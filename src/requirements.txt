@@ -1,0 +1,7 @@
+Django>=5.2,<5.3
+Pillow>=10.0
+python-decouple>=3.8
+waitress>=3.0
+whitenoise>=6.7
+pytest-django>=4.8
+xhtml2pdf>=0.2.17

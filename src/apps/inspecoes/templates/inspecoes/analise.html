@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+{% block title %}Análise — {{ especialidade.get_especialidade_display }} — {{ inspecao.edificacao }} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block extra_css %}
+<style>
+  .badge-p1 { background-color: #dc3545; color: #fff; }
+  .badge-p2 { background-color: #fd7e14; color: #fff; }
+  .badge-p3 { background-color: #198754; color: #fff; }
+  .card-stat { border-left: 4px solid; }
+  .card-stat.p1 { border-color: #dc3545; }
+  .card-stat.p2 { border-color: #fd7e14; }
+  .card-stat.p3 { border-color: #198754; }
+  .card-stat.info { border-color: #0d6efd; }
+  @media print {
+    .no-print { display: none !important; }
+    .card { break-inside: avoid; page-break-inside: avoid; }
+    body { background: #fff !important; }
+    .container { max-width: 100% !important; }
+    .navbar, footer { display: none !important; }
+    h5.section-title { margin-top: 1.5rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Cabeçalho ──────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4 no-print">
+  <div>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{% url 'inspecoes:list' %}">Inspeções</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'inspecoes:detail' inspecao.pk %}">{{ inspecao.edificacao }}</a></li>
+        <li class="breadcrumb-item active">Análise — {{ especialidade.get_especialidade_display }}</li>
+      </ol>
+    </nav>
+    <h2 class="mb-0"><i class="bi bi-clipboard2-data"></i> Laudo de Inspeção Predial</h2>
+    <p class="text-muted mb-0">{{ inspecao.edificacao }} &mdash; {{ especialidade.get_especialidade_display }}</p>
+    <small class="text-muted">Profissional: {{ especialidade.profissional }} &mdash; {{ especialidade.data_inspecao|date:"d/m/Y" }}</small>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'inspecoes:detail' inspecao.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+    <a href="{% url 'inspecoes:inspecao_analise' inspecao.pk %}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-building"></i> Análise Geral da Edificação
+    </a>
+    <a href="{% url 'inspecoes:analise_pdf' especialidade.pk %}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf"></i> Baixar PDF
+    </a>
+    <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-printer"></i> Imprimir
+    </button>
+  </div>
+</div>
+
+<div class="d-none d-print-block mb-4 text-center">
+  <h3 class="fw-bold">LAUDO DE INSPEÇÃO PREDIAL</h3>
+  <p class="mb-0"><strong>Local:</strong> {{ inspecao.edificacao }}</p>
+  <p class="mb-0"><strong>Especialidade:</strong> {{ especialidade.get_especialidade_display }}</p>
+  <p class="mb-0"><strong>Profissional:</strong> {{ especialidade.profissional }}</p>
+  <p class="mb-0"><strong>Data:</strong> {{ especialidade.data_inspecao|date:"d/m/Y" }}</p>
+  <hr>
+</div>
+
+{# ── 1. Resumo Executivo ─────────────────────────────────────────────────────── #}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-speedometer2"></i> Resumo Executivo
+</h5>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card card-stat info h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Total verificações</div>
+        <div class="fs-2 fw-bold">{{ total }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card card-stat p1 h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Não conformidades</div>
+        <div class="fs-2 fw-bold text-danger">{{ total_nc }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card card-stat p3 h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Em conformidade</div>
+        <div class="fs-2 fw-bold text-success">{{ total_conformes }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card card-stat p2 h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">Índice GUT médio</div>
+        <div class="fs-2 fw-bold text-warning">{{ gut_media }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── 2. Grau de Risco Geral + Estatísticas GUT ───────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-pie-chart"></i> Grau de Risco — Geral
+      </div>
+      <div class="card-body d-flex flex-column justify-content-center">
+        <canvas id="chartRisco" height="200"></canvas>
+        <table class="table table-sm mt-3 mb-0">
+          <tbody>
+            <tr>
+              <td><span class="badge badge-p1">P1</span> Crítico</td>
+              <td class="fw-bold text-end text-danger">{{ p1|length }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-p2">P2</span> Regular</td>
+              <td class="fw-bold text-end text-warning">{{ p2|length }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-p3">P3</span> Mínimo</td>
+              <td class="fw-bold text-end text-success">{{ p3|length }}</td>
+            </tr>
+            <tr class="table-light">
+              <td class="fw-bold">Total</td>
+              <td class="fw-bold text-end">{{ total_nc }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-bar-chart-line"></i> Estatísticas GUT &amp; Top Achados Críticos
+      </div>
+      <div class="card-body">
+        <div class="row g-3 mb-3 text-center">
+          <div class="col-3">
+            <div class="text-muted small">Máximo</div>
+            <div class="fs-3 fw-bold text-danger">{{ gut_max }}</div>
+          </div>
+          <div class="col-3">
+            <div class="text-muted small">Média</div>
+            <div class="fs-3 fw-bold text-warning">{{ gut_media }}</div>
+          </div>
+          <div class="col-3">
+            <div class="text-muted small">Mínimo</div>
+            <div class="fs-3 fw-bold text-success">{{ gut_min }}</div>
+          </div>
+          <div class="col-3">
+            <div class="text-muted small">Desvio Padrão</div>
+            <div class="fs-3 fw-bold text-secondary">{{ gut_desvio }}</div>
+          </div>
+        </div>
+        <p class="text-muted small mb-2 fw-semibold">Top achados por índice GUT:</p>
+        {% for a in top_gut %}
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="badge badge-p{{ a.prioridade_risco }}" style="min-width:2.8rem;text-align:center">
+            {{ a.gut_total }}
+          </span>
+          <div class="flex-grow-1">
+            <div class="progress" style="height:6px">
+              <div class="progress-bar {% if a.prioridade_risco == 1 %}bg-danger{% elif a.prioridade_risco == 2 %}bg-warning{% else %}bg-success{% endif %}"
+                style="width:{{ a.gut_pct }}%"></div>
+            </div>
+          </div>
+          <small class="text-muted text-truncate" style="max-width:260px">
+            {{ a.localizacao }} — {{ a.verificacao }}
+          </small>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── 3. Matriz Grupo Técnico × Prioridade ────────────────────────────────────── #}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-table"></i> Análise por Grupo Técnico
+</h5>
+<div class="card mb-4">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Grupo Técnico</th>
+            <th class="text-center">P1 Crítico</th>
+            <th class="text-center">P2 Regular</th>
+            <th class="text-center">P3 Mínimo</th>
+            <th class="text-center fw-bold">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in grupos %}
+          <tr>
+            <td>{{ g.nome }}</td>
+            <td class="text-center">
+              {% if g.p1 %}<span class="badge badge-p1">{{ g.p1 }}</span>{% else %}&mdash;{% endif %}
+            </td>
+            <td class="text-center">
+              {% if g.p2 %}<span class="badge badge-p2">{{ g.p2 }}</span>{% else %}&mdash;{% endif %}
+            </td>
+            <td class="text-center">
+              {% if g.p3 %}<span class="badge badge-p3">{{ g.p3 }}</span>{% else %}&mdash;{% endif %}
+            </td>
+            <td class="text-center fw-bold">{{ g.total }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-3">Nenhum dado disponível.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot class="table-light fw-bold">
+          <tr>
+            <td>TOTAL</td>
+            <td class="text-center text-danger">{{ p1|length }}</td>
+            <td class="text-center text-warning">{{ p2|length }}</td>
+            <td class="text-center text-success">{{ p3|length }}</td>
+            <td class="text-center">{{ total_nc }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── 4. Requisito Afetado × Quantidade ───────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-bar-chart"></i> Requisito Afetado × Quantidade
+  </div>
+  <div class="card-body">
+    <canvas id="chartRequisitos" style="max-height:280px"></canvas>
+  </div>
+</div>
+
+{# ── 5. Por Localização + Por Prazo ──────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-geo-alt"></i> Não Conformidades por Localização
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Localização</th>
+                <th class="text-center">P1</th>
+                <th class="text-center">P2</th>
+                <th class="text-center">P3</th>
+                <th class="text-center">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in por_localizacao %}
+              <tr>
+                <td>{{ l.localizacao }}</td>
+                <td class="text-center">
+                  {% if l.p1 %}<span class="badge badge-p1">{{ l.p1 }}</span>{% else %}&mdash;{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if l.p2 %}<span class="badge badge-p2">{{ l.p2 }}</span>{% else %}&mdash;{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if l.p3 %}<span class="badge badge-p3">{{ l.p3 }}</span>{% else %}&mdash;{% endif %}
+                </td>
+                <td class="text-center fw-bold">{{ l.total }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="text-center text-muted py-3">Nenhum dado.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-calendar-range"></i> Distribuição por Prazo
+      </div>
+      <div class="card-body">
+        <canvas id="chartPrazo" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── 6. Manutenção ───────────────────────────────────────────────────────────── #}
+{% if manutencao.p1 or manutencao.p2 or manutencao.p3 %}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-tools"></i> Manutenção
+</h5>
+<div class="card mb-4">
+  <div class="card-body p-0">
+    {% if manutencao.p1 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p1">Prioridade 1 — Crítico</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=manutencao.p1 %}
+    {% endif %}
+    {% if manutencao.p2 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p2">Prioridade 2 — Regular</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=manutencao.p2 %}
+    {% endif %}
+    {% if manutencao.p3 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p3">Prioridade 3 — Mínimo</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=manutencao.p3 %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── 7. Novas Contratações ───────────────────────────────────────────────────── #}
+{% if nova_contratacao.p1 or nova_contratacao.p2 or nova_contratacao.p3 %}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-file-earmark-plus"></i> Novas Contratações
+</h5>
+<div class="card mb-4">
+  <div class="card-body p-0">
+    {% if nova_contratacao.p1 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p1">Prioridade 1 — Crítico</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=nova_contratacao.p1 %}
+    {% endif %}
+    {% if nova_contratacao.p2 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p2">Prioridade 2 — Regular</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=nova_contratacao.p2 %}
+    {% endif %}
+    {% if nova_contratacao.p3 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p3">Prioridade 3 — Mínimo</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=nova_contratacao.p3 %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── 8. Garantia de Obra ─────────────────────────────────────────────────────── #}
+{% if garantia.p1 or garantia.p2 or garantia.p3 %}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-shield-check"></i> Garantia de Obra
+</h5>
+<div class="card mb-4">
+  <div class="card-body p-0">
+    {% if garantia.p1 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p1">Prioridade 1 — Crítico</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=garantia.p1 %}
+    {% endif %}
+    {% if garantia.p2 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p2">Prioridade 2 — Regular</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=garantia.p2 %}
+    {% endif %}
+    {% if garantia.p3 %}
+    <div class="px-3 pt-3 pb-1"><span class="badge badge-p3">Prioridade 3 — Mínimo</span></div>
+    {% include "inspecoes/_achados_tabela.html" with achados=garantia.p3 %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── 9. Subsídios — Referência GUT ───────────────────────────────────────────── #}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-info-circle"></i> Subsídios — Referência Análise GUT e Grau de Risco
+</h5>
+<div class="card mb-5">
+  <div class="card-body p-0">
+    <div class="row g-0">
+      <div class="col-md-7">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Grau</th><th>Nota</th><th>Gravidade</th><th>Urgência</th><th>Tendência</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Máximo</td><td class="fw-bold">5</td><td>Impacto extremamente grave (risco à vida, colapso)</td><td>Ação imediata necessária</td><td>Agravamento rápido e contínuo</td></tr>
+              <tr><td>Alto</td><td class="fw-bold">4</td><td>Impacto alto (ferimentos, avarias irreversíveis)</td><td>Ação no curto prazo</td><td>Tende a piorar em médio prazo</td></tr>
+              <tr><td>Médio</td><td class="fw-bold">3</td><td>Impacto moderado (inconveniência, desgaste relevante)</td><td>Ação no médio prazo</td><td>Pode piorar com tempo</td></tr>
+              <tr><td>Baixo</td><td class="fw-bold">2</td><td>Impacto baixo (desconforto, desgaste leve)</td><td>Ação no longo prazo</td><td>Lentos agravamentos</td></tr>
+              <tr><td>Mínimo</td><td class="fw-bold">1</td><td>Impacto mínimo (estético, sem impacto funcional)</td><td>Pode ser programada</td><td>Estável, sem tendência clara</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="col-md-5 border-start">
+        <div class="p-3">
+          <p class="mb-2">
+            <span class="badge badge-p1 me-1">P1</span>
+            <strong>Crítico</strong> — Risco à saúde/segurança, perda excessiva de desempenho.
+            <em class="text-danger">Intervenção imediata.</em>
+          </p>
+          <p class="mb-2">
+            <span class="badge badge-p2 me-1">P2</span>
+            <strong>Regular</strong> — Perda de funcionalidade; deterioração precoce.
+            <em class="text-warning">Programação a curto prazo.</em>
+          </p>
+          <p class="mb-0">
+            <span class="badge badge-p3 me-1">P3</span>
+            <strong>Mínimo</strong> — Prejuízos à estética ou atividade programável.
+            <em class="text-success">Intervenção a médio prazo.</em>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+Chart.register(ChartDataLabels);
+
+const riscoData      = {{ chart_risco|safe }};
+const prazoData      = {{ chart_prazo|safe }};
+const requisitosData = {{ chart_requisitos|safe }};
+
+new Chart(document.getElementById('chartRisco'), {
+  type: 'doughnut',
+  data: {
+    labels: riscoData.labels,
+    datasets: [{ data: riscoData.data, backgroundColor: riscoData.colors, borderWidth: 2 }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 11 } } },
+      datalabels: { display: false }
+    }
+  }
+});
+
+new Chart(document.getElementById('chartPrazo'), {
+  type: 'bar',
+  data: {
+    labels: prazoData.labels,
+    datasets: [{ label: 'Achados', data: prazoData.data, backgroundColor: '#0d6efd', borderRadius: 4 }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      datalabels: { display: false }
+    },
+    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+  }
+});
+
+new Chart(document.getElementById('chartRequisitos'), {
+  type: 'bar',
+  data: {
+    labels: requisitosData.labels,
+    datasets: [{
+      data: requisitosData.data,
+      backgroundColor: requisitosData.colors,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      datalabels: {
+        anchor: 'end',
+        align: 'end',
+        font: { weight: 'bold', size: 12 },
+        color: '#333',
+        formatter: v => v > 0 ? v : '',
+      }
+    },
+    scales: {
+      y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      x: { ticks: { font: { size: 11 } } }
+    },
+    layout: { padding: { top: 20 } }
+  }
+});
+</script>
+{% endblock %}

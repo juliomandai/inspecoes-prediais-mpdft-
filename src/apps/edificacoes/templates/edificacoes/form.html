@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'edificacoes:list' %}">Edificações</a></li>
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="card shadow-sm" style="max-width: 600px;">
+  <div class="card-header"><h5 class="mb-0">{{ titulo }}</h5></div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label for="{{ form.nome.id_for_label }}" class="form-label fw-semibold">
+          Nome <span class="text-danger">*</span>
+        </label>
+        {{ form.nome }}
+        {% if form.nome.errors %}
+        <div class="text-danger small">{{ form.nome.errors.0 }}</div>
+        {% endif %}
+      </div>
+      <div class="mb-3">
+        <label for="{{ form.endereco.id_for_label }}" class="form-label fw-semibold">Endereço</label>
+        {{ form.endereco }}
+      </div>
+      {% if form.instance.pk %}
+      <div class="mb-3 form-check">
+        {{ form.ativo }}
+        <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Edificação ativa</label>
+      </div>
+      {% endif %}
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-check-lg"></i> Salvar
+        </button>
+        <a href="{% url 'edificacoes:list' %}" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

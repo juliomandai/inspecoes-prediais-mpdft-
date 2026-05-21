@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Laudo de Inspecao Predial</title>
+<style>
+  @page {
+    size: A4;
+    margin: 1.8cm 1.5cm 2.2cm 1.5cm;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #222; line-height: 1.4; }
+
+  /* Títulos de seção */
+  h2 {
+    font-size: 9.5pt; font-weight: bold;
+    background: #003366; color: #fff;
+    padding: 4pt 8pt; margin: 14pt 0 6pt;
+  }
+  h3 { font-size: 8.5pt; font-weight: bold; margin: 8pt 0 3pt; color: #003366; }
+
+  /* Tabelas de dados */
+  table.dados { width: 100%; border-collapse: collapse; margin-bottom: 8pt; font-size: 7.5pt; }
+  table.dados th { background: #003366; color: #fff; padding: 3pt 5pt; text-align: left; font-size: 7pt; }
+  table.dados td { padding: 3pt 5pt; border-bottom: 0.5pt solid #ddd; vertical-align: top; }
+  table.dados tr.par td { background: #f4f6fb; }
+  table.dados tfoot td { background: #dde3ed; font-weight: bold; border-top: 1pt solid #999; font-size: 7.5pt; }
+
+  /* Badges prioridade */
+  .badge { display: inline; padding: 1pt 4pt; border-radius: 2pt; font-size: 7pt; font-weight: bold; color: #fff; }
+  .bp1 { background: #cc0000; }
+  .bp2 { background: #cc6600; }
+  .bp3 { background: #006600; }
+  .badge-conf { background: #555; }
+
+  /* Quebra de página */
+  .page-break { page-break-before: always; }
+
+  hr { border: none; border-top: 0.5pt solid #ccc; margin: 6pt 0; }
+</style>
+</head>
+<body>
+
+{# ── Cabeçalho ──────────────────────────────────────────────────────────────── #}
+<table style="width:100%;border-collapse:collapse;margin-bottom:0">
+  <tr>
+    <td style="background:#003366;color:#fff;padding:10pt 14pt;text-align:center">
+      <span style="font-size:15pt;font-weight:bold;display:block;letter-spacing:1pt">LAUDO DE INSPEÇÃO PREDIAL</span>
+      <span style="font-size:8.5pt;color:#b0c8e8;display:block;margin-top:2pt">RELAÇÃO E ANÁLISE DAS VERIFICAÇÕES — MPDFT/SPO</span>
+    </td>
+  </tr>
+</table>
+<table style="width:100%;border-collapse:collapse;margin-bottom:14pt;border:1pt solid #b0bec9">
+  <tr>
+    <td style="background:#e8edf5;padding:4pt 12pt;font-size:8pt;color:#333">
+      <strong>Local:</strong> {{ inspecao.edificacao }}
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <strong>Especialidade:</strong> {{ especialidade.get_especialidade_display }}
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <strong>Profissional:</strong> {{ especialidade.profissional }}
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <strong>Data:</strong> {{ especialidade.data_inspecao|date:"d/m/Y" }}
+    </td>
+  </tr>
+</table>
+
+{# ── 1. Resumo Executivo ─────────────────────────────────────────────────────── #}
+<h2>1. Resumo Executivo</h2>
+<table style="width:100%;border-collapse:collapse;margin-bottom:14pt">
+  <tr>
+    <td style="width:25%;background:#dbeafe;border:1pt solid #93c5fd;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#1d4ed8;display:block">Total de verificações</span>
+      <span style="font-size:20pt;font-weight:bold;color:#1d4ed8;display:block">{{ total }}</span>
+    </td>
+    <td style="width:25%;background:#fee2e2;border:1pt solid #fca5a5;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#b91c1c;display:block">Não conformidades</span>
+      <span style="font-size:20pt;font-weight:bold;color:#b91c1c;display:block">{{ total_nc }}</span>
+    </td>
+    <td style="width:25%;background:#dcfce7;border:1pt solid #86efac;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#15803d;display:block">Em conformidade</span>
+      <span style="font-size:20pt;font-weight:bold;color:#15803d;display:block">{{ total_conformes }}</span>
+    </td>
+    <td style="width:25%;background:#fef3c7;border:1pt solid #fcd34d;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#b45309;display:block">Índice GUT médio</span>
+      <span style="font-size:20pt;font-weight:bold;color:#b45309;display:block">{{ gut_media }}</span>
+    </td>
+  </tr>
+</table>
+
+{# ── 2 + 3. Risco Geral  |  Estatísticas GUT ────────────────────────────────── #}
+<table style="width:100%;border-collapse:collapse;margin-bottom:14pt">
+  <tr>
+
+    {# Coluna esquerda: Grau de Risco #}
+    <td style="width:38%;vertical-align:top;padding-right:8pt">
+      <h2 style="margin-top:0">2. Grau de Risco — Geral</h2>
+      <table class="dados">
+        <thead>
+          <tr>
+            <th>Classificação</th>
+            <th style="width:40pt;text-align:center">Qtd</th>
+            <th style="width:40pt;text-align:center">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fee2e2">
+            <td><span class="badge bp1">P1</span> Prioridade 1 — Crítico</td>
+            <td style="text-align:center;font-weight:bold;color:#b91c1c">{{ p1|length }}</td>
+            <td style="text-align:center">{% if total_nc %}{% widthratio p1|length total_nc 100 %}%{% else %}—{% endif %}</td>
+          </tr>
+          <tr style="background:#fff7ed">
+            <td><span class="badge bp2">P2</span> Prioridade 2 — Regular</td>
+            <td style="text-align:center;font-weight:bold;color:#cc6600">{{ p2|length }}</td>
+            <td style="text-align:center">{% if total_nc %}{% widthratio p2|length total_nc 100 %}%{% else %}—{% endif %}</td>
+          </tr>
+          <tr style="background:#f0fdf4">
+            <td><span class="badge bp3">P3</span> Prioridade 3 — Mínimo</td>
+            <td style="text-align:center;font-weight:bold;color:#15803d">{{ p3|length }}</td>
+            <td style="text-align:center">{% if total_nc %}{% widthratio p3|length total_nc 100 %}%{% else %}—{% endif %}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>TOTAL</td>
+            <td style="text-align:center">{{ total_nc }}</td>
+            <td style="text-align:center">100%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </td>
+
+    {# Coluna direita: Estatísticas GUT + Top achados #}
+    <td style="width:62%;vertical-align:top;padding-left:8pt;border-left:1pt solid #ddd">
+      <h2 style="margin-top:0">3. Estatísticas GUT &amp; Top Achados</h2>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8pt">
+        <tr>
+          <td style="text-align:center;padding:5pt 4pt;background:#fee2e2;border:0.5pt solid #fca5a5">
+            <span style="font-size:7pt;color:#b91c1c;display:block">Máximo</span>
+            <span style="font-size:13pt;font-weight:bold;color:#b91c1c;display:block">{{ gut_max }}</span>
+          </td>
+          <td style="text-align:center;padding:5pt 4pt;background:#fef3c7;border:0.5pt solid #fcd34d">
+            <span style="font-size:7pt;color:#b45309;display:block">Média</span>
+            <span style="font-size:13pt;font-weight:bold;color:#b45309;display:block">{{ gut_media }}</span>
+          </td>
+          <td style="text-align:center;padding:5pt 4pt;background:#dcfce7;border:0.5pt solid #86efac">
+            <span style="font-size:7pt;color:#15803d;display:block">Mínimo</span>
+            <span style="font-size:13pt;font-weight:bold;color:#15803d;display:block">{{ gut_min }}</span>
+          </td>
+          <td style="text-align:center;padding:5pt 4pt;background:#f4f6fb;border:0.5pt solid #c0c8d8">
+            <span style="font-size:7pt;color:#555;display:block">Desvio Padrão</span>
+            <span style="font-size:13pt;font-weight:bold;color:#555;display:block">{{ gut_desvio }}</span>
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:7.5pt;font-weight:bold;color:#003366;margin:0 0 3pt">Top achados por índice GUT:</p>
+      {% for a in top_gut %}
+      <table style="width:100%;border-collapse:collapse;margin-bottom:2pt">
+        <tr>
+          <td style="width:26pt;vertical-align:middle">
+            <span class="badge bp{{ a.prioridade_risco }}" style="font-size:7.5pt;padding:1.5pt 4pt">{{ a.gut_total }}</span>
+          </td>
+          <td style="font-size:7pt;vertical-align:middle;color:#333;padding-left:4pt">
+            {{ a.localizacao }}{% if a.sub_localizacao %}/{{ a.sub_localizacao }}{% endif %} — {{ a.verificacao }}
+          </td>
+        </tr>
+      </table>
+      {% endfor %}
+    </td>
+
+  </tr>
+</table>
+
+{# ── 4. Análise por Grupo Técnico ────────────────────────────────────────────── #}
+<h2>4. Análise por Grupo Técnico</h2>
+<table class="dados">
+  <thead>
+    <tr>
+      <th>Grupo Técnico</th>
+      <th style="width:55pt;text-align:center">P1 — Crítico</th>
+      <th style="width:55pt;text-align:center">P2 — Regular</th>
+      <th style="width:55pt;text-align:center">P3 — Mínimo</th>
+      <th style="width:40pt;text-align:center">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for g in grupos %}
+    <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
+      <td>{{ g.nome }}</td>
+      <td style="text-align:center">{% if g.p1 %}<span class="badge bp1">{{ g.p1 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center">{% if g.p2 %}<span class="badge bp2">{{ g.p2 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center">{% if g.p3 %}<span class="badge bp3">{{ g.p3 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center;font-weight:bold">{{ g.total }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>TOTAL</td>
+      <td style="text-align:center;color:#b91c1c">{{ p1|length }}</td>
+      <td style="text-align:center;color:#cc6600">{{ p2|length }}</td>
+      <td style="text-align:center;color:#15803d">{{ p3|length }}</td>
+      <td style="text-align:center">{{ total_nc }}</td>
+    </tr>
+  </tfoot>
+</table>
+
+{# ── 5. Requisito Afetado  |  Por Prazo ──────────────────────────────────────── #}
+<table style="width:100%;border-collapse:collapse;margin-bottom:0">
+  <tr>
+
+    {# Requisito Afetado #}
+    <td style="width:58%;vertical-align:top;padding-right:8pt">
+      <h2 style="margin-top:0">5. NC por Requisito Afetado</h2>
+      <table class="dados">
+        <thead>
+          <tr>
+            <th>Requisito Afetado</th>
+            <th style="width:40pt;text-align:center">Qtd</th>
+            <th style="width:40pt;text-align:center">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in por_requisito %}
+          {% if r.total > 0 %}
+          <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
+            <td>{{ r.label }}</td>
+            <td style="text-align:center;font-weight:bold">{{ r.total }}</td>
+            <td style="text-align:center">{% if total_nc %}{% widthratio r.total total_nc 100 %}%{% else %}—{% endif %}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>TOTAL</td>
+            <td style="text-align:center">{{ total_nc }}</td>
+            <td style="text-align:center">100%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </td>
+
+    {# Por Prazo #}
+    <td style="width:42%;vertical-align:top;padding-left:8pt;border-left:1pt solid #ddd">
+      <h2 style="margin-top:0">6. Distribuição por Prazo</h2>
+      <table class="dados">
+        <thead>
+          <tr>
+            <th>Prazo</th>
+            <th style="width:26pt;text-align:center">P1</th>
+            <th style="width:26pt;text-align:center">P2</th>
+            <th style="width:26pt;text-align:center">P3</th>
+            <th style="width:30pt;text-align:center">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in por_prazo %}
+          <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
+            <td>{{ p.label }}</td>
+            <td style="text-align:center">{% if p.p1 %}<span class="badge bp1">{{ p.p1 }}</span>{% else %}—{% endif %}</td>
+            <td style="text-align:center">{% if p.p2 %}<span class="badge bp2">{{ p.p2 }}</span>{% else %}—{% endif %}</td>
+            <td style="text-align:center">{% if p.p3 %}<span class="badge bp3">{{ p.p3 }}</span>{% else %}—{% endif %}</td>
+            <td style="text-align:center;font-weight:bold">{{ p.total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </td>
+
+  </tr>
+</table>
+
+{# ── 7. NC por Localização ────────────────────────────────────────────────────── #}
+<h2>7. Não Conformidades por Localização</h2>
+<table class="dados">
+  <thead>
+    <tr>
+      <th>Localização</th>
+      <th style="width:40pt;text-align:center">P1</th>
+      <th style="width:40pt;text-align:center">P2</th>
+      <th style="width:40pt;text-align:center">P3</th>
+      <th style="width:40pt;text-align:center">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in por_localizacao %}
+    <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
+      <td>{{ l.localizacao }}</td>
+      <td style="text-align:center">{% if l.p1 %}<span class="badge bp1">{{ l.p1 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center">{% if l.p2 %}<span class="badge bp2">{{ l.p2 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center">{% if l.p3 %}<span class="badge bp3">{{ l.p3 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center;font-weight:bold">{{ l.total }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ── 8. Manutenção ───────────────────────────────────────────────────────────── #}
+{% if manutencao.p1 or manutencao.p2 or manutencao.p3 %}
+<div class="page-break"></div>
+<h2>8. Manutenção — Relação de Achados</h2>
+{% if manutencao.p1 %}
+<h3><span class="badge bp1">P1</span> Prioridade 1 — Crítico</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=manutencao.p1 row_bg="#fff5f5" %}
+{% endif %}
+{% if manutencao.p2 %}
+<h3><span class="badge bp2">P2</span> Prioridade 2 — Regular</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=manutencao.p2 row_bg="#fffbf0" %}
+{% endif %}
+{% if manutencao.p3 %}
+<h3><span class="badge bp3">P3</span> Prioridade 3 — Mínimo</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=manutencao.p3 row_bg="#f6fff8" %}
+{% endif %}
+{% endif %}
+
+{# ── 9. Novas Contratações ───────────────────────────────────────────────────── #}
+{% if nova_contratacao.p1 or nova_contratacao.p2 or nova_contratacao.p3 %}
+<h2>9. Novas Contratações — Relação de Achados</h2>
+{% if nova_contratacao.p1 %}
+<h3><span class="badge bp1">P1</span> Prioridade 1 — Crítico</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=nova_contratacao.p1 row_bg="#fff5f5" %}
+{% endif %}
+{% if nova_contratacao.p2 %}
+<h3><span class="badge bp2">P2</span> Prioridade 2 — Regular</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=nova_contratacao.p2 row_bg="#fffbf0" %}
+{% endif %}
+{% if nova_contratacao.p3 %}
+<h3><span class="badge bp3">P3</span> Prioridade 3 — Mínimo</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=nova_contratacao.p3 row_bg="#f6fff8" %}
+{% endif %}
+{% endif %}
+
+{# ── 10. Garantia de Obra ─────────────────────────────────────────────────────── #}
+{% if garantia.p1 or garantia.p2 or garantia.p3 %}
+<h2>10. Garantia de Obra — Relação de Achados</h2>
+{% if garantia.p1 %}
+<h3><span class="badge bp1">P1</span> Prioridade 1 — Crítico</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=garantia.p1 row_bg="#fff5f5" %}
+{% endif %}
+{% if garantia.p2 %}
+<h3><span class="badge bp2">P2</span> Prioridade 2 — Regular</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=garantia.p2 row_bg="#fffbf0" %}
+{% endif %}
+{% if garantia.p3 %}
+<h3><span class="badge bp3">P3</span> Prioridade 3 — Mínimo</h3>
+{% include "inspecoes/_achados_tabela_pdf.html" with achados=garantia.p3 row_bg="#f6fff8" %}
+{% endif %}
+{% endif %}
+
+{# ── 11. Subsídios ────────────────────────────────────────────────────────────── #}
+<div class="page-break"></div>
+<h2>11. Subsídios — Referência Análise GUT e Grau de Risco</h2>
+
+<table class="dados" style="margin-bottom:10pt">
+  <thead>
+    <tr>
+      <th style="width:50pt">Grau</th>
+      <th style="width:26pt;text-align:center">Nota</th>
+      <th>Gravidade</th>
+      <th>Urgência</th>
+      <th>Tendência</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="font-weight:bold;color:#b91c1c">Máximo</td>
+      <td style="text-align:center;font-weight:bold">5</td>
+      <td>Impacto extremamente grave (risco à vida, colapso)</td>
+      <td>Ação imediata necessária</td>
+      <td>Agravamento rápido e contínuo</td>
+    </tr>
+    <tr class="par">
+      <td style="font-weight:bold;color:#cc6600">Alto</td>
+      <td style="text-align:center;font-weight:bold">4</td>
+      <td>Impacto alto (ferimentos, avarias irreversíveis)</td>
+      <td>Ação no curto prazo</td>
+      <td>Tende a piorar em médio prazo</td>
+    </tr>
+    <tr>
+      <td style="font-weight:bold;color:#b45309">Médio</td>
+      <td style="text-align:center;font-weight:bold">3</td>
+      <td>Impacto moderado (inconveniência, desgaste relevante)</td>
+      <td>Ação no médio prazo</td>
+      <td>Pode piorar com tempo</td>
+    </tr>
+    <tr class="par">
+      <td style="font-weight:bold;color:#555">Baixo</td>
+      <td style="text-align:center;font-weight:bold">2</td>
+      <td>Impacto baixo (desconforto, desgaste leve)</td>
+      <td>Ação no longo prazo</td>
+      <td>Lentos agravamentos</td>
+    </tr>
+    <tr>
+      <td style="font-weight:bold;color:#15803d">Mínimo</td>
+      <td style="text-align:center;font-weight:bold">1</td>
+      <td>Impacto mínimo (estético, sem impacto funcional)</td>
+      <td>Pode ser programada</td>
+      <td>Estável, sem tendência clara</td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="dados">
+  <thead>
+    <tr>
+      <th style="width:90pt">Grau de Risco</th>
+      <th>Definição</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background:#fff5f5">
+      <td><span class="badge bp1">P1</span> <strong>Crítico</strong></td>
+      <td>Risco que pode provocar danos contra a saúde e segurança das pessoas e/ou meio ambiente, perda excessiva de desempenho causando possíveis paralisações, aumento de custo e desvalorização acentuada. <strong>Intervenção imediata.</strong></td>
+    </tr>
+    <tr style="background:#fff7ed">
+      <td><span class="badge bp2">P2</span> <strong>Regular</strong></td>
+      <td>Risco que pode provocar a perda de funcionalidade sem prejuízo à operação direta de sistemas; deterioração precoce e pequena desvalorização. <strong>Programação e intervenção a curto prazo.</strong></td>
+    </tr>
+    <tr style="background:#f0fdf4">
+      <td><span class="badge bp3">P3</span> <strong>Mínimo</strong></td>
+      <td>Pequenos prejuízos à estética ou atividade programável, sem incidência dos riscos críticos e regulares, além de baixo ou nenhum comprometimento do valor imobiliário. <strong>Intervenção a médio prazo.</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<table style="width:100%;border-collapse:collapse;margin-top:18pt">
+  <tr>
+    <td style="border-top:1pt solid #ccc;padding-top:5pt;text-align:center;font-size:7pt;color:#888">
+      Laudo gerado pelo Sistema de Inspeções Prediais — MPDFT/SPO — {{ especialidade.data_inspecao|date:"d/m/Y" }}
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

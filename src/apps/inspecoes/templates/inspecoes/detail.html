@@ -1,0 +1,284 @@
+{% extends 'base.html' %}
+{% block title %}Inspeção #{{ inspecao.pk }} — {{ inspecao.edificacao }} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .navbar, .no-print, footer { display: none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Cabeçalho da inspeção ──────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0">{{ inspecao.edificacao }}</h4>
+      <small class="text-muted">Inspeção #{{ inspecao.pk }}</small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap no-print">
+      <a href="{% url 'inspecoes:especialidade_create' inspecao.pk %}" class="btn btn-success btn-sm">
+        <i class="bi bi-plus-circle"></i> Adicionar Especialidade
+      </a>
+      <a href="{% url 'inspecoes:update' inspecao.pk %}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-pencil-square"></i> Editar
+      </a>
+      {% if inspecao.especialidades.exists %}
+      <a href="{% url 'inspecoes:inspecao_analise' inspecao.pk %}" class="btn btn-primary btn-sm">
+        <i class="bi bi-clipboard2-data"></i> Análise Geral
+      </a>
+      {% endif %}
+      {% if backup_salvo %}
+      <a href="{% url 'inspecoes:backup_download' inspecao.pk %}" class="btn btn-success btn-sm no-print"
+         title="Baixar backup gerado automaticamente ao finalizar">
+        <i class="bi bi-archive-fill"></i> Baixar Backup
+      </a>
+      {% elif inspecao.status_geral == 'finalizada' %}
+      <a href="{% url 'inspecoes:backup' inspecao.pk %}" class="btn btn-outline-success btn-sm no-print">
+        <i class="bi bi-archive"></i> Gerar Backup
+      </a>
+      {% endif %}
+      <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+        <i class="bi bi-printer"></i> Imprimir
+      </button>
+      <a href="{% url 'inspecoes:list' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+      <form method="post" action="{% url 'inspecoes:delete' inspecao.pk %}" class="no-print"
+            onsubmit="return confirm('Excluir esta inspeção permanentemente?\n\nTodas as especialidades, achados e fotos vinculados também serão removidos.\n\nEsta ação não pode ser desfeita.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger btn-sm">
+          <i class="bi bi-trash"></i> Excluir Inspeção
+        </button>
+      </form>
+    </div>
+  </div>
+  <div class="card-body py-2">
+    <div class="row g-2">
+      <div class="col-auto">
+        <small class="text-muted d-block">Status geral</small>
+        {% if inspecao.status_geral == 'em_andamento' %}
+        <span class="badge bg-warning text-dark">Em andamento</span>
+        {% else %}
+        <span class="badge bg-success">Finalizada</span>
+        {% endif %}
+      </div>
+      <div class="col-auto">
+        <small class="text-muted d-block">Especialidades</small>
+        <strong>{{ inspecao.especialidades.count }}</strong>
+      </div>
+      <div class="col-auto">
+        <small class="text-muted d-block">Criada em</small>
+        {{ inspecao.criado_em|date:"d/m/Y H:i" }}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not inspecao.especialidades.exists %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle"></i> Nenhuma especialidade cadastrada.
+  <a href="{% url 'inspecoes:especialidade_create' inspecao.pk %}">Adicionar a primeira especialidade.</a>
+</div>
+
+{% else %}
+
+{# ── Abas das especialidades ────────────────────────────────────────────────── #}
+<ul class="nav nav-tabs mb-0" id="tabEspecialidades" role="tablist">
+  {% for esp in inspecao.especialidades.all %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if forloop.first %}active{% endif %}"
+            id="tab-{{ esp.pk }}"
+            data-bs-toggle="tab"
+            data-bs-target="#pane-{{ esp.pk }}"
+            type="button" role="tab"
+            aria-controls="pane-{{ esp.pk }}"
+            aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+      <i class="bi bi-tools"></i> {{ esp.get_especialidade_display }}
+      {% if esp.status == 'em_andamento' %}
+      <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem">Em andamento</span>
+      {% else %}
+      <span class="badge bg-success ms-1" style="font-size:.65rem">Finalizada</span>
+      {% endif %}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content border border-top-0 rounded-bottom" id="tabEspecialidadesContent">
+  {% for esp in inspecao.especialidades.all %}
+  <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+       id="pane-{{ esp.pk }}"
+       role="tabpanel"
+       aria-labelledby="tab-{{ esp.pk }}">
+
+    {# ── Barra de ações da especialidade ──────────────────────────────────── #}
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-2 border-bottom bg-light no-print">
+      <div>
+        <span class="fw-semibold">{{ esp.profissional }}</span>
+        <span class="text-muted ms-2">{{ esp.data_inspecao|date:"d/m/Y" }}</span>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        {% if esp.status == 'em_andamento' %}
+        <a href="{% url 'inspecoes:achado_create' esp.pk %}" class="btn btn-success btn-sm">
+          <i class="bi bi-plus-circle"></i> Novo Achado
+        </a>
+        {% endif %}
+        {% if esp.achados.exists %}
+        <a href="{% url 'inspecoes:analise' esp.pk %}" class="btn btn-primary btn-sm">
+          <i class="bi bi-clipboard2-data"></i> Análise
+        </a>
+        {% endif %}
+        {% if request.user.is_staff or request.user.is_superuser or request.user.get_full_name == esp.profissional %}
+        <a href="{% url 'inspecoes:especialidade_update' esp.pk %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-pencil"></i> Editar
+        </a>
+        {% if esp.status == 'em_andamento' %}
+        <form method="post" action="{% url 'inspecoes:especialidade_finalizar' esp.pk %}"
+              onsubmit="return confirm('Finalizar {{ esp.get_especialidade_display }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-check2-all"></i> Finalizar
+          </button>
+        </form>
+        {% else %}
+        <form method="post" action="{% url 'inspecoes:especialidade_reabrir' esp.pk %}"
+              onsubmit="return confirm('Reabrir {{ esp.get_especialidade_display }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-counterclockwise"></i> Reabrir
+          </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'inspecoes:especialidade_delete' esp.pk %}"
+              onsubmit="return confirm('Excluir {{ esp.get_especialidade_display }}?\n\nTodos os achados e fotos vinculados também serão removidos.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-trash"></i>
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Aviso finalizada ──────────────────────────────────────────────────── #}
+    {% if esp.status == 'finalizada' %}
+    <div class="alert alert-info mb-0 border-0 rounded-0 no-print">
+      <i class="bi bi-lock"></i> Esta especialidade está <strong>finalizada</strong>. Clique em <strong>Reabrir</strong> para editar ou adicionar achados.
+    </div>
+    {% endif %}
+
+    {# ── Lista de achados ──────────────────────────────────────────────────── #}
+    {% if esp.achados.all %}
+    <p class="px-3 pt-3 mb-2 text-muted small">{{ esp.achados.count }} achado(s)</p>
+
+    {% for achado in esp.achados.all %}
+    <div class="border-bottom px-3 py-2">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>{{ forloop.counter }}. {{ achado.localizacao }}</strong>
+          {% if achado.sub_localizacao %}
+          <span class="text-muted"> / {{ achado.sub_localizacao }}</span>
+          {% endif %}
+          <br>
+          <small class="text-muted">{{ achado.verificacao }}</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-2">
+          {% if achado.em_conformidade %}
+          <span class="badge bg-secondary">Em conformidade</span>
+          {% elif achado.prioridade_risco == 1 %}
+          <span class="badge bg-danger">GUT {{ achado.gut_total }} — Crítico</span>
+          {% elif achado.prioridade_risco == 2 %}
+          <span class="badge bg-warning text-dark">GUT {{ achado.gut_total }} — Regular</span>
+          {% else %}
+          <span class="badge bg-success">GUT {{ achado.gut_total }} — Mínimo</span>
+          {% endif %}
+          {% if esp.status == 'em_andamento' %}
+          <a href="{% url 'inspecoes:achado_update' achado.pk %}" class="btn btn-sm btn-outline-secondary no-print">
+            <i class="bi bi-pencil"></i>
+          </a>
+          <form method="post" action="{% url 'inspecoes:achado_delete' achado.pk %}" class="no-print"
+                onsubmit="return confirm('Excluir este achado? As fotos vinculadas também serão removidas.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if not achado.em_conformidade %}
+      <div class="row g-2 mt-1 small">
+        <div class="col-md-3">
+          <span class="text-muted">Grupo:</span> {{ achado.grupo_tecnico }}
+        </div>
+        <div class="col-md-3">
+          <span class="text-muted">Requisito:</span> {{ achado.requisito_afetado }}
+        </div>
+        <div class="col-md-3">
+          <span class="text-muted">GUT:</span> G={{ achado.gravidade }} × U={{ achado.urgencia }} × T={{ achado.tendencia }} = <strong>{{ achado.gut_total }}</strong>
+        </div>
+        <div class="col-md-3">
+          <span class="text-muted">Prazo:</span> {{ achado.get_prazo_meses_display }} — {{ achado.get_direcionamento_display }}
+        </div>
+      </div>
+      {% if achado.descricao_nao_conformidade %}
+      <div class="mt-1 small">
+        <span class="text-muted">Descrição:</span> {{ achado.descricao_nao_conformidade }}
+      </div>
+      {% endif %}
+      {% if achado.recomendacao %}
+      <div class="mt-1 small">
+        <span class="text-muted">Recomendação:</span> {{ achado.recomendacao }}
+      </div>
+      {% endif %}
+      {% endif %}
+
+      {% if achado.fotos.all %}
+      <div class="mt-2">
+        <div class="d-flex flex-wrap gap-2">
+          {% for foto in achado.fotos.all %}
+          <a href="{{ foto.arquivo.url }}" target="_blank" title="{{ foto.nome_original }}">
+            <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+                 style="height:70px;width:70px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <div class="px-3 py-3 text-muted small">
+      Nenhum achado registrado nesta especialidade.
+      {% if esp.status == 'em_andamento' %}
+      <a href="{% url 'inspecoes:achado_create' esp.pk %}">Adicionar o primeiro achado.</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+  {% endfor %}
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var hash = window.location.hash;
+  if (!hash) return;
+  var tabEl = document.querySelector('[data-bs-target="' + hash + '"]');
+  if (tabEl) {
+    new bootstrap.Tab(tabEl).show();
+    tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+})();
+</script>
+{% endblock %}

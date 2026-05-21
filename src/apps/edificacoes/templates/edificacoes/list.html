@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}Edificações — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2><i class="bi bi-buildings"></i> Edificações</h2>
+  <a href="{% url 'edificacoes:create' %}" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Nova Edificação
+  </a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Endereço</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in edificacoes %}
+        <tr>
+          <td class="fw-semibold">{{ e.nome }}</td>
+          <td class="text-muted">{{ e.endereco|default:"—" }}</td>
+          <td>
+            {% if e.ativo %}
+            <span class="badge bg-success">Ativa</span>
+            {% else %}
+            <span class="badge bg-secondary">Inativa</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'edificacoes:update' e.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i> Editar
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted py-4">Nenhuma edificação cadastrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

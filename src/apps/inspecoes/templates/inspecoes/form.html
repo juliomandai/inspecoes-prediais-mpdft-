@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{% if inspecao %}Editar Inspeção #{{ inspecao.pk }}{% else %}Nova Inspeção{% endif %} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0">
+          {% if inspecao %}
+          <i class="bi bi-pencil-square"></i> Editar Inspeção #{{ inspecao.pk }}
+          {% else %}
+          <i class="bi bi-plus-circle"></i> Nova Inspeção
+          {% endif %}
+        </h4>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          {% for field in form %}
+          <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+            <div class="text-danger small mt-1">{{ field.errors }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+          <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg"></i>
+              {% if inspecao %}Salvar alterações{% else %}Criar Inspeção{% endif %}
+            </button>
+            {% if inspecao %}
+            <a href="{% url 'inspecoes:detail' inspecao.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+            {% else %}
+            <a href="{% url 'inspecoes:list' %}" class="btn btn-outline-secondary">Cancelar</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

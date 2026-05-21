@@ -1,0 +1,354 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% if achado %}Editar Achado{% else %}Novo Achado{% endif %} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{% if achado %}Editar Achado{% else %}Novo Achado{% endif %}</h4>
+    <small class="text-muted">
+      {{ especialidade.inspecao.edificacao }} &mdash; {{ especialidade.get_especialidade_display }} ({{ especialidade.data_inspecao|date:"d/m/Y" }})
+    </small>
+  </div>
+  <a href="{% url 'inspecoes:detail' especialidade.inspecao.pk %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+<form method="post" enctype="multipart/form-data" id="achado-form">
+  {% csrf_token %}
+
+  <div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-geo-alt"></i> 1. Localização</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="{{ form.localizacao.id_for_label }}" class="form-label">{{ form.localizacao.label }}</label>
+          {{ form.localizacao }}
+          {% if form.localizacao.errors %}<div class="text-danger small mt-1">{{ form.localizacao.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label for="{{ form.sub_localizacao.id_for_label }}" class="form-label">
+            {{ form.sub_localizacao.label }} <span class="text-muted fw-normal">(opcional)</span>
+          </label>
+          {{ form.sub_localizacao }}
+          {% if form.sub_localizacao.errors %}<div class="text-danger small mt-1">{{ form.sub_localizacao.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-search"></i> 2. Identificação</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label for="{{ form.verificacao.id_for_label }}" class="form-label">{{ form.verificacao.label }}</label>
+          {{ form.verificacao }}
+          {% if form.verificacao.errors %}<div class="text-danger small mt-1">{{ form.verificacao.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label for="{{ form.grupo_tecnico.id_for_label }}" class="form-label">{{ form.grupo_tecnico.label }}</label>
+          {{ form.grupo_tecnico }}
+          {% if form.grupo_tecnico.errors %}<div class="text-danger small mt-1">{{ form.grupo_tecnico.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-clipboard2-x"></i> 3. Diagnóstico</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <div class="form-check form-switch">
+          {{ form.em_conformidade }}
+          <label class="form-check-label fw-semibold text-success" for="id_em_conformidade">
+            <i class="bi bi-check-circle"></i> Item em conformidade
+          </label>
+        </div>
+        <small class="text-muted">Marque quando o item inspecionado estiver conforme. Os campos GUT e recomendação serão desativados.</small>
+      </div>
+      <div id="campos-nao-conformidade">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label for="{{ form.descricao_nao_conformidade.id_for_label }}" class="form-label">{{ form.descricao_nao_conformidade.label }}</label>
+            {{ form.descricao_nao_conformidade }}
+            {% if form.descricao_nao_conformidade.errors %}<div class="text-danger small mt-1">{{ form.descricao_nao_conformidade.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label for="{{ form.requisito_afetado.id_for_label }}" class="form-label">{{ form.requisito_afetado.label }}</label>
+            {{ form.requisito_afetado }}
+            {% if form.requisito_afetado.errors %}<div class="text-danger small mt-1">{{ form.requisito_afetado.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3" id="secao-gut">
+    <div class="card-header fw-bold"><i class="bi bi-bar-chart"></i> 4. Matriz GUT</div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end mb-3">
+        <div class="col-md-2">
+          <label for="{{ form.gravidade.id_for_label }}" class="form-label">{{ form.gravidade.label }}</label>
+          {{ form.gravidade }}
+          {% if form.gravidade.errors %}<div class="text-danger small mt-1">{{ form.gravidade.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-2">
+          <label for="{{ form.urgencia.id_for_label }}" class="form-label">{{ form.urgencia.label }}</label>
+          {{ form.urgencia }}
+          {% if form.urgencia.errors %}<div class="text-danger small mt-1">{{ form.urgencia.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-2">
+          <label for="{{ form.tendencia.id_for_label }}" class="form-label">{{ form.tendencia.label }}</label>
+          {{ form.tendencia }}
+          {% if form.tendencia.errors %}<div class="text-danger small mt-1">{{ form.tendencia.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="small text-muted mb-1">Índice GUT (G × U × T)</div>
+          <span id="gut-display" class="badge bg-secondary fs-4">—</span>
+          <div id="gut-suggestion" class="small text-muted mt-1"></div>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-5">
+          <label for="{{ form.prioridade_risco.id_for_label }}" class="form-label">{{ form.prioridade_risco.label }}</label>
+          {{ form.prioridade_risco }}
+          {% if form.prioridade_risco.errors %}<div class="text-danger small mt-1">{{ form.prioridade_risco.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3" id="secao-recomendacao">
+    <div class="card-header fw-bold"><i class="bi bi-tools"></i> 5. Recomendação</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-12">
+          <label for="{{ form.recomendacao.id_for_label }}" class="form-label">{{ form.recomendacao.label }}</label>
+          {{ form.recomendacao }}
+          {% if form.recomendacao.errors %}<div class="text-danger small mt-1">{{ form.recomendacao.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label for="{{ form.direcionamento.id_for_label }}" class="form-label">{{ form.direcionamento.label }}</label>
+          {{ form.direcionamento }}
+          {% if form.direcionamento.errors %}<div class="text-danger small mt-1">{{ form.direcionamento.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label for="{{ form.prazo_meses.id_for_label }}" class="form-label">{{ form.prazo_meses.label }}</label>
+          {{ form.prazo_meses }}
+          {% if form.prazo_meses.errors %}<div class="text-danger small mt-1">{{ form.prazo_meses.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Seção de fotos — sempre visível ────────────────────────────────────────── #}
+  <div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-camera"></i> 6. Fotos</div>
+    <div class="card-body">
+
+      {# Fotos já salvas (apenas na edição) #}
+      {% if fotos_existentes %}
+      <div id="fotos-grid" class="d-flex flex-wrap gap-2 mb-3">
+        {% for foto in fotos_existentes %}
+        <div class="position-relative" id="foto-{{ foto.pk }}">
+          <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+               style="height:100px;width:100px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
+          <button type="button"
+                  class="btn btn-danger btn-sm position-absolute top-0 end-0"
+                  style="padding:1px 5px;font-size:.7rem;"
+                  onclick="deletarFoto({{ foto.pk }})"
+                  title="Excluir foto">
+            <i class="bi bi-x-lg"></i>
+          </button>
+          <div class="small text-muted text-truncate mt-1" style="max-width:100px;" title="{{ foto.nome_original }}">
+            {{ foto.nome_original }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div id="fotos-grid" class="d-flex flex-wrap gap-2 mb-3"></div>
+      {% endif %}
+
+      {# Preview de fotos selecionadas mas ainda não salvas #}
+      <div id="preview-grid" class="d-flex flex-wrap gap-2 mb-3"></div>
+
+      <div>
+        <label class="form-label">
+          {% if achado %}Adicionar fotos{% else %}Fotografar / selecionar fotos{% endif %}
+          <span class="text-muted fw-normal">(JPEG ou PNG, máx. 10 MB cada)</span>
+        </label>
+        <div class="d-flex gap-2 flex-wrap">
+          {# Botão câmera (mobile) #}
+          <label class="btn btn-outline-primary btn-sm mb-0" style="cursor:pointer;">
+            <i class="bi bi-camera"></i> Câmera
+            <input type="file" name="fotos" id="foto-camera"
+                   accept="image/*" capture="environment"
+                   multiple class="d-none">
+          </label>
+          {# Botão galeria / arquivo #}
+          <label class="btn btn-outline-secondary btn-sm mb-0" style="cursor:pointer;">
+            <i class="bi bi-image"></i> Galeria / Arquivo
+            <input type="file" name="fotos" id="foto-arquivo"
+                   accept="image/jpeg,image/png"
+                   multiple class="d-none">
+          </label>
+        </div>
+        <div id="upload-status" class="mt-2"></div>
+      </div>
+
+    </div>
+  </div>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="d-flex gap-2 mb-4">
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-check-lg"></i> Salvar Achado
+    </button>
+    <a href="{% url 'inspecoes:detail' especialidade.inspecao.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/gut_calculator.js' %}"></script>
+<script>
+// ── Controle de conformidade ───────────────────────────────────────────────
+(function () {
+  var chk = document.getElementById('id_em_conformidade');
+  var secaoNaoConf = document.getElementById('campos-nao-conformidade');
+  var secaoGut = document.getElementById('secao-gut');
+  var secaoRec = document.getElementById('secao-recomendacao');
+
+  var camposDesabilitar = [
+    'id_descricao_nao_conformidade',
+    'id_requisito_afetado',
+    'id_gravidade',
+    'id_urgencia',
+    'id_tendencia',
+    'id_prioridade_risco',
+    'id_recomendacao',
+    'id_direcionamento',
+    'id_prazo_meses',
+  ];
+
+  function aplicarConformidade(conforme) {
+    camposDesabilitar.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.disabled = conforme;
+    });
+    var opacidade = conforme ? '0.4' : '';
+    [secaoNaoConf, secaoGut, secaoRec].forEach(function (s) {
+      if (s) s.style.opacity = opacidade;
+    });
+    // Atualiza display do GUT
+    var g = document.getElementById('id_gravidade');
+    if (g) g.dispatchEvent(new Event('input'));
+  }
+
+  if (chk) {
+    aplicarConformidade(chk.checked);
+    chk.addEventListener('change', function () {
+      aplicarConformidade(this.checked);
+    });
+  }
+})();
+</script>
+<script>
+(function () {
+  var CSRF = "{{ csrf_token }}";
+  {% if achado %}
+  var UPLOAD_URL = "{% url 'inspecoes:foto_upload' achado.pk %}";
+  {% endif %}
+
+  // Mostra preview das fotos selecionadas
+  function mostrarPreview(files) {
+    var grid = document.getElementById('preview-grid');
+    Array.from(files).forEach(function (file) {
+      if (!file.type.match(/image\/(jpeg|png)/)) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var div = document.createElement('div');
+        div.className = 'position-relative';
+        div.innerHTML =
+          '<img src="' + e.target.result + '" alt="' + file.name + '" ' +
+          'style="height:100px;width:100px;object-fit:cover;border:2px dashed #0d6efd;border-radius:4px;" ' +
+          'title="' + file.name + '">' +
+          '<div class="small text-muted text-truncate mt-1" style="max-width:100px;">' + file.name + '</div>' +
+          '<span class="badge bg-primary position-absolute top-0 start-0" style="font-size:.6rem;">Nova</span>';
+        grid.appendChild(div);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  {% if achado %}
+  // Na edição: upload AJAX imediato (comportamento anterior)
+  function uploadAjax(files) {
+    var statusDiv = document.getElementById('upload-status');
+    Array.from(files).forEach(function (file) {
+      var fd = new FormData();
+      fd.append('arquivo', file);
+      fetch(UPLOAD_URL, {method: 'POST', headers: {'X-CSRFToken': CSRF}, body: fd})
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.erro) {
+            statusDiv.innerHTML += '<div class="text-danger small">' + data.erro + '</div>';
+            return;
+          }
+          var vazio = document.getElementById('fotos-vazio');
+          if (vazio) vazio.remove();
+          var div = document.createElement('div');
+          div.className = 'position-relative';
+          div.id = 'foto-' + data.id;
+          div.innerHTML =
+            '<img src="' + data.url + '" alt="' + data.nome + '" ' +
+            'style="height:100px;width:100px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">' +
+            '<button type="button" class="btn btn-danger btn-sm position-absolute top-0 end-0" ' +
+            'style="padding:1px 5px;font-size:.7rem;" onclick="deletarFoto(' + data.id + ')" title="Excluir foto">' +
+            '<i class="bi bi-x-lg"></i></button>' +
+            '<div class="small text-muted text-truncate mt-1" style="max-width:100px;" title="' + data.nome + '">' +
+            data.nome + '</div>';
+          document.getElementById('fotos-grid').appendChild(div);
+        })
+        .catch(function () {
+          statusDiv.innerHTML += '<div class="text-danger small">Erro ao enviar ' + file.name + '.</div>';
+        });
+    });
+  }
+
+  document.getElementById('foto-camera').addEventListener('change', function () {
+    uploadAjax(this.files); this.value = '';
+  });
+  document.getElementById('foto-arquivo').addEventListener('change', function () {
+    uploadAjax(this.files); this.value = '';
+  });
+
+  window.deletarFoto = function (pk) {
+    if (!confirm('Excluir esta foto? A operação não pode ser desfeita.')) return;
+    fetch('/fotos/' + pk + '/', {method: 'DELETE', headers: {'X-CSRFToken': CSRF}})
+      .then(function (r) {
+        if (r.status === 204) {
+          var el = document.getElementById('foto-' + pk);
+          if (el) el.remove();
+        }
+      });
+  };
+
+  {% else %}
+  // Na criação: só preview — as fotos são enviadas junto com o formulário
+  document.getElementById('foto-camera').addEventListener('change', function () {
+    mostrarPreview(this.files);
+  });
+  document.getElementById('foto-arquivo').addEventListener('change', function () {
+    mostrarPreview(this.files);
+  });
+  {% endif %}
+})();
+</script>
+{% endblock %}

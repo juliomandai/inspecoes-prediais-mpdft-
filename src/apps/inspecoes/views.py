@@ -1,0 +1,769 @@
+import json
+import io
+import zipfile
+import os
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render, get_object_or_404, redirect
+from django.template.loader import render_to_string
+from django.views.decorators.http import require_POST, require_http_methods
+
+from django.urls import reverse
+
+from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso
+from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm
+
+
+def _redirect_detail(inspecao_pk, esp_pk=None):
+    """Redireciona para o detalhe da inspeção abrindo a aba da especialidade correta."""
+    url = reverse('inspecoes:detail', kwargs={'pk': inspecao_pk})
+    if esp_pk:
+        url += f'#pane-{esp_pk}'
+    return redirect(url)
+
+
+def _log(request, tipo, descricao):
+    ip = (
+        request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+        or request.META.get('REMOTE_ADDR')
+    )
+    LogAcesso.objects.create(
+        usuario=request.user,
+        tipo=tipo,
+        descricao=descricao,
+        ip=ip or None,
+    )
+
+
+# ── Erros ─────────────────────────────────────────────────────────────────────
+
+def erro_404(request, exception=None):
+    return render(request, '404.html', status=404)
+
+
+def erro_403(request, exception=None):
+    return render(request, '403.html', status=403)
+
+
+# ── Inspeções (container por edificação) ──────────────────────────────────────
+
+@login_required
+def inspecao_list(request):
+    form = InspecaoFilterForm(request.GET or None)
+    qs = Inspecao.objects.select_related('edificacao').prefetch_related('especialidades').annotate(
+        num_especialidades=Count('especialidades', distinct=True),
+        num_achados=Count('especialidades__achados', distinct=True),
+    )
+
+    if form.is_valid():
+        if form.cleaned_data.get('edificacao'):
+            qs = qs.filter(edificacao=form.cleaned_data['edificacao'])
+        if form.cleaned_data.get('especialidade'):
+            qs = qs.filter(especialidades__especialidade=form.cleaned_data['especialidade']).distinct()
+        if form.cleaned_data.get('profissional'):
+            qs = qs.filter(especialidades__profissional__icontains=form.cleaned_data['profissional']).distinct()
+        if form.cleaned_data.get('data_inicio'):
+            qs = qs.filter(especialidades__data_inspecao__gte=form.cleaned_data['data_inicio']).distinct()
+        if form.cleaned_data.get('data_fim'):
+            qs = qs.filter(especialidades__data_inspecao__lte=form.cleaned_data['data_fim']).distinct()
+        if form.cleaned_data.get('status'):
+            qs = qs.filter(especialidades__status=form.cleaned_data['status']).distinct()
+
+    paginator = Paginator(qs.order_by('-criado_em'), 20)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    em_andamento_count = InspecaoEspecialidade.objects.filter(status='em_andamento').count()
+
+    return render(request, 'inspecoes/list.html', {
+        'filter_form': form,
+        'page_obj': page_obj,
+        'total_count': paginator.count,
+        'em_andamento_count': em_andamento_count,
+    })
+
+
+@login_required
+def inspecao_create(request):
+    form = InspecaoForm(request.POST or None)
+    if form.is_valid():
+        inspecao = form.save()
+        _log(request, 'inspecao_criada', f'Inspeção criada para "{inspecao.edificacao}".')
+        messages.success(request, 'Inspeção criada. Adicione as especialidades abaixo.')
+        return redirect('inspecoes:detail', pk=inspecao.pk)
+    return render(request, 'inspecoes/form.html', {'form': form})
+
+
+@login_required
+def inspecao_detail(request, pk):
+    from django.conf import settings
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades',
+            'especialidades__achados__fotos',
+        ),
+        pk=pk,
+    )
+    backup_salvo = os.path.exists(
+        os.path.join(settings.MEDIA_ROOT, 'backups', f'inspecao_{pk}.zip')
+    )
+    return render(request, 'inspecoes/detail.html', {
+        'inspecao': inspecao,
+        'backup_salvo': backup_salvo,
+    })
+
+
+@login_required
+def inspecao_update(request, pk):
+    inspecao = get_object_or_404(Inspecao, pk=pk)
+    form = InspecaoForm(request.POST or None, instance=inspecao)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Inspeção atualizada com sucesso.')
+        return redirect('inspecoes:detail', pk=pk)
+    return render(request, 'inspecoes/form.html', {'form': form, 'inspecao': inspecao})
+
+
+@login_required
+@require_POST
+def inspecao_delete(request, pk):
+    inspecao = get_object_or_404(Inspecao, pk=pk)
+    nome = str(inspecao)
+    _log(request, 'inspecao_excluida', f'Inspeção excluída: "{nome}".')
+    inspecao.delete()
+    messages.success(request, f'Inspeção "{nome}" excluída com sucesso.')
+    return redirect('inspecoes:list')
+
+
+# ── Especialidades ─────────────────────────────────────────────────────────────
+
+@login_required
+def especialidade_create(request, inspecao_pk):
+    inspecao = get_object_or_404(Inspecao, pk=inspecao_pk)
+    form = EspecialidadeForm(request.POST or None, inspecao=inspecao)
+    if form.is_valid():
+        esp = form.save(commit=False)
+        esp.inspecao = inspecao
+        try:
+            esp.full_clean()
+            esp.save()
+            _log(request, 'especialidade_criada', f'{esp.get_especialidade_display()} criada em "{inspecao.edificacao}".')
+            messages.success(request, f'{esp.get_especialidade_display()} adicionada com sucesso.')
+        except Exception as e:
+            messages.error(request, f'Erro ao salvar: {e}')
+        return redirect('inspecoes:detail', pk=inspecao_pk)
+    return render(request, 'inspecoes/especialidade_form.html', {
+        'form': form,
+        'inspecao': inspecao,
+    })
+
+
+def _pode_editar_especialidade(user, esp):
+    """Retorna True se o usuário tem permissão para editar esta especialidade."""
+    if user.is_staff or user.is_superuser:
+        return True
+    return user.get_full_name() == esp.profissional
+
+
+def _acesso_negado_especialidade(request, esp):
+    messages.error(
+        request,
+        f'Acesso negado. Apenas o profissional responsável '
+        f'("{esp.profissional}") pode realizar esta ação.',
+    )
+    return _redirect_detail(esp.inspecao_id, esp.pk)
+
+
+@login_required
+def especialidade_update(request, pk):
+    esp = get_object_or_404(InspecaoEspecialidade.objects.select_related('inspecao'), pk=pk)
+    if not _pode_editar_especialidade(request.user, esp):
+        return _acesso_negado_especialidade(request, esp)
+    form = EspecialidadeForm(request.POST or None, instance=esp, inspecao=esp.inspecao)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Especialidade atualizada com sucesso.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    return render(request, 'inspecoes/especialidade_form.html', {
+        'form': form,
+        'inspecao': esp.inspecao,
+        'especialidade': esp,
+    })
+
+
+@login_required
+@require_POST
+def especialidade_delete(request, pk):
+    esp = get_object_or_404(InspecaoEspecialidade.objects.select_related('inspecao'), pk=pk)
+    if not _pode_editar_especialidade(request.user, esp):
+        return _acesso_negado_especialidade(request, esp)
+    inspecao_pk = esp.inspecao_id
+    nome = esp.get_especialidade_display()
+    _log(request, 'especialidade_excluida', f'{nome} excluída de "{esp.inspecao.edificacao}".')
+    esp.delete()
+    messages.success(request, f'Especialidade "{nome}" excluída com sucesso.')
+    return redirect('inspecoes:detail', pk=inspecao_pk)
+
+
+@login_required
+@require_POST
+def especialidade_finalizar(request, pk):
+    esp = get_object_or_404(InspecaoEspecialidade, pk=pk)
+    if not _pode_editar_especialidade(request.user, esp):
+        return _acesso_negado_especialidade(request, esp)
+    if esp.status == 'finalizada':
+        messages.error(request, 'Esta especialidade já foi finalizada.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    if not esp.achados.exists():
+        messages.error(request, 'Não é possível finalizar sem achados registrados.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    esp.status = 'finalizada'
+    esp.save(update_fields=['status', 'atualizado_em'])
+    messages.success(request, f'{esp.get_especialidade_display()} finalizada.')
+    # Se todas as especialidades estão finalizadas, gera backup automático
+    inspecao = esp.inspecao
+    if inspecao.status_geral == 'finalizada':
+        try:
+            _salvar_backup_em_disco(inspecao)
+            messages.success(request, 'Inspeção finalizada! Backup gerado automaticamente.')
+        except Exception as e:
+            messages.warning(request, f'Inspeção finalizada, mas o backup automático falhou: {e}')
+    return redirect('inspecoes:analise', pk=pk)
+
+
+@login_required
+@require_POST
+def especialidade_reabrir(request, pk):
+    esp = get_object_or_404(InspecaoEspecialidade, pk=pk)
+    if not _pode_editar_especialidade(request.user, esp):
+        return _acesso_negado_especialidade(request, esp)
+    if esp.status == 'em_andamento':
+        messages.error(request, 'Esta especialidade já está em andamento.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    esp.status = 'em_andamento'
+    esp.save(update_fields=['status', 'atualizado_em'])
+    messages.success(request, f'{esp.get_especialidade_display()} reaberta.')
+    return _redirect_detail(esp.inspecao_id, esp.pk)
+
+
+# ── Achados ────────────────────────────────────────────────────────────────────
+
+@login_required
+def achado_create(request, esp_pk):
+    esp = get_object_or_404(InspecaoEspecialidade.objects.select_related('inspecao'), pk=esp_pk)
+    if not esp.pode_editar:
+        messages.error(request, 'Não é possível adicionar achados a uma especialidade finalizada. Reabra primeiro.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    form = AchadoForm(request.POST or None)
+    if form.is_valid():
+        achado = form.save(commit=False)
+        achado.especialidade = esp
+        achado.save()
+        for arquivo in request.FILES.getlist('fotos'):
+            if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                Foto.objects.create(
+                    achado=achado,
+                    arquivo=arquivo,
+                    nome_original=arquivo.name,
+                    tamanho_bytes=arquivo.size,
+                )
+        _log(request, 'achado_criado',
+             f'Achado criado: "{achado.verificacao}" em {esp.get_especialidade_display()} — "{esp.inspecao.edificacao}".')
+        messages.success(request, 'Achado registrado com sucesso.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    return render(request, 'inspecoes/achado_form.html', {
+        'form': form,
+        'especialidade': esp,
+        'fotos_existentes': [],
+    })
+
+
+@login_required
+def achado_update(request, pk):
+    achado = get_object_or_404(Achado.objects.select_related('especialidade__inspecao'), pk=pk)
+    if not achado.especialidade.pode_editar:
+        messages.error(request, 'Não é possível editar achados de uma especialidade finalizada. Reabra primeiro.')
+        return _redirect_detail(achado.especialidade.inspecao_id, achado.especialidade_id)
+    form = AchadoForm(request.POST or None, instance=achado)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Achado atualizado com sucesso.')
+        return _redirect_detail(achado.especialidade.inspecao_id, achado.especialidade_id)
+    return render(request, 'inspecoes/achado_form.html', {
+        'form': form,
+        'especialidade': achado.especialidade,
+        'achado': achado,
+        'fotos_existentes': achado.fotos.all(),
+    })
+
+
+@login_required
+@require_POST
+def achado_delete(request, pk):
+    achado = get_object_or_404(Achado.objects.select_related('especialidade__inspecao'), pk=pk)
+    if not achado.especialidade.pode_editar:
+        messages.error(request, 'Não é possível excluir achados de uma especialidade finalizada. Reabra primeiro.')
+        return _redirect_detail(achado.especialidade.inspecao_id, achado.especialidade_id)
+    inspecao_pk = achado.especialidade.inspecao_id
+    esp_pk = achado.especialidade_id
+    _log(request, 'achado_excluido',
+         f'Achado excluído: "{achado.verificacao}" em '
+         f'{achado.especialidade.get_especialidade_display()} — "{achado.especialidade.inspecao.edificacao}".')
+    achado.delete()
+    messages.success(request, 'Achado excluído com sucesso.')
+    return _redirect_detail(inspecao_pk, esp_pk)
+
+
+# ── Fotos ──────────────────────────────────────────────────────────────────────
+
+ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/png'}
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+
+
+@login_required
+@require_POST
+def foto_upload(request, achado_pk):
+    achado = get_object_or_404(Achado.objects.select_related('especialidade'), pk=achado_pk)
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
+    if arquivo.content_type not in ALLOWED_CONTENT_TYPES:
+        return JsonResponse({'erro': 'Formato inválido. Use JPEG ou PNG.'}, status=400)
+    if arquivo.size > MAX_UPLOAD_SIZE:
+        return JsonResponse({'erro': 'Arquivo muito grande. Máximo: 10 MB.'}, status=400)
+
+    foto = Foto.objects.create(
+        achado=achado,
+        arquivo=arquivo,
+        nome_original=arquivo.name,
+        tamanho_bytes=arquivo.size,
+    )
+    return JsonResponse({'id': foto.pk, 'url': foto.arquivo.url, 'nome': foto.nome_original})
+
+
+@login_required
+@require_http_methods(['DELETE'])
+def foto_delete(request, pk):
+    foto = get_object_or_404(Foto.objects.select_related('achado__especialidade'), pk=pk)
+    foto.delete()
+    return HttpResponse(status=204)
+
+
+# ── Análise — helper compartilhado ────────────────────────────────────────────
+
+def _analise_data(achados_list):
+    """Calcula todos os dados de análise a partir de uma lista de achados."""
+    nao_conformes = [a for a in achados_list if a.gut_total > 0]
+    total = len(achados_list)
+    total_nc = len(nao_conformes)
+    total_conformes = total - total_nc
+
+    p1 = [a for a in nao_conformes if a.prioridade_risco == 1]
+    p2 = [a for a in nao_conformes if a.prioridade_risco == 2]
+    p3 = [a for a in nao_conformes if a.prioridade_risco == 3]
+
+    # Grupos
+    grupo_labels = dict(Achado.GRUPO_TECNICO_CHOICES)
+    grupo_map = {}
+    for a in nao_conformes:
+        g = a.grupo_tecnico
+        if g not in grupo_map:
+            grupo_map[g] = {'grupo_tecnico': g, 'nome': grupo_labels.get(g, g), 'p1': 0, 'p2': 0, 'p3': 0, 'total': 0}
+        grupo_map[g][f'p{a.prioridade_risco}'] += 1
+        grupo_map[g]['total'] += 1
+    grupos = sorted(grupo_map.values(), key=lambda x: (-x['p1'], -x['total']))
+
+    # Direcionamento
+    def achados_por_dir(dir_key):
+        result = {'p1': [], 'p2': [], 'p3': []}
+        for a in nao_conformes:
+            if a.direcionamento == dir_key:
+                result[f'p{a.prioridade_risco}'].append(a)
+        return result
+
+    manutencao = achados_por_dir('manutencao')
+    nova_contratacao = achados_por_dir('nova_contratacao')
+    garantia = achados_por_dir('garantia')
+
+    # GUT
+    gut_vals = [a.gut_total for a in nao_conformes]
+    gut_media = round(sum(gut_vals) / len(gut_vals), 1) if gut_vals else 0
+    gut_max = max(gut_vals) if gut_vals else 0
+    gut_min = min(gut_vals) if gut_vals else 0
+    n = len(gut_vals)
+    gut_desvio = round((sum((v - gut_media) ** 2 for v in gut_vals) / n) ** 0.5, 1) if n > 1 else 0
+    top_gut_raw = sorted(nao_conformes, key=lambda a: -a.gut_total)[:10]
+    top_gut_max = top_gut_raw[0].gut_total if top_gut_raw else 1
+    for a in top_gut_raw:
+        a.gut_pct = round(a.gut_total / top_gut_max * 100)
+
+    # Por localização
+    loc_map = {}
+    for a in nao_conformes:
+        loc = a.localizacao
+        if loc not in loc_map:
+            loc_map[loc] = {'localizacao': loc, 'total': 0, 'p1': 0, 'p2': 0, 'p3': 0}
+        loc_map[loc]['total'] += 1
+        loc_map[loc][f'p{a.prioridade_risco}'] += 1
+    por_localizacao = sorted(loc_map.values(), key=lambda x: -x['total'])
+
+    # Por prazo
+    prazo_map = {}
+    prazo_labels = dict(Achado.PRAZO_CHOICES)
+    for a in nao_conformes:
+        k = a.prazo_meses
+        if k not in prazo_map:
+            prazo_map[k] = {'prazo': k, 'label': prazo_labels.get(k, f'{k} meses'), 'total': 0, 'p1': 0, 'p2': 0, 'p3': 0}
+        prazo_map[k]['total'] += 1
+        prazo_map[k][f'p{a.prioridade_risco}'] += 1
+    por_prazo = sorted(prazo_map.values(), key=lambda x: x['prazo'])
+
+    # Por requisito afetado
+    _req_labels = dict(Achado.REQUISITO_CHOICES)
+    _req_colors = {
+        'seguranca_estrutural': '#dc3545', 'acessibilidade': '#ffc107',
+        'saude_qualidade_ar': '#0d6efd',   'funcionalidade': '#198754',
+        'estetica': '#6f42c1',             'eficiencia_energetica': '#fd7e14',
+        'sustentabilidade': '#20c997',     'durabilidade': '#7B2D00',
+    }
+    req_count = {k: 0 for k in _req_labels}
+    for a in nao_conformes:
+        req_count[a.requisito_afetado] = req_count.get(a.requisito_afetado, 0) + 1
+    por_requisito = [
+        {'requisito': k, 'label': _req_labels.get(k, k), 'total': req_count.get(k, 0),
+         'color': _req_colors.get(k, '#adb5bd')}
+        for k in _req_labels
+    ]
+
+    # Charts JSON
+    chart_risco = json.dumps({
+        'labels': ['P1 — Crítico', 'P2 — Regular', 'P3 — Mínimo'],
+        'data': [len(p1), len(p2), len(p3)],
+        'colors': ['#dc3545', '#fd7e14', '#198754'],
+    })
+    chart_prazo = json.dumps({
+        'labels': [p['label'] for p in por_prazo],
+        'data': [p['total'] for p in por_prazo],
+    })
+    chart_requisitos = json.dumps({
+        'labels': [r['label'] for r in por_requisito],
+        'data':   [r['total'] for r in por_requisito],
+        'colors': [r['color'] for r in por_requisito],
+    })
+
+    return {
+        'total': total, 'total_nc': total_nc, 'total_conformes': total_conformes,
+        'p1': p1, 'p2': p2, 'p3': p3,
+        'grupos': grupos,
+        'manutencao': manutencao, 'nova_contratacao': nova_contratacao, 'garantia': garantia,
+        'gut_media': gut_media, 'gut_max': gut_max, 'gut_min': gut_min, 'gut_desvio': gut_desvio,
+        'top_gut': top_gut_raw,
+        'por_localizacao': por_localizacao,
+        'por_prazo': por_prazo,
+        'por_requisito': por_requisito,
+        'chart_risco': chart_risco,
+        'chart_prazo': chart_prazo,
+        'chart_requisitos': chart_requisitos,
+    }
+
+
+def _gerar_pdf(html_string, nome_arquivo):
+    from xhtml2pdf import pisa
+    buffer = io.BytesIO()
+    result = pisa.pisaDocument(io.BytesIO(html_string.encode('utf-8')), buffer, encoding='utf-8')
+    if result.err:
+        return HttpResponse(f'Erro ao gerar PDF: {result.err}', status=500)
+    resp = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+    return resp
+
+
+# ── Análise por especialidade ─────────────────────────────────────────────────
+
+@login_required
+def especialidade_analise(request, pk):
+    esp = get_object_or_404(
+        InspecaoEspecialidade.objects.select_related('inspecao__edificacao').prefetch_related('achados__fotos'),
+        pk=pk,
+    )
+    ctx = _analise_data(list(esp.achados.all()))
+    ctx['especialidade'] = esp
+    ctx['inspecao'] = esp.inspecao
+    return render(request, 'inspecoes/analise.html', ctx)
+
+
+@login_required
+def especialidade_analise_pdf(request, pk):
+    esp = get_object_or_404(
+        InspecaoEspecialidade.objects.select_related('inspecao__edificacao').prefetch_related('achados'),
+        pk=pk,
+    )
+    ctx = _analise_data(list(esp.achados.all()))
+    ctx['especialidade'] = esp
+    ctx['inspecao'] = esp.inspecao
+    html = render_to_string('inspecoes/analise_pdf.html', ctx, request=request)
+    nome = (
+        f"laudo_{esp.inspecao.edificacao.nome.replace(' ', '_')}"
+        f"_{esp.get_especialidade_display().replace(' ', '_')}"
+        f"_{esp.data_inspecao.strftime('%Y%m%d')}.pdf"
+    )
+    return _gerar_pdf(html, nome)
+
+
+# ── Análise geral (por edificação) ────────────────────────────────────────────
+
+@login_required
+def inspecao_analise(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades', 'especialidades__achados__fotos',
+        ),
+        pk=pk,
+    )
+    todos_achados = []
+    for esp in inspecao.especialidades.all():
+        todos_achados.extend(list(esp.achados.all()))
+
+    ctx = _analise_data(todos_achados)
+    ctx['inspecao'] = inspecao
+
+    # Breakdown por especialidade
+    por_especialidade = []
+    for esp in inspecao.especialidades.all():
+        ach = list(esp.achados.all())
+        nc = [a for a in ach if a.gut_total > 0]
+        por_especialidade.append({
+            'especialidade': esp,
+            'total': len(ach),
+            'total_nc': len(nc),
+            'p1': len([a for a in nc if a.prioridade_risco == 1]),
+            'p2': len([a for a in nc if a.prioridade_risco == 2]),
+            'p3': len([a for a in nc if a.prioridade_risco == 3]),
+        })
+    ctx['por_especialidade'] = por_especialidade
+
+    return render(request, 'inspecoes/analise_geral.html', ctx)
+
+
+@login_required
+def inspecao_analise_pdf(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades', 'especialidades__achados',
+        ),
+        pk=pk,
+    )
+    todos_achados = []
+    for esp in inspecao.especialidades.all():
+        todos_achados.extend(list(esp.achados.all()))
+
+    ctx = _analise_data(todos_achados)
+    ctx['inspecao'] = inspecao
+
+    por_especialidade = []
+    for esp in inspecao.especialidades.all():
+        ach = list(esp.achados.all())
+        nc = [a for a in ach if a.gut_total > 0]
+        por_especialidade.append({
+            'especialidade': esp,
+            'total': len(ach),
+            'total_nc': len(nc),
+            'p1': len([a for a in nc if a.prioridade_risco == 1]),
+            'p2': len([a for a in nc if a.prioridade_risco == 2]),
+            'p3': len([a for a in nc if a.prioridade_risco == 3]),
+        })
+    ctx['por_especialidade'] = por_especialidade
+
+    html = render_to_string('inspecoes/analise_geral_pdf.html', ctx, request=request)
+    nome = f"laudo_{inspecao.edificacao.nome.replace(' ', '_')}_{inspecao.criado_em.strftime('%Y%m%d')}.pdf"
+    return _gerar_pdf(html, nome)
+
+
+# ── Backup da inspeção ────────────────────────────────────────────────────────
+
+def _gerar_zip_backup(inspecao):
+    """Gera o conteúdo ZIP do backup de uma inspeção. Retorna (bytes, nome_arquivo)."""
+    from django.conf import settings
+
+    dados = {
+        'inspecao': {
+            'id': inspecao.pk,
+            'edificacao': inspecao.edificacao.nome,
+            'criado_em': inspecao.criado_em.strftime('%Y-%m-%d %H:%M:%S'),
+            'status_geral': inspecao.status_geral,
+        },
+        'especialidades': [],
+    }
+    fotos_paths = []
+
+    for esp in inspecao.especialidades.all():
+        esp_dict = {
+            'id': esp.pk,
+            'especialidade': esp.get_especialidade_display(),
+            'profissional': esp.profissional,
+            'data_inspecao': esp.data_inspecao.strftime('%Y-%m-%d'),
+            'status': esp.get_status_display(),
+            'achados': [],
+        }
+        for achado in esp.achados.all():
+            achado_dict = {
+                'id': achado.pk,
+                'localizacao': achado.localizacao,
+                'sub_localizacao': achado.sub_localizacao or '',
+                'verificacao': achado.verificacao,
+                'em_conformidade': achado.em_conformidade,
+                'grupo_tecnico': achado.grupo_tecnico if not achado.em_conformidade else '',
+                'requisito_afetado': achado.requisito_afetado if not achado.em_conformidade else '',
+                'descricao_nao_conformidade': achado.descricao_nao_conformidade or '',
+                'recomendacao': achado.recomendacao or '',
+                'gravidade': achado.gravidade,
+                'urgencia': achado.urgencia,
+                'tendencia': achado.tendencia,
+                'gut_total': achado.gut_total,
+                'prazo_meses': achado.get_prazo_meses_display() if not achado.em_conformidade else '',
+                'direcionamento': achado.get_direcionamento_display() if not achado.em_conformidade else '',
+                'fotos': [],
+            }
+            for foto in achado.fotos.all():
+                nome_esp = esp.get_especialidade_display().replace(' ', '_')
+                nome_no_zip = f'fotos/{nome_esp}/achado_{achado.pk}/{foto.nome_original}'
+                achado_dict['fotos'].append(nome_no_zip)
+                if foto.arquivo and os.path.exists(foto.arquivo.path):
+                    fotos_paths.append((nome_no_zip, foto.arquivo.path))
+            esp_dict['achados'].append(achado_dict)
+        dados['especialidades'].append(esp_dict)
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr('dados.json', json.dumps(dados, ensure_ascii=False, indent=2))
+        for nome_no_zip, caminho_fisico in fotos_paths:
+            zf.write(caminho_fisico, nome_no_zip)
+        # Inclui cópia do banco de dados
+        db_path = settings.DATABASES['default']['NAME']
+        if os.path.exists(str(db_path)):
+            zf.write(str(db_path), 'banco_de_dados/db.sqlite3')
+
+    nome_edificacao = inspecao.edificacao.nome.replace(' ', '_')
+    nome_arquivo = f'backup_inspecao_{nome_edificacao}_{inspecao.criado_em.strftime("%Y%m%d")}.zip'
+    return buffer.getvalue(), nome_arquivo
+
+
+def _salvar_backup_em_disco(inspecao):
+    """Gera e salva o backup no disco. Retorna o caminho do arquivo salvo."""
+    from django.conf import settings
+    inspecao_com_dados = Inspecao.objects.select_related('edificacao').prefetch_related(
+        'especialidades__achados__fotos',
+    ).get(pk=inspecao.pk)
+    zip_bytes, nome_arquivo = _gerar_zip_backup(inspecao_com_dados)
+    pasta = os.path.join(settings.MEDIA_ROOT, 'backups')
+    os.makedirs(pasta, exist_ok=True)
+    caminho = os.path.join(pasta, f'inspecao_{inspecao.pk}.zip')
+    with open(caminho, 'wb') as f:
+        f.write(zip_bytes)
+    return caminho
+
+
+@login_required
+def inspecao_backup(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades__achados__fotos',
+        ),
+        pk=pk,
+    )
+    zip_bytes, nome_arquivo = _gerar_zip_backup(inspecao)
+    response = HttpResponse(zip_bytes, content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+    return response
+
+
+@login_required
+def inspecao_backup_download(request, pk):
+    """Baixa o backup salvo automaticamente ao finalizar a inspeção."""
+    from django.conf import settings
+    inspecao = get_object_or_404(Inspecao.objects.select_related('edificacao'), pk=pk)
+    caminho = os.path.join(settings.MEDIA_ROOT, 'backups', f'inspecao_{pk}.zip')
+    if not os.path.exists(caminho):
+        messages.error(request, 'Backup automático não encontrado. Use o botão "Backup" para gerar um agora.')
+        return _redirect_detail(pk)
+    nome_edificacao = inspecao.edificacao.nome.replace(' ', '_')
+    nome_arquivo = f'backup_inspecao_{nome_edificacao}_{inspecao.criado_em.strftime("%Y%m%d")}.zip'
+    with open(caminho, 'rb') as f:
+        response = HttpResponse(f.read(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+    return response
+
+
+# ── Log de acesso ─────────────────────────────────────────────────────────────
+
+@login_required
+def log_acesso(request):
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.error(request, 'Acesso restrito a administradores.')
+        return redirect('inspecoes:list')
+    logs = LogAcesso.objects.select_related('usuario').all()
+    # Filtros simples
+    tipo = request.GET.get('tipo', '')
+    usuario_id = request.GET.get('usuario', '')
+    if tipo:
+        logs = logs.filter(tipo=tipo)
+    if usuario_id:
+        logs = logs.filter(usuario_id=usuario_id)
+    from django.contrib.auth import get_user_model
+    usuarios = get_user_model().objects.filter(logs_acesso__isnull=False).distinct().order_by('first_name', 'username')
+    paginator = Paginator(logs, 50)
+    page = paginator.get_page(request.GET.get('page'))
+    return render(request, 'inspecoes/log_acesso.html', {
+        'page_obj': page,
+        'tipo_choices': LogAcesso.TIPO_CHOICES,
+        'tipo_selecionado': tipo,
+        'usuarios': usuarios,
+        'usuario_selecionado': usuario_id,
+    })
+
+
+# ── Configurações ──────────────────────────────────────────────────────────────
+
+@login_required
+def configuracoes(request):
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'add':
+            campo = request.POST.get('campo', '').strip()
+            label = request.POST.get('label', '').strip()
+            campos_validos = dict(OpcaoCampo.CAMPO_CHOICES)
+            if not campo or campo not in campos_validos:
+                messages.error(request, 'Campo inválido.')
+            elif not label:
+                messages.error(request, 'A descrição não pode ficar em branco.')
+            else:
+                try:
+                    OpcaoCampo.objects.create(campo=campo, label=label)
+                    messages.success(request, f'Opção "{label}" adicionada em {campos_validos[campo]}.')
+                except Exception:
+                    messages.error(request, f'A opção "{label}" já existe neste campo.')
+
+        elif action == 'delete':
+            opcao_id = request.POST.get('opcao_id')
+            try:
+                opcao = OpcaoCampo.objects.get(pk=opcao_id, is_padrao=False)
+                nome = opcao.label
+                opcao.delete()
+                messages.success(request, f'Opção "{nome}" removida.')
+            except OpcaoCampo.DoesNotExist:
+                messages.error(request, 'Opção não encontrada ou não pode ser removida.')
+
+        return redirect('inspecoes:configuracoes')
+
+    opcoes_qs = OpcaoCampo.objects.all()
+    grupos = {}
+    for campo_key, campo_label in OpcaoCampo.CAMPO_CHOICES:
+        grupos[campo_key] = {
+            'label': campo_label,
+            'opcoes': [o for o in opcoes_qs if o.campo == campo_key],
+        }
+
+    return render(request, 'inspecoes/configuracoes.html', {'grupos': grupos})

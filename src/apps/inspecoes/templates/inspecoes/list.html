@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}Inspeções — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Inspeções</h2>
+    {% if em_andamento_count %}
+    <small class="text-muted">
+      <span class="badge bg-warning text-dark">{{ em_andamento_count }}</span> especialidade(s) em andamento
+    </small>
+    {% endif %}
+  </div>
+  <a href="{% url 'inspecoes:create' %}" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Nova Inspeção
+  </a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small">{{ filter_form.edificacao.label }}</label>
+        {{ filter_form.edificacao }}
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">{{ filter_form.data_inicio.label }}</label>
+        {{ filter_form.data_inicio }}
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">{{ filter_form.data_fim.label }}</label>
+        {{ filter_form.data_fim }}
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">{{ filter_form.especialidade.label }}</label>
+        {{ filter_form.especialidade }}
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small">{{ filter_form.status.label }}</label>
+        {{ filter_form.status }}
+      </div>
+      <div class="col-md-2 d-flex gap-1">
+        <button type="submit" class="btn btn-secondary btn-sm">
+          <i class="bi bi-funnel"></i> Filtrar
+        </button>
+        <a href="{% url 'inspecoes:list' %}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<p class="text-muted small mb-2">Total: <strong>{{ total_count }}</strong> inspeção(ões)</p>
+
+{% if page_obj.object_list %}
+<div class="table-responsive">
+  <table class="table table-hover table-bordered align-middle">
+    <thead class="table-primary">
+      <tr>
+        <th>Edificação</th>
+        <th class="text-center">Especialidades</th>
+        <th>Status geral</th>
+        <th class="text-center">Achados</th>
+        <th class="text-center">Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inspecao in page_obj %}
+      <tr>
+        <td>{{ inspecao.edificacao }}</td>
+        <td class="text-center">{{ inspecao.num_especialidades }}</td>
+        <td>
+          {% if inspecao.status_geral == 'em_andamento' %}
+          <span class="badge bg-warning text-dark">Em andamento</span>
+          {% else %}
+          <span class="badge bg-success">Finalizada</span>
+          {% endif %}
+        </td>
+        <td class="text-center">{{ inspecao.num_achados }}</td>
+        <td class="text-center">
+          <a href="{% url 'inspecoes:detail' inspecao.pk %}" class="btn btn-sm btn-outline-primary">
+            {% if inspecao.status_geral == 'em_andamento' %}
+            <i class="bi bi-pencil"></i> Continuar
+            {% else %}
+            <i class="bi bi-eye"></i> Ver
+            {% endif %}
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav aria-label="Paginação">
+  <ul class="pagination justify-content-center">
+    {% if page_obj.has_previous %}
+    <li class="page-item">
+      <a class="page-link" href="?{% for key,val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">
+        &laquo; Anterior
+      </a>
+    </li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+    {% endif %}
+
+    {% for num in page_obj.paginator.page_range %}
+    {% if page_obj.number == num %}
+    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+    <li class="page-item">
+      <a class="page-link" href="?{% for key,val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+    </li>
+    {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="?{% for key,val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">
+        Próxima &raquo;
+      </a>
+    </li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle"></i> Nenhuma inspeção encontrada.
+  {% if request.GET %} Tente limpar os filtros.{% endif %}
+</div>
+{% endif %}
+{% endblock %}

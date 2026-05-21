@@ -1,0 +1,26 @@
+<table class="dados">
+  <thead>
+    <tr>
+      <th style="width:14pt">#</th>
+      <th style="width:62pt">Localização</th>
+      <th style="width:65pt">Verificação</th>
+      <th>Descrição da Não Conformidade</th>
+      <th style="width:24pt;text-align:center">GUT</th>
+      <th>Recomendação Técnica</th>
+      <th style="width:42pt">Prazo</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in achados %}
+    <tr style="background:{% if row_bg %}{{ row_bg }}{% elif forloop.counter|divisibleby:2 %}#f4f6fb{% else %}#fff{% endif %}">
+      <td>{{ forloop.counter }}</td>
+      <td>{{ a.localizacao }}{% if a.sub_localizacao %} / {{ a.sub_localizacao }}{% endif %}</td>
+      <td>{{ a.verificacao }}</td>
+      <td>{{ a.descricao_nao_conformidade }}</td>
+      <td style="text-align:center"><span class="badge bp{{ a.prioridade_risco }}">{{ a.gut_total }}</span></td>
+      <td>{{ a.recomendacao }}</td>
+      <td>{{ a.get_prazo_meses_display }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

@@ -1,0 +1,35 @@
+<div class="table-responsive">
+  <table class="table table-sm table-hover mb-0">
+    <thead class="table-light">
+      <tr>
+        <th style="width:2.5rem">#</th>
+        <th>Localização</th>
+        <th>Verificação</th>
+        <th>Descrição da Não Conformidade</th>
+        <th class="text-center" style="width:4rem">GUT</th>
+        <th>Recomendação Técnica</th>
+        <th style="width:7rem">Prazo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in achados %}
+      <tr>
+        <td class="text-muted">{{ forloop.counter }}</td>
+        <td>
+          {{ a.localizacao }}
+          {% if a.sub_localizacao %}
+          <br><small class="text-muted">{{ a.sub_localizacao }}</small>
+          {% endif %}
+        </td>
+        <td>{{ a.verificacao }}</td>
+        <td>{{ a.descricao_nao_conformidade }}</td>
+        <td class="text-center">
+          <span class="badge badge-p{{ a.prioridade_risco }}">{{ a.gut_total }}</span>
+        </td>
+        <td>{{ a.recomendacao }}</td>
+        <td class="text-nowrap small">{{ a.get_prazo_meses_display }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

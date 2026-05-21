@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}Log de Acesso — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-journal-text"></i> Log de Acesso</h4>
+  <a href="{% url 'inspecoes:list' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+{# Filtros #}
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <select name="tipo" class="form-select form-select-sm">
+      <option value="">Todos os eventos</option>
+      {% for valor, label in tipo_choices %}
+      <option value="{{ valor }}" {% if valor == tipo_selecionado %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="usuario" class="form-select form-select-sm">
+      <option value="">Todos os usuários</option>
+      {% for u in usuarios %}
+      <option value="{{ u.pk }}" {% if u.pk|stringformat:"s" == usuario_selecionado %}selected{% endif %}>
+        {{ u.get_full_name|default:u.username }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+    <a href="{% url 'inspecoes:log_acesso' %}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Data/Hora</th>
+          <th>Usuário</th>
+          <th>Evento</th>
+          <th>Descrição</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in page_obj %}
+        <tr>
+          <td class="text-nowrap small">{{ log.criado_em|date:"d/m/Y H:i:s" }}</td>
+          <td class="small">
+            {% if log.usuario %}
+              {{ log.usuario.get_full_name|default:log.usuario.username }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if log.tipo == 'login' %}
+            <span class="badge bg-secondary">Login</span>
+            {% elif log.tipo == 'inspecao_criada' %}
+            <span class="badge bg-success">Inspeção criada</span>
+            {% elif log.tipo == 'inspecao_excluida' %}
+            <span class="badge bg-danger">Inspeção excluída</span>
+            {% elif log.tipo == 'especialidade_criada' %}
+            <span class="badge bg-success">Especialidade criada</span>
+            {% elif log.tipo == 'especialidade_excluida' %}
+            <span class="badge bg-danger">Especialidade excluída</span>
+            {% elif log.tipo == 'achado_criado' %}
+            <span class="badge bg-primary">Achado criado</span>
+            {% elif log.tipo == 'achado_excluido' %}
+            <span class="badge bg-danger">Achado excluído</span>
+            {% endif %}
+          </td>
+          <td class="small">{{ log.descricao }}</td>
+          <td class="small text-muted">{{ log.ip|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-3">Nenhum registro encontrado.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# Paginação #}
+{% if page_obj.has_other_pages %}
+<nav class="mt-3">
+  <ul class="pagination pagination-sm">
+    {% if page_obj.has_previous %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ page_obj.previous_page_number }}&tipo={{ tipo_selecionado }}&usuario={{ usuario_selecionado }}">Anterior</a>
+    </li>
+    {% endif %}
+    <li class="page-item disabled">
+      <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+    </li>
+    {% if page_obj.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ page_obj.next_page_number }}&tipo={{ tipo_selecionado }}&usuario={{ usuario_selecionado }}">Próxima</a>
+    </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}
