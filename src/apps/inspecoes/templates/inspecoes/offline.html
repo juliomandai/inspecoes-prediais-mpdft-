@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Sem conexão — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+  <i class="bi bi-wifi-off text-warning" style="font-size: 4rem;"></i>
+  <h3 class="mt-3">Sem conexão WiFi</h3>
+  <p class="text-muted">
+    Você está sem acesso à rede.<br>
+    Esta página não está disponível no momento.
+  </p>
+  <div class="alert alert-info d-inline-block text-start mt-3" style="max-width:480px;">
+    <strong><i class="bi bi-info-circle"></i> O que você pode fazer offline:</strong>
+    <ul class="mt-2 mb-0">
+      <li>Abrir páginas que já foram visitadas anteriormente (estão no cache)</li>
+      <li>Preencher formulários de achados — serão salvos e enviados quando o WiFi retornar</li>
+    </ul>
+  </div>
+  <div class="mt-4">
+    <button class="btn btn-primary" onclick="history.back()">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </button>
+    <button class="btn btn-outline-secondary ms-2" onclick="location.reload()">
+      <i class="bi bi-arrow-clockwise"></i> Tentar novamente
+    </button>
+  </div>
+</div>
+{% endblock %}

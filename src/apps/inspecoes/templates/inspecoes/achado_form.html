@@ -15,7 +15,11 @@
   </a>
 </div>
 
-<form method="post" enctype="multipart/form-data" id="achado-form">
+<form method="post" enctype="multipart/form-data" id="achado-form"
+      data-esp-pk="{{ especialidade.pk }}"
+      data-inspecao-pk="{{ especialidade.inspecao.pk }}"
+      data-detalhe-url="{% url 'inspecoes:detail' especialidade.inspecao.pk %}#pane-{{ especialidade.pk }}"
+      data-modo="{% if achado %}editar{% else %}criar{% endif %}">
   {% csrf_token %}
 
   <div class="card mb-3">
@@ -217,6 +221,91 @@
 
 {% block extra_js %}
 <script src="{% static 'js/gut_calculator.js' %}"></script>
+<script>
+// ── Interceptação offline (somente na criação) ─────────────────────────────
+(function () {
+  var form = document.getElementById('achado-form');
+  if (!form || form.dataset.modo !== 'criar') return;
+
+  // Coleta fotos selecionadas como ArrayBuffer para salvar no IndexedDB
+  var fotosColetadas = []; // [ { nome, tipo, arquivo (File) } ]
+
+  document.getElementById('foto-camera').addEventListener('change', function () {
+    Array.from(this.files).forEach(f => fotosColetadas.push(f));
+  });
+  document.getElementById('foto-arquivo').addEventListener('change', function () {
+    Array.from(this.files).forEach(f => fotosColetadas.push(f));
+  });
+
+  form.addEventListener('submit', async function (e) {
+    if (navigator.onLine) return; // online → envio normal
+    e.preventDefault();
+
+    var btn = form.querySelector('button[type=submit]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass"></i> Salvando...'; }
+
+    // Coletar valores do formulário
+    var esp_pk    = parseInt(form.dataset.espPk);
+    var detalheUrl = form.dataset.detalheUrl;
+
+    function val(id) {
+      var el = document.getElementById(id);
+      return el ? el.value : '';
+    }
+    function checked(id) {
+      var el = document.getElementById(id);
+      return el ? el.checked : false;
+    }
+
+    var dados = {
+      esp_pk: esp_pk,
+      localizacao: val('id_localizacao'),
+      sub_localizacao: val('id_sub_localizacao'),
+      verificacao: val('id_verificacao'),
+      grupo_tecnico: val('id_grupo_tecnico'),
+      em_conformidade: checked('id_em_conformidade'),
+      descricao_nao_conformidade: val('id_descricao_nao_conformidade'),
+      requisito_afetado: val('id_requisito_afetado'),
+      gravidade: parseInt(val('id_gravidade')) || 1,
+      urgencia: parseInt(val('id_urgencia')) || 1,
+      tendencia: parseInt(val('id_tendencia')) || 1,
+      prioridade_risco: parseInt(val('id_prioridade_risco')) || 3,
+      recomendacao: val('id_recomendacao'),
+      direcionamento: val('id_direcionamento'),
+      prazo_meses: parseInt(val('id_prazo_meses')) || 12,
+      fotos: [],
+    };
+
+    // Converter fotos para base64
+    async function fotoParaB64(file) {
+      return new Promise((resolve, reject) => {
+        var reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(',')[1]); // só base64
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    for (var foto of fotosColetadas) {
+      if (!foto.type.match(/image\/(jpeg|png)/)) continue;
+      if (foto.size > 10 * 1024 * 1024) continue;
+      try {
+        var b64 = await fotoParaB64(foto);
+        dados.fotos.push({ nome: foto.name, tipo: foto.type, dados_b64: b64 });
+      } catch {}
+    }
+
+    try {
+      await window.salvarAchadoOffline(dados);
+      // Redirecionar para a página de detalhe (do cache do SW)
+      window.location.href = detalheUrl;
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Salvar Achado'; }
+      alert('Erro ao salvar offline: ' + err.message);
+    }
+  });
+})();
+</script>
 <script>
 // ── Controle de conformidade ───────────────────────────────────────────────
 (function () {

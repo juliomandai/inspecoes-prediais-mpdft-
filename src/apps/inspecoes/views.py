@@ -1,14 +1,17 @@
+import base64
 import json
 import io
 import zipfile
 import os
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template.loader import render_to_string
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 
 from django.urls import reverse
@@ -349,6 +352,121 @@ def foto_delete(request, pk):
     foto = get_object_or_404(Foto.objects.select_related('achado__especialidade'), pk=pk)
     foto.delete()
     return HttpResponse(status=204)
+
+
+# ── PWA — Service Worker, Manifest e página offline ──────────────────────────
+
+def service_worker(request):
+    """Serve o service worker com escopo raiz e sem cache."""
+    from django.contrib.staticfiles import finders
+    path = finders.find('sw.js')
+    if not path:
+        from django.http import Http404
+        raise Http404('sw.js não encontrado')
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    resp = HttpResponse(content, content_type='application/javascript')
+    resp['Service-Worker-Allowed'] = '/'
+    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+def web_manifest(request):
+    """Serve o manifest.json."""
+    from django.contrib.staticfiles import finders
+    path = finders.find('manifest.json')
+    if not path:
+        from django.http import Http404
+        raise Http404('manifest.json não encontrado')
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    return HttpResponse(content, content_type='application/manifest+json')
+
+
+def offline_page(request):
+    """Página de fallback quando o usuário está offline."""
+    return render(request, 'inspecoes/offline.html')
+
+
+# ── API — Sincronização de achados offline ────────────────────────────────────
+
+@login_required
+@csrf_exempt
+@require_POST
+def achado_sincronizar(request):
+    """
+    Recebe um achado criado offline (JSON) e persiste no banco.
+    Utilizado pelo service worker e pelo pwa.js durante a sincronização.
+    """
+    try:
+        dados = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+
+    esp_pk = dados.get('esp_pk')
+    if not esp_pk:
+        return JsonResponse({'erro': 'esp_pk obrigatório.'}, status=400)
+
+    try:
+        esp = InspecaoEspecialidade.objects.select_related('inspecao').get(pk=esp_pk)
+    except InspecaoEspecialidade.DoesNotExist:
+        return JsonResponse({'erro': 'Especialidade não encontrada.'}, status=404)
+
+    if not esp.pode_editar:
+        return JsonResponse({'erro': 'Especialidade finalizada. Reabra antes de sincronizar.'}, status=400)
+
+    em_conformidade = bool(dados.get('em_conformidade', False))
+
+    try:
+        achado = Achado.objects.create(
+            especialidade=esp,
+            localizacao=dados.get('localizacao', ''),
+            sub_localizacao=dados.get('sub_localizacao', ''),
+            verificacao=dados.get('verificacao', ''),
+            grupo_tecnico='' if em_conformidade else dados.get('grupo_tecnico', ''),
+            em_conformidade=em_conformidade,
+            descricao_nao_conformidade='' if em_conformidade else dados.get('descricao_nao_conformidade', ''),
+            requisito_afetado='' if em_conformidade else dados.get('requisito_afetado', ''),
+            gravidade=int(dados.get('gravidade', 1)),
+            urgencia=int(dados.get('urgencia', 1)),
+            tendencia=int(dados.get('tendencia', 1)),
+            prioridade_risco=3 if em_conformidade else int(dados.get('prioridade_risco', 3)),
+            recomendacao='' if em_conformidade else dados.get('recomendacao', ''),
+            direcionamento=dados.get('direcionamento', 'manutencao'),
+            prazo_meses=int(dados.get('prazo_meses', 12)),
+        )
+    except Exception as e:
+        return JsonResponse({'erro': f'Erro ao criar achado: {e}'}, status=400)
+
+    # Processar fotos enviadas como base64
+    fotos_salvas = 0
+    for foto_data in dados.get('fotos', []):
+        try:
+            nome = foto_data.get('nome', 'foto.jpg')
+            tipo = foto_data.get('tipo', 'image/jpeg')
+            if tipo not in ALLOWED_CONTENT_TYPES:
+                continue
+            b64 = foto_data.get('dados_b64', '')
+            if not b64:
+                continue
+            conteudo = base64.b64decode(b64)
+            if len(conteudo) > MAX_UPLOAD_SIZE:
+                continue
+            Foto.objects.create(
+                achado=achado,
+                arquivo=ContentFile(conteudo, name=nome),
+                nome_original=nome,
+                tamanho_bytes=len(conteudo),
+            )
+            fotos_salvas += 1
+        except Exception:
+            pass
+
+    _log(request, 'achado_criado',
+         f'[OFFLINE SYNC] Achado criado: "{achado.verificacao}" em '
+         f'{esp.get_especialidade_display()} — "{esp.inspecao.edificacao}".')
+
+    return JsonResponse({'ok': True, 'achado_pk': achado.pk, 'fotos_salvas': fotos_salvas}, status=201)
 
 
 # ── Análise — helper compartilhado ────────────────────────────────────────────
