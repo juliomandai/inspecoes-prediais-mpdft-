@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Restaurar Backup — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-upload"></i> Restaurar Backup</h4>
+  <a href="{% url 'inspecoes:list' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-md-7">
+
+    <div class="card mb-4">
+      <div class="card-header fw-bold">
+        <i class="bi bi-archive"></i> Carregar arquivo de backup
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="backup_zip" class="form-label">Arquivo de backup (.zip)</label>
+            <input type="file" name="backup_zip" id="backup_zip"
+                   accept=".zip" class="form-control" required>
+            <div class="form-text">
+              Selecione um arquivo ZIP gerado pelo botão <strong>Gerar Backup</strong>
+              na tela de detalhe de uma inspeção.
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload"></i> Restaurar
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong><i class="bi bi-info-circle"></i> Como funciona:</strong>
+      <ul class="mb-0 mt-2">
+        <li>O backup é lido e uma <strong>nova inspeção</strong> é criada no sistema.</li>
+        <li>Todos os achados e fotos contidos no backup são restaurados.</li>
+        <li>Os dados existentes no sistema <strong>não são alterados ou excluídos</strong>.</li>
+        <li>A edificação do backup deve estar cadastrada no sistema antes de restaurar.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

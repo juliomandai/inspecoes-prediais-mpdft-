@@ -37,6 +37,9 @@ urlpatterns = [
     path('achados/<int:achado_pk>/fotos/', views.foto_upload, name='foto_upload'),
     path('fotos/<int:pk>/', views.foto_delete, name='foto_delete'),
 
+    # ── Backup — restaurar ────────────────────────────────────────────────────
+    path('inspecoes/restaurar/', views.inspecao_restaurar_backup, name='restaurar_backup'),
+
     # ── PWA ────────────────────────────────────────────────────────────────────
     path('offline/', views.offline_page, name='offline'),
     path('api/achados/sincronizar/', views.achado_sincronizar, name='achado_sincronizar'),

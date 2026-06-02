@@ -814,6 +814,173 @@ def inspecao_backup_download(request, pk):
     return response
 
 
+# ── Restaurar backup ──────────────────────────────────────────────────────────
+
+def _restaurar_backup(arquivo_zip, request):
+    """
+    Lê um arquivo ZIP de backup e recria a inspeção no banco de dados.
+    Cria uma NOVA inspeção — nunca sobrescreve dados existentes.
+    Retorna o objeto Inspecao criado.
+    """
+    from apps.edificacoes.models import Edificacao
+    from datetime import date as DateType
+
+    # Mapeamentos de rótulo → valor de campo
+    ESP_MAP = {
+        'Engenharia Civil': 'civil',
+        'Engenharia Mecânica': 'mecanica',
+        'Engenharia Elétrica': 'eletrica',
+    }
+    STATUS_MAP = {
+        'Em andamento': 'em_andamento',
+        'Finalizada': 'finalizada',
+    }
+    PRAZO_MAP = {
+        '1 mês': 1, '3 meses': 3, '6 meses': 6,
+        '12 meses': 12, '18 meses': 18, '24 meses': 24,
+    }
+    DIRECAO_MAP = {
+        'Garantia de obra': 'garantia',
+        'Manutenção': 'manutencao',
+        'Nova contratação': 'nova_contratacao',
+    }
+
+    conteudo = arquivo_zip.read()
+    try:
+        zf_obj = zipfile.ZipFile(io.BytesIO(conteudo), 'r')
+    except zipfile.BadZipFile:
+        raise ValueError('O arquivo enviado não é um ZIP válido.')
+
+    with zf_obj as zf:
+        if 'dados.json' not in zf.namelist():
+            raise ValueError('Arquivo de backup inválido: dados.json não encontrado dentro do ZIP.')
+
+        dados = json.loads(zf.read('dados.json').decode('utf-8'))
+
+        # Localizar edificação pelo nome
+        nome_edif = dados.get('inspecao', {}).get('edificacao', '')
+        if not nome_edif:
+            raise ValueError('Backup inválido: nome da edificação não encontrado.')
+        try:
+            edificacao = Edificacao.objects.get(nome__iexact=nome_edif)
+        except Edificacao.DoesNotExist:
+            raise ValueError(
+                f'Edificação "{nome_edif}" não está cadastrada no sistema. '
+                f'Cadastre-a em Edificações antes de restaurar o backup.'
+            )
+
+        # Criar nova inspeção
+        inspecao = Inspecao.objects.create(edificacao=edificacao)
+
+        for esp_data in dados.get('especialidades', []):
+            esp_key = ESP_MAP.get(esp_data.get('especialidade', ''))
+            if not esp_key:
+                continue
+
+            try:
+                data_insp = DateType.fromisoformat(esp_data.get('data_inspecao', ''))
+            except (ValueError, TypeError):
+                data_insp = DateType.today()
+
+            # Evitar duplicata se especialidade já existir na nova inspeção
+            esp, _ = InspecaoEspecialidade.objects.get_or_create(
+                inspecao=inspecao,
+                especialidade=esp_key,
+                defaults={
+                    'profissional': esp_data.get('profissional', ''),
+                    'data_inspecao': data_insp,
+                    'status': STATUS_MAP.get(esp_data.get('status', ''), 'em_andamento'),
+                },
+            )
+
+            for achado_data in esp_data.get('achados', []):
+                em_conf = bool(achado_data.get('em_conformidade', False))
+                g = int(achado_data.get('gravidade', 1) or 1)
+                u = int(achado_data.get('urgencia', 1) or 1)
+                t = int(achado_data.get('tendencia', 1) or 1)
+                gut = g * u * t
+
+                if em_conf:
+                    prioridade = 3
+                elif gut >= 27:
+                    prioridade = 1
+                elif gut >= 8:
+                    prioridade = 2
+                else:
+                    prioridade = 3
+
+                prazo = PRAZO_MAP.get(str(achado_data.get('prazo_meses', '')), 12)
+                direcao = DIRECAO_MAP.get(str(achado_data.get('direcionamento', '')), 'manutencao')
+
+                achado = Achado.objects.create(
+                    especialidade=esp,
+                    localizacao=achado_data.get('localizacao', ''),
+                    sub_localizacao=achado_data.get('sub_localizacao', ''),
+                    verificacao=achado_data.get('verificacao', ''),
+                    em_conformidade=em_conf,
+                    grupo_tecnico='' if em_conf else achado_data.get('grupo_tecnico', ''),
+                    requisito_afetado='' if em_conf else achado_data.get('requisito_afetado', ''),
+                    descricao_nao_conformidade='' if em_conf else achado_data.get('descricao_nao_conformidade', ''),
+                    recomendacao='' if em_conf else achado_data.get('recomendacao', ''),
+                    gravidade=g,
+                    urgencia=u,
+                    tendencia=t,
+                    prioridade_risco=prioridade,
+                    direcionamento=direcao,
+                    prazo_meses=prazo,
+                )
+
+                # Restaurar fotos do ZIP
+                for foto_path_zip in achado_data.get('fotos', []):
+                    try:
+                        foto_bytes = zf.read(foto_path_zip)
+                    except KeyError:
+                        continue  # foto não está no ZIP
+                    nome_original = foto_path_zip.split('/')[-1]
+                    ext = nome_original.rsplit('.', 1)[-1].lower()
+                    tipo = 'image/jpeg' if ext in ('jpg', 'jpeg') else 'image/png'
+                    if tipo not in ALLOWED_CONTENT_TYPES:
+                        continue
+                    Foto.objects.create(
+                        achado=achado,
+                        arquivo=ContentFile(foto_bytes, name=nome_original),
+                        nome_original=nome_original,
+                        tamanho_bytes=len(foto_bytes),
+                    )
+
+    _log(request, 'inspecao_criada',
+         f'Inspeção restaurada do backup: "{edificacao.nome}" — Inspeção #{inspecao.pk}.')
+    return inspecao
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def inspecao_restaurar_backup(request):
+    """Página de upload de backup ZIP para restaurar uma inspeção."""
+    if request.method == 'POST':
+        arquivo = request.FILES.get('backup_zip')
+        if not arquivo:
+            messages.error(request, 'Nenhum arquivo selecionado.')
+            return redirect('inspecoes:restaurar_backup')
+        if not arquivo.name.lower().endswith('.zip'):
+            messages.error(request, 'O arquivo deve ter extensão .zip.')
+            return redirect('inspecoes:restaurar_backup')
+        try:
+            inspecao = _restaurar_backup(arquivo, request)
+            messages.success(
+                request,
+                f'Backup restaurado com sucesso! Inspeção #{inspecao.pk} — "{inspecao.edificacao}" criada.'
+            )
+            return redirect('inspecoes:detail', pk=inspecao.pk)
+        except ValueError as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f'Erro inesperado ao restaurar backup: {e}')
+        return redirect('inspecoes:restaurar_backup')
+
+    return render(request, 'inspecoes/restaurar_backup.html')
+
+
 # ── Log de acesso ─────────────────────────────────────────────────────────────
 
 @login_required

@@ -11,9 +11,14 @@
     </small>
     {% endif %}
   </div>
-  <a href="{% url 'inspecoes:create' %}" class="btn btn-primary">
-    <i class="bi bi-plus-lg"></i> Nova Inspeção
-  </a>
+  <div class="d-flex gap-2">
+    <a href="{% url 'inspecoes:restaurar_backup' %}" class="btn btn-outline-success">
+      <i class="bi bi-upload"></i> Carregar Backup
+    </a>
+    <a href="{% url 'inspecoes:create' %}" class="btn btn-primary">
+      <i class="bi bi-plus-lg"></i> Nova Inspeção
+    </a>
+  </div>
 </div>
 
 <div class="card mb-4">
