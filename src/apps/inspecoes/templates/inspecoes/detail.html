@@ -35,8 +35,10 @@
          title="Baixar backup gerado automaticamente ao finalizar">
         <i class="bi bi-archive-fill"></i> Baixar Backup
       </a>
-      {% elif inspecao.status_geral == 'finalizada' %}
-      <a href="{% url 'inspecoes:backup' inspecao.pk %}" class="btn btn-outline-success btn-sm no-print">
+      {% endif %}
+      {% if inspecao.especialidades.exists %}
+      <a href="{% url 'inspecoes:backup' inspecao.pk %}" class="btn btn-outline-success btn-sm no-print"
+         title="Gerar backup com os dados e fotos registrados até agora">
         <i class="bi bi-archive"></i> Gerar Backup
       </a>
       {% endif %}
