@@ -42,6 +42,10 @@
         <i class="bi bi-archive"></i> Gerar Backup
       </a>
       {% endif %}
+      <button class="btn btn-outline-info btn-sm no-print" id="btn-preparar-campo"
+              onclick="prepararParaCampo()" title="Salva todas as páginas desta inspeção para uso offline no campo">
+        <i class="bi bi-download"></i> Preparar para campo
+      </button>
       <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
         <i class="bi bi-printer"></i> Imprimir
       </button>
@@ -272,6 +276,56 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+// ── Preparar para campo: pré-cacheia páginas da inspeção ──────────────────────
+async function prepararParaCampo() {
+  var btn = document.getElementById('btn-preparar-campo');
+
+  if (!('caches' in window) || !navigator.serviceWorker.controller) {
+    alert(
+      'O cache offline não está disponível neste navegador/conexão.\n\n' +
+      'Possível causa: o app está sendo acessado via HTTP em IP de rede.\n\n' +
+      'Solução (Chrome Android):\n' +
+      '1. Abra chrome://flags/#unsafely-treat-insecure-origin-as-secure\n' +
+      '2. Adicione o endereço do servidor (ex: http://10.34.52.12:8000)\n' +
+      '3. Clique em Enable → Relaunch\n' +
+      '4. Volte ao app e tente novamente.'
+    );
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-arrow-repeat pwa-spin"></i> Preparando...';
+
+  // URLs a pré-cachear para esta inspeção
+  var urls = [window.location.pathname];
+
+  {% for esp in inspecao.especialidades.all %}
+  urls.push('{% url "inspecoes:achado_create" esp.pk %}');
+  {% endfor %}
+
+  try {
+    var cache = await caches.open('inspecoes-paginas-v1');
+    var resultados = await Promise.allSettled(
+      urls.map(url => fetch(url, { credentials: 'include' })
+        .then(resp => { if (resp.ok) cache.put(url, resp); })
+      )
+    );
+    var ok = resultados.filter(r => r.status === 'fulfilled').length;
+    btn.innerHTML = '<i class="bi bi-check-circle text-success"></i> Pronto para campo!';
+    btn.classList.replace('btn-outline-info', 'btn-outline-success');
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-download"></i> Preparar para campo';
+      btn.classList.replace('btn-outline-success', 'btn-outline-info');
+    }, 4000);
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-download"></i> Preparar para campo';
+    alert('Erro ao preparar páginas: ' + e.message);
+  }
+}
+</script>
 <script>
 (function () {
   var hash = window.location.hash;
