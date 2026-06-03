@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Min
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -59,6 +59,7 @@ def inspecao_list(request):
     qs = Inspecao.objects.select_related('edificacao').prefetch_related('especialidades').annotate(
         num_especialidades=Count('especialidades', distinct=True),
         num_achados=Count('especialidades__achados', distinct=True),
+        data_inicio=Min('especialidades__data_inspecao'),
     )
 
     if form.is_valid():

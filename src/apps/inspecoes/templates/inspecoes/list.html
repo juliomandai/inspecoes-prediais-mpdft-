@@ -62,6 +62,7 @@
     <thead class="table-primary">
       <tr>
         <th>Edificação</th>
+        <th class="text-center">Data de início</th>
         <th class="text-center">Especialidades</th>
         <th>Status geral</th>
         <th class="text-center">Achados</th>
@@ -72,6 +73,9 @@
       {% for inspecao in page_obj %}
       <tr>
         <td>{{ inspecao.edificacao }}</td>
+        <td class="text-center">
+          {% if inspecao.data_inicio %}{{ inspecao.data_inicio|date:"d/m/Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
         <td class="text-center">{{ inspecao.num_especialidades }}</td>
         <td>
           {% if inspecao.status_geral == 'em_andamento' %}
