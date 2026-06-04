@@ -3,6 +3,10 @@ title Sistema de Inspecoes Prediais - MPDFT
 chcp 65001 > nul
 set PYTHONUTF8=1
 
+REM ====== Porta do servidor (troque aqui se precisar) ======
+set PORTA=8080
+REM =========================================================
+
 cd /d "%~dp0src"
 
 echo Ativando ambiente virtual...
@@ -20,7 +24,8 @@ python manage.py collectstatic --noinput --clear
 echo.
 echo ============================================
 echo  Sistema de Inspecoes Prediais MPDFT
+echo  Porta: %PORTA%
 echo ============================================
-python serve.py
+python serve.py %PORTA%
 
 pause
