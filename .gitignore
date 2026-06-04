@@ -43,3 +43,9 @@ desktop.ini
 .claude/
 .specify/
 =6.7
+
+# Backups e logs gerados em produção
+Backups_Automaticos/
+DADOS_PARA_MIGRAR.zip
+log_backup_automatico.txt
+log_servidor_automatico.txt
