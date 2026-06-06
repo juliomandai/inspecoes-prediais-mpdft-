@@ -49,3 +49,7 @@ Backups_Automaticos/
 DADOS_PARA_MIGRAR.zip
 log_backup_automatico.txt
 log_servidor_automatico.txt
+
+# Certificados HTTPS (gerados na máquina, nunca versionar)
+src/certs/
+*.pem
