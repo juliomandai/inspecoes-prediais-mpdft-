@@ -235,7 +235,7 @@ class VisitaTecnica(models.Model):
         related_name='visitas',
     )
     data_visita = models.DateField('Data da visita')
-    responsavel = models.CharField('Profissional responsável', max_length=200)
+    participantes = models.TextField('Profissionais participantes', help_text='Um nome por linha.')
     motivo = models.TextField('Motivo da visita')
     achados = models.TextField('Achados da visita', blank=True)
     conclusoes_encaminhamentos = models.TextField('Conclusões e encaminhamentos', blank=True)
@@ -258,6 +258,14 @@ class VisitaTecnica(models.Model):
     def clean(self):
         if self.data_visita and self.data_visita > date.today():
             raise ValidationError({'data_visita': 'A data da visita não pode ser futura.'})
+
+    @property
+    def participantes_lista(self):
+        return [p.strip() for p in self.participantes.splitlines() if p.strip()]
+
+    @property
+    def participantes_display(self):
+        return ', '.join(self.participantes_lista)
 
 
 class VisitaFoto(models.Model):

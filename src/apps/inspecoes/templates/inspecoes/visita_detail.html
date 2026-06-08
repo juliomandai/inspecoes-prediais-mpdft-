@@ -25,7 +25,7 @@
     </div>
   </div>
   <div class="card-body">
-    <p><strong>Responsável:</strong> {{ visita.responsavel }}</p>
+    <p><strong>Profissionais participantes:</strong><br>{{ visita.participantes|linebreaksbr }}</p>
     <p><strong>Motivo:</strong><br>{{ visita.motivo|linebreaksbr }}</p>
     <p><strong>Achados:</strong><br>{{ visita.achados|linebreaksbr|default:"—" }}</p>
     <p><strong>Conclusões e encaminhamentos:</strong><br>{{ visita.conclusoes_encaminhamentos|linebreaksbr|default:"—" }}</p>

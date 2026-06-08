@@ -57,11 +57,15 @@ class VisitaFotoInline(admin.TabularInline):
 
 @admin.register(VisitaTecnica)
 class VisitaTecnicaAdmin(admin.ModelAdmin):
-    list_display = ['edificacao', 'data_visita', 'responsavel', 'criado_em']
+    list_display = ['edificacao', 'data_visita', 'participantes_resumo', 'criado_em']
     list_filter = ['edificacao']
-    search_fields = ['responsavel', 'edificacao__nome', 'motivo']
+    search_fields = ['participantes', 'edificacao__nome', 'motivo']
     date_hierarchy = 'data_visita'
     inlines = [VisitaFotoInline]
+
+    @admin.display(description='Participantes')
+    def participantes_resumo(self, obj):
+        return obj.participantes_display
 
 
 @admin.register(LogAcesso)

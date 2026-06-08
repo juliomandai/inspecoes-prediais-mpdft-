@@ -24,10 +24,23 @@
           {{ form.data_visita }}
           {% if form.data_visita.errors %}<div class="text-danger small mt-1">{{ form.data_visita.errors }}</div>{% endif %}
         </div>
-        <div class="col-md-8">
-          <label for="{{ form.responsavel.id_for_label }}" class="form-label">{{ form.responsavel.label }}</label>
-          {{ form.responsavel }}
-          {% if form.responsavel.errors %}<div class="text-danger small mt-1">{{ form.responsavel.errors }}</div>{% endif %}
+        <div class="col-12">
+          <label class="form-label">Profissionais participantes</label>
+          <div id="participantes-container">
+            {% for nome in participantes %}
+            <div class="input-group mb-2 participante-row">
+              <span class="input-group-text"><i class="bi bi-person"></i></span>
+              <input type="text" name="participantes" class="form-control" value="{{ nome }}" placeholder="Nome do profissional">
+              <button type="button" class="btn btn-outline-danger" onclick="removerParticipante(this)" title="Remover">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn btn-outline-primary btn-sm" onclick="adicionarParticipante()">
+            <i class="bi bi-plus-lg"></i> Adicionar participante
+          </button>
+          {% if erro_participantes %}<div class="text-danger small mt-1">{{ erro_participantes }}</div>{% endif %}
         </div>
         <div class="col-12">
           <label for="{{ form.motivo.id_for_label }}" class="form-label">{{ form.motivo.label }}</label>
@@ -94,6 +107,29 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+// ── Participantes dinâmicos ─────────────────────────────────────────────────
+function adicionarParticipante() {
+  var c = document.getElementById('participantes-container');
+  var div = document.createElement('div');
+  div.className = 'input-group mb-2 participante-row';
+  div.innerHTML =
+    '<span class="input-group-text"><i class="bi bi-person"></i></span>' +
+    '<input type="text" name="participantes" class="form-control" placeholder="Nome do profissional">' +
+    '<button type="button" class="btn btn-outline-danger" onclick="removerParticipante(this)" title="Remover"><i class="bi bi-x-lg"></i></button>';
+  c.appendChild(div);
+  div.querySelector('input').focus();
+}
+function removerParticipante(btn) {
+  var rows = document.querySelectorAll('#participantes-container .participante-row');
+  if (rows.length <= 1) {
+    // mantém ao menos um campo, apenas limpa
+    btn.closest('.participante-row').querySelector('input').value = '';
+    return;
+  }
+  btn.closest('.participante-row').remove();
+}
+</script>
 <script>
 (function () {
   var CSRF = "{{ csrf_token }}";

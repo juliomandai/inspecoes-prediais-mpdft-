@@ -42,7 +42,7 @@
     <thead class="table-primary">
       <tr>
         <th>Data</th>
-        <th>Responsável</th>
+        <th>Participantes</th>
         <th>Motivo</th>
         <th class="text-center">Fotos</th>
         <th class="text-center">Ação</th>
@@ -52,7 +52,7 @@
       {% for v in visitas %}
       <tr>
         <td>{{ v.data_visita|date:"d/m/Y" }}</td>
-        <td>{{ v.responsavel }}</td>
+        <td>{{ v.participantes_display|truncatechars:50 }}</td>
         <td>{{ v.motivo|truncatechars:60 }}</td>
         <td class="text-center">{{ v.fotos.count }}</td>
         <td class="text-center">

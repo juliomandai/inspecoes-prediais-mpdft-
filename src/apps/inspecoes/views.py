@@ -1096,32 +1096,45 @@ def visita_list(request, edif_pk):
     })
 
 
+def _coletar_participantes(request):
+    """Lê os campos dinâmicos de participantes e retorna a lista limpa de nomes."""
+    return [n.strip() for n in request.POST.getlist('participantes') if n.strip()]
+
+
 @login_required
 def visita_create(request, edif_pk):
     from apps.edificacoes.models import Edificacao
     edificacao = get_object_or_404(Edificacao, pk=edif_pk)
-    initial = {'responsavel': request.user.get_full_name()}
-    form = VisitaTecnicaForm(request.POST or None, initial=initial)
-    if form.is_valid():
-        visita = form.save(commit=False)
-        visita.edificacao = edificacao
-        visita.criado_por = request.user
-        visita.save()
-        for arquivo in request.FILES.getlist('fotos'):
-            if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
-                VisitaFoto.objects.create(
-                    visita=visita,
-                    arquivo=arquivo,
-                    nome_original=arquivo.name,
-                    tamanho_bytes=arquivo.size,
-                )
-        _log(request, 'visita_criada',
-             f'Visita técnica criada em "{edificacao.nome}" ({visita.data_visita:%d/%m/%Y}) por {visita.responsavel}.')
-        messages.success(request, 'Visita técnica registrada com sucesso.')
-        return redirect('inspecoes:visita_detail', pk=visita.pk)
+    form = VisitaTecnicaForm(request.POST or None)
+    participantes = _coletar_participantes(request) if request.method == 'POST' else [request.user.get_full_name()]
+    erro_participantes = None
+    if request.method == 'POST' and form.is_valid():
+        if not participantes:
+            erro_participantes = 'Informe ao menos um profissional participante.'
+        else:
+            visita = form.save(commit=False)
+            visita.edificacao = edificacao
+            visita.criado_por = request.user
+            visita.participantes = '\n'.join(participantes)
+            visita.save()
+            for arquivo in request.FILES.getlist('fotos'):
+                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                    VisitaFoto.objects.create(
+                        visita=visita,
+                        arquivo=arquivo,
+                        nome_original=arquivo.name,
+                        tamanho_bytes=arquivo.size,
+                    )
+            _log(request, 'visita_criada',
+                 f'Visita técnica criada em "{edificacao.nome}" ({visita.data_visita:%d/%m/%Y}) '
+                 f'por {visita.participantes_display}.')
+            messages.success(request, 'Visita técnica registrada com sucesso.')
+            return redirect('inspecoes:visita_detail', pk=visita.pk)
     return render(request, 'inspecoes/visita_form.html', {
         'form': form,
         'edificacao': edificacao,
+        'participantes': participantes or [''],
+        'erro_participantes': erro_participantes,
         'fotos_existentes': [],
     })
 
@@ -1129,7 +1142,7 @@ def visita_create(request, edif_pk):
 def _pode_editar_visita(user, visita):
     if user.is_staff or user.is_superuser:
         return True
-    return user.get_full_name() == visita.responsavel
+    return visita.criado_por_id == user.id
 
 
 @login_required
@@ -1147,7 +1160,7 @@ def visita_detail(request, pk):
 def _acesso_negado_visita(request, visita):
     messages.error(
         request,
-        f'Acesso negado. Apenas o responsável ("{visita.responsavel}") pode realizar esta ação.',
+        'Acesso negado. Apenas quem registrou a visita pode realizar esta ação.',
     )
     return redirect('inspecoes:visita_detail', pk=visita.pk)
 
@@ -1158,14 +1171,23 @@ def visita_update(request, pk):
     if not _pode_editar_visita(request.user, visita):
         return _acesso_negado_visita(request, visita)
     form = VisitaTecnicaForm(request.POST or None, instance=visita)
-    if form.is_valid():
-        form.save()
-        messages.success(request, 'Visita atualizada com sucesso.')
-        return redirect('inspecoes:visita_detail', pk=visita.pk)
+    participantes = _coletar_participantes(request) if request.method == 'POST' else visita.participantes_lista
+    erro_participantes = None
+    if request.method == 'POST' and form.is_valid():
+        if not participantes:
+            erro_participantes = 'Informe ao menos um profissional participante.'
+        else:
+            visita = form.save(commit=False)
+            visita.participantes = '\n'.join(participantes)
+            visita.save()
+            messages.success(request, 'Visita atualizada com sucesso.')
+            return redirect('inspecoes:visita_detail', pk=visita.pk)
     return render(request, 'inspecoes/visita_form.html', {
         'form': form,
         'edificacao': visita.edificacao,
         'visita': visita,
+        'participantes': participantes or [''],
+        'erro_participantes': erro_participantes,
         'fotos_existentes': visita.fotos.all(),
     })
 
