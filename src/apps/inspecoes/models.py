@@ -221,6 +221,61 @@ class Foto(models.Model):
         return self.nome_original
 
 
+def visita_foto_upload_path(instance, filename):
+    ext = filename.rsplit('.', 1)[-1].lower()
+    hoje = date.today()
+    return f'visitas/{hoje.year}/{hoje.month:02d}/{instance.visita_id}/{uuid.uuid4()}.{ext}'
+
+
+class VisitaTecnica(models.Model):
+    edificacao = models.ForeignKey(
+        'edificacoes.Edificacao',
+        on_delete=models.PROTECT,
+        verbose_name='Localidade',
+        related_name='visitas',
+    )
+    data_visita = models.DateField('Data da visita')
+    responsavel = models.CharField('Profissional responsável', max_length=200)
+    motivo = models.TextField('Motivo da visita')
+    achados = models.TextField('Achados da visita', blank=True)
+    conclusoes_encaminhamentos = models.TextField('Conclusões e encaminhamentos', blank=True)
+    criado_por = models.ForeignKey(
+        get_user_model(), on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='visitas_criadas',
+        verbose_name='Criado por',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-data_visita', '-criado_em']
+        verbose_name = 'Visita técnica'
+        verbose_name_plural = 'Visitas técnicas'
+
+    def __str__(self):
+        return f'{self.edificacao} — {self.data_visita:%d/%m/%Y}'
+
+    def clean(self):
+        if self.data_visita and self.data_visita > date.today():
+            raise ValidationError({'data_visita': 'A data da visita não pode ser futura.'})
+
+
+class VisitaFoto(models.Model):
+    visita = models.ForeignKey(VisitaTecnica, on_delete=models.CASCADE, related_name='fotos', verbose_name='Visita')
+    arquivo = models.ImageField('Foto', upload_to=visita_foto_upload_path)
+    nome_original = models.CharField(max_length=255)
+    tamanho_bytes = models.IntegerField(default=0)
+    data_upload = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['data_upload']
+        verbose_name = 'Foto de visita'
+        verbose_name_plural = 'Fotos de visita'
+
+    def __str__(self):
+        return self.nome_original
+
+
 class LogAcesso(models.Model):
     TIPO_CHOICES = [
         ('login', 'Login'),
@@ -230,6 +285,8 @@ class LogAcesso(models.Model):
         ('especialidade_excluida', 'Especialidade excluída'),
         ('achado_criado', 'Achado criado'),
         ('achado_excluido', 'Achado excluído'),
+        ('visita_criada', 'Visita técnica criada'),
+        ('visita_excluida', 'Visita técnica excluída'),
     ]
 
     usuario = models.ForeignKey(
