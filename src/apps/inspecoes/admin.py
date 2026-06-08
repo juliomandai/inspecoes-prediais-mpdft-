@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, LogAcesso
+from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, LogAcesso, VisitaTecnica, VisitaFoto
 
 
 class FotoInline(admin.TabularInline):
@@ -47,6 +47,21 @@ class AchadoAdmin(admin.ModelAdmin):
     list_filter = ['prioridade_risco', 'grupo_tecnico', 'direcionamento']
     readonly_fields = ['gut_total']
     inlines = [FotoInline]
+
+
+class VisitaFotoInline(admin.TabularInline):
+    model = VisitaFoto
+    extra = 0
+    readonly_fields = ['nome_original', 'tamanho_bytes', 'data_upload']
+
+
+@admin.register(VisitaTecnica)
+class VisitaTecnicaAdmin(admin.ModelAdmin):
+    list_display = ['edificacao', 'data_visita', 'responsavel', 'criado_em']
+    list_filter = ['edificacao']
+    search_fields = ['responsavel', 'edificacao__nome', 'motivo']
+    date_hierarchy = 'data_visita'
+    inlines = [VisitaFotoInline]
 
 
 @admin.register(LogAcesso)
