@@ -33,7 +33,10 @@
       <ul class="navbar-nav me-auto">
         {% if request.user.is_authenticated %}
         <li class="nav-item">
-          <a class="nav-link" href="/"><i class="bi bi-list-ul"></i> Inspeções</a>
+          <a class="nav-link" href="{% url 'inspecoes:list' %}"><i class="bi bi-building-check"></i> Inspeções</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'inspecoes:visita_localidades' %}"><i class="bi bi-clipboard-check"></i> Visitas</a>
         </li>
         {% if request.user.is_staff %}
         <li class="nav-item">

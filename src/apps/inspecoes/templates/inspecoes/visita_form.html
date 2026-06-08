@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}{% if visita %}Editar Visita{% else %}Nova Visita{% endif %} — {{ edificacao.nome }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{% if visita %}Editar Visita{% else %}Nova Visita Técnica{% endif %}</h4>
+    <small class="text-muted">{{ edificacao.nome }}</small>
+  </div>
+  {% if visita %}
+  <a href="{% url 'inspecoes:visita_detail' visita.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
+  {% else %}
+  <a href="{% url 'inspecoes:visita_list' edificacao.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
+  {% endif %}
+</div>
+
+<form method="post" enctype="multipart/form-data" id="visita-form">
+  {% csrf_token %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="{{ form.data_visita.id_for_label }}" class="form-label">{{ form.data_visita.label }}</label>
+          {{ form.data_visita }}
+          {% if form.data_visita.errors %}<div class="text-danger small mt-1">{{ form.data_visita.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-8">
+          <label for="{{ form.responsavel.id_for_label }}" class="form-label">{{ form.responsavel.label }}</label>
+          {{ form.responsavel }}
+          {% if form.responsavel.errors %}<div class="text-danger small mt-1">{{ form.responsavel.errors }}</div>{% endif %}
+        </div>
+        <div class="col-12">
+          <label for="{{ form.motivo.id_for_label }}" class="form-label">{{ form.motivo.label }}</label>
+          {{ form.motivo }}
+        </div>
+        <div class="col-12">
+          <label for="{{ form.achados.id_for_label }}" class="form-label">{{ form.achados.label }}</label>
+          {{ form.achados }}
+        </div>
+        <div class="col-12">
+          <label for="{{ form.conclusoes_encaminhamentos.id_for_label }}" class="form-label">{{ form.conclusoes_encaminhamentos.label }}</label>
+          {{ form.conclusoes_encaminhamentos }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-camera"></i> Fotos</div>
+    <div class="card-body">
+      {% if fotos_existentes %}
+      <div id="fotos-grid" class="d-flex flex-wrap gap-2 mb-3">
+        {% for foto in fotos_existentes %}
+        <div class="position-relative" id="foto-{{ foto.pk }}">
+          <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+               style="height:100px;width:100px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
+          <button type="button" class="btn btn-danger btn-sm position-absolute top-0 end-0"
+                  style="padding:1px 5px;font-size:.7rem;" onclick="deletarFoto({{ foto.pk }})" title="Excluir foto">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div id="fotos-grid" class="d-flex flex-wrap gap-2 mb-3"></div>
+      {% endif %}
+      <div id="preview-grid" class="d-flex flex-wrap gap-2 mb-3"></div>
+      <label class="form-label">Fotografar / selecionar fotos <span class="text-muted fw-normal">(JPEG ou PNG, máx. 10 MB)</span></label>
+      <div class="d-flex gap-2 flex-wrap">
+        <label class="btn btn-outline-primary btn-sm mb-0" style="cursor:pointer;">
+          <i class="bi bi-camera"></i> Câmera
+          <input type="file" name="fotos" id="foto-camera" accept="image/*" capture="environment" multiple class="d-none">
+        </label>
+        <label class="btn btn-outline-secondary btn-sm mb-0" style="cursor:pointer;">
+          <i class="bi bi-image"></i> Galeria / Arquivo
+          <input type="file" name="fotos" id="foto-arquivo" accept="image/jpeg,image/png" multiple class="d-none">
+        </label>
+      </div>
+      <div id="upload-status" class="mt-2"></div>
+    </div>
+  </div>
+
+  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+  <div class="d-flex gap-2 mb-4">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar Visita</button>
+    {% if visita %}
+    <a href="{% url 'inspecoes:visita_detail' visita.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+    {% else %}
+    <a href="{% url 'inspecoes:visita_list' edificacao.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var CSRF = "{{ csrf_token }}";
+  {% if visita %}var UPLOAD_URL = "{% url 'inspecoes:visita_foto_upload' visita.pk %}";{% endif %}
+
+  function mostrarPreview(files) {
+    var grid = document.getElementById('preview-grid');
+    Array.from(files).forEach(function (file) {
+      if (!file.type.match(/image\/(jpeg|png)/)) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var div = document.createElement('div');
+        div.className = 'position-relative';
+        div.innerHTML = '<img src="' + e.target.result + '" style="height:100px;width:100px;object-fit:cover;border:2px dashed #0d6efd;border-radius:4px;">';
+        grid.appendChild(div);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  {% if visita %}
+  function uploadAjax(files) {
+    var statusDiv = document.getElementById('upload-status');
+    Array.from(files).forEach(function (file) {
+      var fd = new FormData();
+      fd.append('arquivo', file);
+      fetch(UPLOAD_URL, {method: 'POST', headers: {'X-CSRFToken': CSRF}, body: fd})
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.erro) { statusDiv.innerHTML += '<div class="text-danger small">' + data.erro + '</div>'; return; }
+          var div = document.createElement('div');
+          div.className = 'position-relative'; div.id = 'foto-' + data.id;
+          div.innerHTML = '<img src="' + data.url + '" style="height:100px;width:100px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">' +
+            '<button type="button" class="btn btn-danger btn-sm position-absolute top-0 end-0" style="padding:1px 5px;font-size:.7rem;" onclick="deletarFoto(' + data.id + ')"><i class="bi bi-x-lg"></i></button>';
+          document.getElementById('fotos-grid').appendChild(div);
+        });
+    });
+  }
+  document.getElementById('foto-camera').addEventListener('change', function () { uploadAjax(this.files); this.value=''; });
+  document.getElementById('foto-arquivo').addEventListener('change', function () { uploadAjax(this.files); this.value=''; });
+  window.deletarFoto = function (pk) {
+    if (!confirm('Excluir esta foto?')) return;
+    fetch('/visitas/fotos/' + pk + '/', {method: 'DELETE', headers: {'X-CSRFToken': CSRF}})
+      .then(function (r) { if (r.status === 204) { var el = document.getElementById('foto-' + pk); if (el) el.remove(); } });
+  };
+  {% else %}
+  document.getElementById('foto-camera').addEventListener('change', function () { mostrarPreview(this.files); });
+  document.getElementById('foto-arquivo').addEventListener('change', function () { mostrarPreview(this.files); });
+  {% endif %}
+})();
+</script>
+{% endblock %}

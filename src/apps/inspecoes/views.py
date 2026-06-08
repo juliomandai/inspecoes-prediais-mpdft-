@@ -16,8 +16,8 @@ from django.views.decorators.http import require_POST, require_http_methods
 
 from django.urls import reverse
 
-from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso
-from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm
+from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso, VisitaTecnica, VisitaFoto
+from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm, VisitaTecnicaForm, VisitaFilterForm
 
 
 def _redirect_detail(inspecao_pk, esp_pk=None):
@@ -49,6 +49,13 @@ def erro_404(request, exception=None):
 
 def erro_403(request, exception=None):
     return render(request, '403.html', status=403)
+
+
+# ── Página inicial (menu) ─────────────────────────────────────────────────────
+
+@login_required
+def home(request):
+    return render(request, 'inspecoes/home.html')
 
 
 # ── Inspeções (container por edificação) ──────────────────────────────────────
@@ -1053,3 +1060,151 @@ def configuracoes(request):
         }
 
     return render(request, 'inspecoes/configuracoes.html', {'grupos': grupos})
+
+
+# ── Visitas técnicas ──────────────────────────────────────────────────────────
+
+@login_required
+def visita_localidades(request):
+    from apps.edificacoes.models import Edificacao
+    localidades = (
+        Edificacao.objects.filter(ativo=True)
+        .annotate(num_visitas=Count('visitas', distinct=True))
+        .order_by('nome')
+    )
+    return render(request, 'inspecoes/visita_localidades.html', {
+        'localidades': localidades,
+    })
+
+
+@login_required
+def visita_list(request, edif_pk):
+    from apps.edificacoes.models import Edificacao
+    from .forms import VisitaFilterForm
+    edificacao = get_object_or_404(Edificacao, pk=edif_pk)
+    form = VisitaFilterForm(request.GET or None)
+    visitas = edificacao.visitas.all()
+    if form.is_valid():
+        if form.cleaned_data.get('data_inicio'):
+            visitas = visitas.filter(data_visita__gte=form.cleaned_data['data_inicio'])
+        if form.cleaned_data.get('data_fim'):
+            visitas = visitas.filter(data_visita__lte=form.cleaned_data['data_fim'])
+    return render(request, 'inspecoes/visita_list.html', {
+        'edificacao': edificacao,
+        'filter_form': form,
+        'visitas': visitas,
+    })
+
+
+@login_required
+def visita_create(request, edif_pk):
+    from apps.edificacoes.models import Edificacao
+    edificacao = get_object_or_404(Edificacao, pk=edif_pk)
+    initial = {'responsavel': request.user.get_full_name()}
+    form = VisitaTecnicaForm(request.POST or None, initial=initial)
+    if form.is_valid():
+        visita = form.save(commit=False)
+        visita.edificacao = edificacao
+        visita.criado_por = request.user
+        visita.save()
+        for arquivo in request.FILES.getlist('fotos'):
+            if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                VisitaFoto.objects.create(
+                    visita=visita,
+                    arquivo=arquivo,
+                    nome_original=arquivo.name,
+                    tamanho_bytes=arquivo.size,
+                )
+        _log(request, 'visita_criada',
+             f'Visita técnica criada em "{edificacao.nome}" ({visita.data_visita:%d/%m/%Y}) por {visita.responsavel}.')
+        messages.success(request, 'Visita técnica registrada com sucesso.')
+        return redirect('inspecoes:visita_detail', pk=visita.pk)
+    return render(request, 'inspecoes/visita_form.html', {
+        'form': form,
+        'edificacao': edificacao,
+        'fotos_existentes': [],
+    })
+
+
+def _pode_editar_visita(user, visita):
+    if user.is_staff or user.is_superuser:
+        return True
+    return user.get_full_name() == visita.responsavel
+
+
+@login_required
+def visita_detail(request, pk):
+    visita = get_object_or_404(
+        VisitaTecnica.objects.select_related('edificacao').prefetch_related('fotos'),
+        pk=pk,
+    )
+    return render(request, 'inspecoes/visita_detail.html', {
+        'visita': visita,
+        'pode_editar': _pode_editar_visita(request.user, visita),
+    })
+
+
+def _acesso_negado_visita(request, visita):
+    messages.error(
+        request,
+        f'Acesso negado. Apenas o responsável ("{visita.responsavel}") pode realizar esta ação.',
+    )
+    return redirect('inspecoes:visita_detail', pk=visita.pk)
+
+
+@login_required
+def visita_update(request, pk):
+    visita = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
+    if not _pode_editar_visita(request.user, visita):
+        return _acesso_negado_visita(request, visita)
+    form = VisitaTecnicaForm(request.POST or None, instance=visita)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Visita atualizada com sucesso.')
+        return redirect('inspecoes:visita_detail', pk=visita.pk)
+    return render(request, 'inspecoes/visita_form.html', {
+        'form': form,
+        'edificacao': visita.edificacao,
+        'visita': visita,
+        'fotos_existentes': visita.fotos.all(),
+    })
+
+
+@login_required
+@require_POST
+def visita_delete(request, pk):
+    visita = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
+    if not _pode_editar_visita(request.user, visita):
+        return _acesso_negado_visita(request, visita)
+    edif_pk = visita.edificacao_id
+    _log(request, 'visita_excluida',
+         f'Visita técnica excluída de "{visita.edificacao.nome}" ({visita.data_visita:%d/%m/%Y}).')
+    visita.delete()
+    messages.success(request, 'Visita excluída com sucesso.')
+    return redirect('inspecoes:visita_list', edif_pk=edif_pk)
+
+
+@login_required
+@require_POST
+def visita_foto_upload(request, visita_pk):
+    visita = get_object_or_404(VisitaTecnica, pk=visita_pk)
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
+    if arquivo.content_type not in ALLOWED_CONTENT_TYPES:
+        return JsonResponse({'erro': 'Formato inválido. Use JPEG ou PNG.'}, status=400)
+    if arquivo.size > MAX_UPLOAD_SIZE:
+        return JsonResponse({'erro': 'Arquivo muito grande. Máximo: 10 MB.'}, status=400)
+    foto = VisitaFoto.objects.create(
+        visita=visita, arquivo=arquivo,
+        nome_original=arquivo.name, tamanho_bytes=arquivo.size,
+    )
+    return JsonResponse({'id': foto.pk, 'url': foto.arquivo.url, 'nome': foto.nome_original})
+
+
+@login_required
+@require_http_methods(['DELETE'])
+def visita_foto_delete(request, pk):
+    foto = get_object_or_404(VisitaFoto, pk=pk)
+    foto.delete()
+    return HttpResponse(status=204)

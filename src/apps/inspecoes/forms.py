@@ -1,6 +1,6 @@
 from datetime import date
 from django import forms
-from .models import Inspecao, InspecaoEspecialidade, Achado, OpcaoCampo
+from .models import Inspecao, InspecaoEspecialidade, Achado, OpcaoCampo, VisitaTecnica
 from apps.edificacoes.models import Edificacao
 
 
@@ -200,4 +200,44 @@ class InspecaoFilterForm(forms.Form):
         choices=[('', 'Todos')] + InspecaoEspecialidade.STATUS_CHOICES,
         required=False, label='Status',
         widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+
+class VisitaTecnicaForm(forms.ModelForm):
+    data_visita = forms.DateField(
+        label='Data da visita',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+    )
+
+    class Meta:
+        model = VisitaTecnica
+        fields = ['data_visita', 'responsavel', 'motivo', 'achados', 'conclusoes_encaminhamentos']
+        widgets = {
+            'responsavel': forms.TextInput(attrs={'class': 'form-control'}),
+            'motivo': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'achados': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'conclusoes_encaminhamentos': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+        labels = {
+            'responsavel': 'Profissional responsável',
+            'motivo': 'Motivo da visita',
+            'achados': 'Achados da visita',
+            'conclusoes_encaminhamentos': 'Conclusões e encaminhamentos',
+        }
+
+    def clean_data_visita(self):
+        data = self.cleaned_data['data_visita']
+        if data and data > date.today():
+            raise forms.ValidationError('A data da visita não pode ser futura.')
+        return data
+
+
+class VisitaFilterForm(forms.Form):
+    data_inicio = forms.DateField(
+        required=False, label='Data de',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+    )
+    data_fim = forms.DateField(
+        required=False, label='Data até',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
     )
