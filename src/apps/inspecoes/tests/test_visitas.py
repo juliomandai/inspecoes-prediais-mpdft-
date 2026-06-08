@@ -259,3 +259,25 @@ def test_delete_foto_visita(client, usuario_logado, edificacao):
     resp = client.delete(reverse('inspecoes:visita_foto_delete', args=[f.pk]))
     assert resp.status_code == 204
     assert v.fotos.count() == 0
+
+
+@pytest.mark.django_db
+def test_form_criacao_renderiza(client, usuario_logado, edificacao):
+    resp = client.get(reverse('inspecoes:visita_create', args=[edificacao.pk]))
+    assert resp.status_code == 200
+    assert b'Nova Visita' in resp.content
+    # responsavel pré-preenchido com o nome do usuário logado
+    assert b'Ze Silva' in resp.content
+
+
+@pytest.mark.django_db
+def test_form_edicao_renderiza(client, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    U = get_user_model()
+    dono = U.objects.create_user(username='donaf', password='1', first_name='Ana', last_name='Lima')
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel='Ana Lima', motivo='m', achados='x', conclusoes_encaminhamentos='x')
+    client.force_login(dono)
+    resp = client.get(reverse('inspecoes:visita_update', args=[v.pk]))
+    assert resp.status_code == 200
+    assert b'Editar Visita' in resp.content
