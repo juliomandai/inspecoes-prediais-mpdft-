@@ -1,0 +1,98 @@
+/* ==========================================================================
+   Tema institucional MPDFT — mescla do site público + intranet
+   Paleta: azul-institucional + acento verde. Ajuste os hex aqui se a
+   Secom fornecer as cores exatas do Manual de Identidade Visual.
+   ========================================================================== */
+:root {
+  --mpdft-azul: #0b3d6b;          /* azul institucional (principal) */
+  --mpdft-azul-escuro: #082c4d;   /* hover/topo do gradiente */
+  --mpdft-verde: #2e7d32;         /* acento (sucesso) */
+  --mpdft-verde-escuro: #1f5a23;  /* hover do verde */
+
+  /* Sobrescreve o azul padrão do Bootstrap (recolore .bg-primary, .text-primary,
+     .border-primary, badges, links etc. via as variáveis --bs-*) */
+  --bs-primary: var(--mpdft-azul);
+  --bs-primary-rgb: 11, 61, 107;
+  --bs-link-color: var(--mpdft-azul);
+  --bs-link-color-rgb: 11, 61, 107;
+  --bs-link-hover-color: var(--mpdft-azul-escuro);
+  --bs-link-hover-color-rgb: 8, 44, 77;
+}
+
+/* ── Botões primários (azul institucional) ───────────────────────────────── */
+.btn-primary {
+  --bs-btn-bg: var(--mpdft-azul);
+  --bs-btn-border-color: var(--mpdft-azul);
+  --bs-btn-hover-bg: var(--mpdft-azul-escuro);
+  --bs-btn-hover-border-color: var(--mpdft-azul-escuro);
+  --bs-btn-active-bg: var(--mpdft-azul-escuro);
+  --bs-btn-active-border-color: var(--mpdft-azul-escuro);
+  --bs-btn-disabled-bg: var(--mpdft-azul);
+  --bs-btn-disabled-border-color: var(--mpdft-azul);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--mpdft-azul);
+  --bs-btn-border-color: var(--mpdft-azul);
+  --bs-btn-hover-bg: var(--mpdft-azul);
+  --bs-btn-hover-border-color: var(--mpdft-azul);
+  --bs-btn-active-bg: var(--mpdft-azul);
+  --bs-btn-active-border-color: var(--mpdft-azul);
+}
+
+/* ── Verde institucional (sucesso) ───────────────────────────────────────── */
+.btn-success {
+  --bs-btn-bg: var(--mpdft-verde);
+  --bs-btn-border-color: var(--mpdft-verde);
+  --bs-btn-hover-bg: var(--mpdft-verde-escuro);
+  --bs-btn-hover-border-color: var(--mpdft-verde-escuro);
+  --bs-btn-active-bg: var(--mpdft-verde-escuro);
+  --bs-btn-active-border-color: var(--mpdft-verde-escuro);
+  --bs-btn-disabled-bg: var(--mpdft-verde);
+  --bs-btn-disabled-border-color: var(--mpdft-verde);
+}
+.btn-outline-success {
+  --bs-btn-color: var(--mpdft-verde);
+  --bs-btn-border-color: var(--mpdft-verde);
+  --bs-btn-hover-bg: var(--mpdft-verde);
+  --bs-btn-hover-border-color: var(--mpdft-verde);
+}
+.text-success { color: var(--mpdft-verde) !important; }
+.border-success { border-color: var(--mpdft-verde) !important; }
+.bg-success, .badge.bg-success { background-color: var(--mpdft-verde) !important; }
+
+/* ── Barra de navegação institucional (mescla site + intranet) ───────────── */
+.navbar.bg-primary {
+  background: linear-gradient(90deg, var(--mpdft-azul-escuro), var(--mpdft-azul)) !important;
+  border-bottom: 3px solid var(--mpdft-verde);
+}
+
+/* Tabelas com cabeçalho azul suave */
+.table-primary { --bs-table-bg: #e7eef5; --bs-table-color: #0a2540; }
+
+/* Cartões e foco */
+.card { border-radius: .6rem; }
+:focus-visible { outline: 2px solid var(--mpdft-verde); outline-offset: 2px; }
+
+/* Números alinhados (contagens, GUT, datas) */
+.badge, .table td, .table th, .tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* Títulos mais equilibrados */
+h1, h2, h3, h4 { text-wrap: balance; }
+
+/* Link "pular para o conteúdo" (acessibilidade) */
+.skip-link {
+  position: absolute; left: -999px; top: 0; z-index: 2000;
+  background: var(--mpdft-azul); color: #fff; padding: .5rem 1rem;
+  border-radius: 0 0 .25rem 0; text-decoration: none;
+}
+.skip-link:focus { left: 0; }
+
+/* Respeitar preferência de movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

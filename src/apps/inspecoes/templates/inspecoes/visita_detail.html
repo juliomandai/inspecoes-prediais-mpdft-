@@ -36,8 +36,8 @@
     <strong>Fotos</strong>
     <div class="d-flex flex-wrap gap-2 mt-2">
       {% for foto in visita.fotos.all %}
-      <a href="{{ foto.arquivo.url }}" target="_blank" title="{{ foto.nome_original }}">
-        <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+      <a href="{{ foto.arquivo.url }}" target="_blank" rel="noopener" title="{{ foto.nome_original }}">
+        <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}" width="90" height="90" loading="lazy"
              style="height:90px;width:90px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
       </a>
       {% endfor %}

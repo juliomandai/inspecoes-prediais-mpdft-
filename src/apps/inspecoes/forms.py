@@ -258,11 +258,18 @@ class SignUpForm(forms.Form):
     """Cadastro de novo usuário (sem permissão de administrador)."""
     nome_completo = forms.CharField(
         label='Nome completo', max_length=200,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'autofocus': True}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control', 'autofocus': True,
+            'autocomplete': 'name',
+        }),
     )
     email = forms.EmailField(
         label='E-mail institucional',
-        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'nome@mpdft.mp.br'}),
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control', 'placeholder': 'nome@mpdft.mp.br…',
+            'autocomplete': 'email', 'inputmode': 'email',
+            'spellcheck': 'false', 'autocapitalize': 'none',
+        }),
     )
     password1 = forms.CharField(
         label='Senha',

@@ -247,8 +247,8 @@
       <div class="mt-2">
         <div class="d-flex flex-wrap gap-2">
           {% for foto in achado.fotos.all %}
-          <a href="{{ foto.arquivo.url }}" target="_blank" title="{{ foto.nome_original }}">
-            <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+          <a href="{{ foto.arquivo.url }}" target="_blank" rel="noopener" title="{{ foto.nome_original }}">
+            <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}" width="70" height="70" loading="lazy"
                  style="height:70px;width:70px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
           </a>
           {% endfor %}

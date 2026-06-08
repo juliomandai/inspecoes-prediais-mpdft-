@@ -8,8 +8,8 @@
     <div class="card shadow-sm mt-5">
       <div class="card-body p-4">
         <div class="text-center mb-4">
-          <i class="bi bi-building-check text-primary" style="font-size: 3rem;"></i>
-          <h4 class="mt-2 fw-bold">Inspeções Prediais</h4>
+          <i class="bi bi-building-check text-primary" style="font-size: 3rem;" aria-hidden="true"></i>
+          <h1 class="h4 mt-2 fw-bold">Inspeções Prediais</h1>
           <p class="text-muted small">MPDFT — Secretaria de Projetos e Obras</p>
         </div>
 
@@ -24,7 +24,8 @@
           <div class="mb-3">
             <label for="id_username" class="form-label fw-semibold">Usuário</label>
             <input type="text" name="username" id="id_username"
-                   class="form-control" autofocus autocomplete="username" required>
+                   class="form-control" autofocus autocomplete="username"
+                   spellcheck="false" autocapitalize="none" required>
           </div>
           <div class="mb-4">
             <label for="id_password" class="form-label fw-semibold">Senha</label>
@@ -33,7 +34,7 @@
           </div>
           <input type="hidden" name="next" value="{{ next }}">
           <button type="submit" class="btn btn-primary w-100">
-            <i class="bi bi-box-arrow-in-right"></i> Entrar
+            <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Entrar
           </button>
         </form>
 
