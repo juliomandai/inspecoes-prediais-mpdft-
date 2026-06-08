@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}{% if inspecao %}Editar Inspeção #{{ inspecao.pk }}{% else %}Nova Inspeção{% endif %} — Inspeções Prediais MPDFT{% endblock %}
+{% block title %}{% if inspecao %}Editar Inspeção{% else %}Nova Inspeção{% endif %} — Inspeções Prediais MPDFT{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,7 +8,7 @@
       <div class="card-header">
         <h4 class="mb-0">
           {% if inspecao %}
-          <i class="bi bi-pencil-square"></i> Editar Inspeção #{{ inspecao.pk }}
+          <i class="bi bi-pencil-square" aria-hidden="true"></i> Editar Inspeção
           {% else %}
           <i class="bi bi-plus-circle"></i> Nova Inspeção
           {% endif %}
