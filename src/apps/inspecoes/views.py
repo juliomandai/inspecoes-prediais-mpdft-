@@ -1060,3 +1060,37 @@ def configuracoes(request):
         }
 
     return render(request, 'inspecoes/configuracoes.html', {'grupos': grupos})
+
+
+# ── Visitas técnicas ──────────────────────────────────────────────────────────
+
+@login_required
+def visita_localidades(request):
+    from apps.edificacoes.models import Edificacao
+    localidades = (
+        Edificacao.objects.filter(ativo=True)
+        .annotate(num_visitas=Count('visitas', distinct=True))
+        .order_by('nome')
+    )
+    return render(request, 'inspecoes/visita_localidades.html', {
+        'localidades': localidades,
+    })
+
+
+@login_required
+def visita_list(request, edif_pk):
+    from apps.edificacoes.models import Edificacao
+    from .forms import VisitaFilterForm
+    edificacao = get_object_or_404(Edificacao, pk=edif_pk)
+    form = VisitaFilterForm(request.GET or None)
+    visitas = edificacao.visitas.all()
+    if form.is_valid():
+        if form.cleaned_data.get('data_inicio'):
+            visitas = visitas.filter(data_visita__gte=form.cleaned_data['data_inicio'])
+        if form.cleaned_data.get('data_fim'):
+            visitas = visitas.filter(data_visita__lte=form.cleaned_data['data_fim'])
+    return render(request, 'inspecoes/visita_list.html', {
+        'edificacao': edificacao,
+        'filter_form': form,
+        'visitas': visitas,
+    })

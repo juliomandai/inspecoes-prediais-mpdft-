@@ -95,3 +95,41 @@ def test_visita_form_rejeita_data_futura(edificacao):
     })
     assert not form.is_valid()
     assert 'data_visita' in form.errors
+
+
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+
+@pytest.fixture
+def usuario_logado(db, client):
+    U = get_user_model()
+    u = U.objects.create_user(username='ze', password='123', first_name='Ze', last_name='Silva')
+    client.force_login(u)
+    return u
+
+
+@pytest.mark.django_db
+def test_home_mostra_menu(client, usuario_logado):
+    resp = client.get(reverse('inspecoes:home'))
+    assert resp.status_code == 200
+    assert b'Inspe' in resp.content
+    assert b'Visita' in resp.content
+
+
+@pytest.mark.django_db
+def test_lista_inspecoes_em_inspecoes_url(client, usuario_logado):
+    resp = client.get(reverse('inspecoes:list'))
+    assert resp.status_code == 200
+    assert resp.request['PATH_INFO'] == '/inspecoes/'
+
+
+@pytest.mark.django_db
+def test_lista_localidades_mostra_edificacoes_ativas(client, usuario_logado):
+    from apps.edificacoes.models import Edificacao
+    Edificacao.objects.create(nome="Sede A")
+    Edificacao.objects.create(nome="Sede Inativa", ativo=False)
+    resp = client.get(reverse('inspecoes:visita_localidades'))
+    assert resp.status_code == 200
+    assert b'Sede A' in resp.content
+    assert b'Sede Inativa' not in resp.content

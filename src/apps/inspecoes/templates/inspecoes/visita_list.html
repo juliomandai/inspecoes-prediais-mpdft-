@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Visitas — {{ edificacao.nome }}{% endblock %}
+{% block content %}
+<h3>{{ edificacao.nome }}</h3>
+<p class="text-muted">Visitas técnicas (em construção).</p>
+<a href="{% url 'inspecoes:visita_localidades' %}" class="btn btn-outline-secondary btn-sm">Voltar</a>
+{% endblock %}

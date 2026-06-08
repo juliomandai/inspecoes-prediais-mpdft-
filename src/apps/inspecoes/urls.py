@@ -43,6 +43,10 @@ urlpatterns = [
     # ── Backup — restaurar ────────────────────────────────────────────────────
     path('inspecoes/restaurar/', views.inspecao_restaurar_backup, name='restaurar_backup'),
 
+    # ── Visitas técnicas ───────────────────────────────────────────────────────
+    path('visitas/', views.visita_localidades, name='visita_localidades'),
+    path('visitas/localidade/<int:edif_pk>/', views.visita_list, name='visita_list'),
+
     # ── PWA ────────────────────────────────────────────────────────────────────
     path('offline/', views.offline_page, name='offline'),
     path('api/achados/sincronizar/', views.achado_sincronizar, name='achado_sincronizar'),
