@@ -1,93 +1,132 @@
 /* ==========================================================================
-   Tema institucional MPDFT — mescla do site público + intranet
-   Paleta: azul-institucional + acento verde. Ajuste os hex aqui se a
-   Secom fornecer as cores exatas do Manual de Identidade Visual.
+   Tema institucional MPDFT — refinamento
+   Tipografia: Public Sans (UI/corpo) + Spectral (títulos, ar de documento).
+   Paleta: azul-institucional + acento verde. Ajuste os hex em :root.
    ========================================================================== */
-:root {
-  --mpdft-azul: #0b3d6b;          /* azul institucional (principal) */
-  --mpdft-azul-escuro: #082c4d;   /* hover/topo do gradiente */
-  --mpdft-verde: #2e7d32;         /* acento (sucesso) */
-  --mpdft-verde-escuro: #1f5a23;  /* hover do verde */
 
-  /* Sobrescreve o azul padrão do Bootstrap (recolore .bg-primary, .text-primary,
-     .border-primary, badges, links etc. via as variáveis --bs-*) */
+/* ── Fontes próprias (hospedadas localmente — funcionam offline) ──────────── */
+@font-face { font-family: 'Public Sans'; src: url('../fonts/PublicSans-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Public Sans'; src: url('../fonts/PublicSans-SemiBold.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Public Sans'; src: url('../fonts/PublicSans-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Spectral'; src: url('../fonts/Spectral-SemiBold.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Spectral'; src: url('../fonts/Spectral-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+
+:root {
+  --mpdft-azul: #0b3d6b;
+  --mpdft-azul-escuro: #082c4d;
+  --mpdft-verde: #2e7d32;
+  --mpdft-verde-escuro: #1f5a23;
+
   --bs-primary: var(--mpdft-azul);
   --bs-primary-rgb: 11, 61, 107;
   --bs-link-color: var(--mpdft-azul);
   --bs-link-color-rgb: 11, 61, 107;
   --bs-link-hover-color: var(--mpdft-azul-escuro);
   --bs-link-hover-color-rgb: 8, 44, 77;
+  --bs-body-font-family: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --bs-body-color: #233240;
+  --bs-border-color: #e1e7ef;
 }
 
-/* ── Botões primários (azul institucional) ───────────────────────────────── */
+/* ── Tipografia ───────────────────────────────────────────────────────────── */
+body {
+  font-family: 'Public Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  color: #233240;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, .navbar-brand {
+  font-family: 'Spectral', Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.01em;
+}
+h1, h2 { color: #0a2540; }
+h1, h2, h3, h4 { text-wrap: balance; }
+
+/* ── Atmosfera de fundo (sutil, institucional) ───────────────────────────── */
+body {
+  background-color: #eef2f7;
+  background-image: linear-gradient(180deg, #e8eef6 0, #f4f7fb 340px);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* ── Barra de navegação ──────────────────────────────────────────────────── */
+.navbar.bg-primary {
+  background: linear-gradient(90deg, var(--mpdft-azul-escuro), var(--mpdft-azul)) !important;
+  border-bottom: 3px solid var(--mpdft-verde);
+  box-shadow: 0 2px 10px rgba(8, 44, 77, 0.18);
+}
+.navbar-brand { font-weight: 700; letter-spacing: 0.2px; }
+.navbar .nav-link { font-weight: 600; }
+
+/* ── Botões ──────────────────────────────────────────────────────────────── */
+.btn { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .05s ease; font-weight: 600; }
+.btn:active { transform: translateY(1px); }
 .btn-primary {
-  --bs-btn-bg: var(--mpdft-azul);
-  --bs-btn-border-color: var(--mpdft-azul);
-  --bs-btn-hover-bg: var(--mpdft-azul-escuro);
-  --bs-btn-hover-border-color: var(--mpdft-azul-escuro);
-  --bs-btn-active-bg: var(--mpdft-azul-escuro);
-  --bs-btn-active-border-color: var(--mpdft-azul-escuro);
-  --bs-btn-disabled-bg: var(--mpdft-azul);
-  --bs-btn-disabled-border-color: var(--mpdft-azul);
+  --bs-btn-bg: var(--mpdft-azul); --bs-btn-border-color: var(--mpdft-azul);
+  --bs-btn-hover-bg: var(--mpdft-azul-escuro); --bs-btn-hover-border-color: var(--mpdft-azul-escuro);
+  --bs-btn-active-bg: var(--mpdft-azul-escuro); --bs-btn-active-border-color: var(--mpdft-azul-escuro);
+  --bs-btn-disabled-bg: var(--mpdft-azul); --bs-btn-disabled-border-color: var(--mpdft-azul);
 }
 .btn-outline-primary {
-  --bs-btn-color: var(--mpdft-azul);
-  --bs-btn-border-color: var(--mpdft-azul);
-  --bs-btn-hover-bg: var(--mpdft-azul);
-  --bs-btn-hover-border-color: var(--mpdft-azul);
-  --bs-btn-active-bg: var(--mpdft-azul);
-  --bs-btn-active-border-color: var(--mpdft-azul);
+  --bs-btn-color: var(--mpdft-azul); --bs-btn-border-color: var(--mpdft-azul);
+  --bs-btn-hover-bg: var(--mpdft-azul); --bs-btn-hover-border-color: var(--mpdft-azul);
+  --bs-btn-active-bg: var(--mpdft-azul); --bs-btn-active-border-color: var(--mpdft-azul);
 }
-
-/* ── Verde institucional (sucesso) ───────────────────────────────────────── */
 .btn-success {
-  --bs-btn-bg: var(--mpdft-verde);
-  --bs-btn-border-color: var(--mpdft-verde);
-  --bs-btn-hover-bg: var(--mpdft-verde-escuro);
-  --bs-btn-hover-border-color: var(--mpdft-verde-escuro);
-  --bs-btn-active-bg: var(--mpdft-verde-escuro);
-  --bs-btn-active-border-color: var(--mpdft-verde-escuro);
-  --bs-btn-disabled-bg: var(--mpdft-verde);
-  --bs-btn-disabled-border-color: var(--mpdft-verde);
+  --bs-btn-bg: var(--mpdft-verde); --bs-btn-border-color: var(--mpdft-verde);
+  --bs-btn-hover-bg: var(--mpdft-verde-escuro); --bs-btn-hover-border-color: var(--mpdft-verde-escuro);
+  --bs-btn-active-bg: var(--mpdft-verde-escuro); --bs-btn-active-border-color: var(--mpdft-verde-escuro);
+  --bs-btn-disabled-bg: var(--mpdft-verde); --bs-btn-disabled-border-color: var(--mpdft-verde);
 }
 .btn-outline-success {
-  --bs-btn-color: var(--mpdft-verde);
-  --bs-btn-border-color: var(--mpdft-verde);
-  --bs-btn-hover-bg: var(--mpdft-verde);
-  --bs-btn-hover-border-color: var(--mpdft-verde);
+  --bs-btn-color: var(--mpdft-verde); --bs-btn-border-color: var(--mpdft-verde);
+  --bs-btn-hover-bg: var(--mpdft-verde); --bs-btn-hover-border-color: var(--mpdft-verde);
 }
 .text-success { color: var(--mpdft-verde) !important; }
 .border-success { border-color: var(--mpdft-verde) !important; }
 .bg-success, .badge.bg-success { background-color: var(--mpdft-verde) !important; }
 
-/* ── Barra de navegação institucional (mescla site + intranet) ───────────── */
-.navbar.bg-primary {
-  background: linear-gradient(90deg, var(--mpdft-azul-escuro), var(--mpdft-azul)) !important;
-  border-bottom: 3px solid var(--mpdft-verde);
-}
+/* ── Cartões ─────────────────────────────────────────────────────────────── */
+.card { border-radius: .7rem; border: 1px solid var(--bs-border-color); box-shadow: 0 1px 2px rgba(16, 40, 80, .05); }
+.card-header { background: #f7f9fc; border-bottom: 1px solid var(--bs-border-color); }
+/* Elevação em cartões clicáveis (menu inicial, localidades) */
+a.text-decoration-none .card { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+a.text-decoration-none:hover .card { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(11, 61, 107, .14); border-color: #c9d6e6; }
 
-/* Tabelas com cabeçalho azul suave */
+/* ── Tabelas ─────────────────────────────────────────────────────────────── */
+.table { --bs-table-color: #2a3744; }
+.table > thead th { font-weight: 600; letter-spacing: .02em; }
 .table-primary { --bs-table-bg: #e7eef5; --bs-table-color: #0a2540; }
+.table-hover > tbody > tr:hover > * { --bs-table-bg-state: #eef4fa; }
+.table td, .table th { font-variant-numeric: tabular-nums; vertical-align: middle; }
 
-/* Cartões e foco */
-.card { border-radius: .6rem; }
+/* ── Formulários ─────────────────────────────────────────────────────────── */
+.form-control, .form-select { border-color: #cdd6e2; }
+.form-control:focus, .form-select:focus { border-color: var(--mpdft-azul); box-shadow: 0 0 0 .2rem rgba(11, 61, 107, .15); }
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+.badge { font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+
+/* ── Foco acessível ──────────────────────────────────────────────────────── */
 :focus-visible { outline: 2px solid var(--mpdft-verde); outline-offset: 2px; }
 
-/* Números alinhados (contagens, GUT, datas) */
-.badge, .table td, .table th, .tabular-nums { font-variant-numeric: tabular-nums; }
-
-/* Títulos mais equilibrados */
-h1, h2, h3, h4 { text-wrap: balance; }
-
-/* Link "pular para o conteúdo" (acessibilidade) */
+/* ── Link "pular para o conteúdo" ────────────────────────────────────────── */
 .skip-link {
   position: absolute; left: -999px; top: 0; z-index: 2000;
   background: var(--mpdft-azul); color: #fff; padding: .5rem 1rem;
-  border-radius: 0 0 .25rem 0; text-decoration: none;
+  border-radius: 0 0 .25rem 0; text-decoration: none; font-weight: 600;
 }
 .skip-link:focus { left: 0; }
 
-/* Respeitar preferência de movimento reduzido */
+/* ── Rodapé ──────────────────────────────────────────────────────────────── */
+footer { background: #fff !important; border-top: 1px solid var(--bs-border-color); }
+
+/* ── Entrada suave do conteúdo a cada página ─────────────────────────────── */
+@keyframes mpdftFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#conteudo { animation: mpdftFade .35s ease both; }
+
+/* ── Respeitar preferência de movimento reduzido ─────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;
