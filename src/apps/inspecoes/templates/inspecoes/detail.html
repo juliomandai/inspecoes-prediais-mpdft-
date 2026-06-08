@@ -103,18 +103,11 @@
             aria-controls="pane-{{ esp.pk }}"
             aria-selected="{% if esp.pk == aba_ativa_pk %}true{% else %}false{% endif %}">
       {% if esp.especialidade == 'civil' %}
-      <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"
-           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-           style="vertical-align:-.125em" aria-hidden="true">
-        <path d="M10 10v-3.5a1.5 1.5 0 0 1 3 0v3.5"/>
-        <path d="M3 17h18v-2a9 9 0 0 0 -18 0v2z"/>
-        <path d="M4 17v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1 -1v-1"/>
-        <path d="M12 6v-3"/>
-      </svg>
+      <i class="bi bi-bricks" aria-hidden="true"></i>
       {% elif esp.especialidade == 'eletrica' %}
       <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>
       {% elif esp.especialidade == 'mecanica' %}
-      <i class="bi bi-gear-fill" aria-hidden="true"></i><i class="bi bi-wrench" aria-hidden="true"></i>
+      <i class="bi bi-gear-fill" aria-hidden="true"></i>
       {% else %}
       <i class="bi bi-tools" aria-hidden="true"></i>
       {% endif %}
