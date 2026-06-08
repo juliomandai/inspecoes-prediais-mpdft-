@@ -46,6 +46,12 @@ urlpatterns = [
     # ── Visitas técnicas ───────────────────────────────────────────────────────
     path('visitas/', views.visita_localidades, name='visita_localidades'),
     path('visitas/localidade/<int:edif_pk>/', views.visita_list, name='visita_list'),
+    path('visitas/localidade/<int:edif_pk>/nova/', views.visita_create, name='visita_create'),
+    path('visitas/<int:pk>/', views.visita_detail, name='visita_detail'),
+    path('visitas/<int:pk>/editar/', views.visita_update, name='visita_update'),
+    path('visitas/<int:pk>/excluir/', views.visita_delete, name='visita_delete'),
+    path('visitas/<int:visita_pk>/fotos/', views.visita_foto_upload, name='visita_foto_upload'),
+    path('visitas/fotos/<int:pk>/', views.visita_foto_delete, name='visita_foto_delete'),
 
     # ── PWA ────────────────────────────────────────────────────────────────────
     path('offline/', views.offline_page, name='offline'),

@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Visita — {{ visita.edificacao.nome }} — {{ visita.data_visita|date:"d/m/Y" }}{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0">{{ visita.edificacao.nome }}</h4>
+      <small class="text-muted">Visita técnica — {{ visita.data_visita|date:"d/m/Y" }}</small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{% url 'inspecoes:visita_list' visita.edificacao.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+      {% if pode_editar %}
+      <a href="{% url 'inspecoes:visita_update' visita.pk %}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-pencil"></i> Editar
+      </a>
+      <form method="post" action="{% url 'inspecoes:visita_delete' visita.pk %}"
+            onsubmit="return confirm('Excluir esta visita? As fotos vinculadas também serão removidas.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i> Excluir</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    <p><strong>Responsável:</strong> {{ visita.responsavel }}</p>
+    <p><strong>Motivo:</strong><br>{{ visita.motivo|linebreaksbr }}</p>
+    <p><strong>Achados:</strong><br>{{ visita.achados|linebreaksbr|default:"—" }}</p>
+    <p><strong>Conclusões e encaminhamentos:</strong><br>{{ visita.conclusoes_encaminhamentos|linebreaksbr|default:"—" }}</p>
+
+    {% if visita.fotos.all %}
+    <hr>
+    <strong>Fotos</strong>
+    <div class="d-flex flex-wrap gap-2 mt-2">
+      {% for foto in visita.fotos.all %}
+      <a href="{{ foto.arquivo.url }}" target="_blank" title="{{ foto.nome_original }}">
+        <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+             style="height:90px;width:90px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

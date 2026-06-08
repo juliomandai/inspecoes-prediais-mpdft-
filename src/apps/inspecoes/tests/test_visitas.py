@@ -133,3 +133,129 @@ def test_lista_localidades_mostra_edificacoes_ativas(client, usuario_logado):
     assert resp.status_code == 200
     assert b'Sede A' in resp.content
     assert b'Sede Inativa' not in resp.content
+
+
+@pytest.mark.django_db
+def test_visita_list_filtra_por_data(client, usuario_logado, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date(2026, 1, 10),
+                                 responsavel="A", motivo="m1", achados="x", conclusoes_encaminhamentos="x")
+    VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date(2026, 6, 10),
+                                 responsavel="A", motivo="m2", achados="x", conclusoes_encaminhamentos="x")
+    url = reverse('inspecoes:visita_list', args=[edificacao.pk])
+    resp = client.get(url, {'data_inicio': '2026-05-01', 'data_fim': '2026-12-31'})
+    assert resp.status_code == 200
+    assert b'm2' in resp.content
+    assert b'm1' not in resp.content
+
+
+@pytest.mark.django_db
+def test_cria_visita_via_post_com_foto(client, usuario_logado, edificacao):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.inspecoes.models import VisitaTecnica, LogAcesso
+    png = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+           b'\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01'
+           b'\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82')
+    foto = SimpleUploadedFile('v.png', png, content_type='image/png')
+    url = reverse('inspecoes:visita_create', args=[edificacao.pk])
+    resp = client.post(url, {
+        'data_visita': date.today().isoformat(),
+        'responsavel': 'Ze Silva',
+        'motivo': 'Vistoria geral',
+        'achados': 'tudo certo',
+        'conclusoes_encaminhamentos': 'nada',
+        'fotos': [foto],
+    })
+    assert resp.status_code == 302
+    v = VisitaTecnica.objects.get(edificacao=edificacao)
+    assert v.responsavel == 'Ze Silva'
+    assert v.criado_por_id == usuario_logado.pk
+    assert v.fotos.count() == 1
+    assert LogAcesso.objects.filter(tipo='visita_criada').exists()
+
+
+@pytest.mark.django_db
+def test_visita_detail_exibe_dados(client, usuario_logado, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel="Carla", motivo="Inspecao eletrica", achados="achado X",
+        conclusoes_encaminhamentos="encaminhar Y")
+    resp = client.get(reverse('inspecoes:visita_detail', args=[v.pk]))
+    assert resp.status_code == 200
+    assert b'Carla' in resp.content
+    assert b'achado X' in resp.content
+    assert b'encaminhar Y' in resp.content
+
+
+@pytest.mark.django_db
+def test_outro_usuario_nao_exclui_visita(client, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    U = get_user_model()
+    dono = U.objects.create_user(username='dona', password='1', first_name='Ana', last_name='Lima')
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel='Ana Lima', motivo='m', achados='x', conclusoes_encaminhamentos='x')
+    outro = U.objects.create_user(username='outro', password='1', first_name='Beto', last_name='Reis')
+    client.force_login(outro)
+    resp = client.post(reverse('inspecoes:visita_delete', args=[v.pk]))
+    assert resp.status_code == 302
+    assert VisitaTecnica.objects.filter(pk=v.pk).exists()
+
+
+@pytest.mark.django_db
+def test_responsavel_exclui_visita(client, edificacao):
+    from apps.inspecoes.models import VisitaTecnica, LogAcesso
+    U = get_user_model()
+    dono = U.objects.create_user(username='dona2', password='1', first_name='Ana', last_name='Lima')
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel='Ana Lima', motivo='m', achados='x', conclusoes_encaminhamentos='x')
+    client.force_login(dono)
+    resp = client.post(reverse('inspecoes:visita_delete', args=[v.pk]))
+    assert resp.status_code == 302
+    assert not VisitaTecnica.objects.filter(pk=v.pk).exists()
+    assert LogAcesso.objects.filter(tipo='visita_excluida').exists()
+
+
+@pytest.mark.django_db
+def test_responsavel_edita_visita(client, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    U = get_user_model()
+    dono = U.objects.create_user(username='dona3', password='1', first_name='Ana', last_name='Lima')
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel='Ana Lima', motivo='antigo', achados='x', conclusoes_encaminhamentos='x')
+    client.force_login(dono)
+    resp = client.post(reverse('inspecoes:visita_update', args=[v.pk]), {
+        'data_visita': date.today().isoformat(), 'responsavel': 'Ana Lima',
+        'motivo': 'novo motivo', 'achados': 'x', 'conclusoes_encaminhamentos': 'x',
+    })
+    assert resp.status_code == 302
+    v.refresh_from_db()
+    assert v.motivo == 'novo motivo'
+
+
+@pytest.mark.django_db
+def test_upload_foto_visita_ajax(client, usuario_logado, edificacao):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from apps.inspecoes.models import VisitaTecnica
+    png = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+           b'\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01'
+           b'\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82')
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel='X', motivo='m', achados='x', conclusoes_encaminhamentos='x')
+    foto = SimpleUploadedFile('a.png', png, content_type='image/png')
+    resp = client.post(reverse('inspecoes:visita_foto_upload', args=[v.pk]), {'arquivo': foto})
+    assert resp.status_code == 200
+    assert resp.json()['id']
+    assert v.fotos.count() == 1
+
+
+@pytest.mark.django_db
+def test_delete_foto_visita(client, usuario_logado, edificacao):
+    from django.core.files.base import ContentFile
+    from apps.inspecoes.models import VisitaTecnica, VisitaFoto
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(),
+        responsavel='X', motivo='m', achados='x', conclusoes_encaminhamentos='x')
+    f = VisitaFoto.objects.create(visita=v, arquivo=ContentFile(b'x', name='a.jpg'),
+                                  nome_original='a.jpg', tamanho_bytes=1)
+    resp = client.delete(reverse('inspecoes:visita_foto_delete', args=[f.pk]))
+    assert resp.status_code == 204
+    assert v.fotos.count() == 0
