@@ -294,3 +294,20 @@ def test_form_edicao_renderiza_data_em_iso(client, edificacao):
     client.force_login(dono)
     resp = client.get(reverse('inspecoes:visita_update', args=[v.pk]))
     assert b'value="2026-06-05"' in resp.content
+
+
+@pytest.mark.django_db
+def test_especialidade_edicao_renderiza_data_em_iso(client, edificacao):
+    """Mesmo bug de data ISO no formulário de especialidade (inspeções)."""
+    from apps.inspecoes.models import Inspecao, InspecaoEspecialidade
+    U = get_user_model()
+    u = U.objects.create_user(username='espuser', password='1', is_staff=True)
+    client.force_login(u)
+    insp = Inspecao.objects.create(edificacao=edificacao)
+    esp = InspecaoEspecialidade.objects.create(
+        inspecao=insp, especialidade='civil',
+        profissional='Fulano', data_inspecao=date(2026, 6, 5),
+    )
+    resp = client.get(reverse('inspecoes:especialidade_update', args=[esp.pk]))
+    assert resp.status_code == 200
+    assert b'value="2026-06-05"' in resp.content

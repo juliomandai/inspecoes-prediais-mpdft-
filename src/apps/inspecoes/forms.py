@@ -22,7 +22,8 @@ class EspecialidadeForm(forms.ModelForm):
     data_inspecao = forms.DateField(
         label='Data da inspeção',
         initial=date.today,
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
 
     class Meta:
@@ -189,12 +190,12 @@ class InspecaoFilterForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nome do profissional'}),
     )
     data_inicio = forms.DateField(
-        required=False, label='Data de',
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        required=False, label='Data de', input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
     data_fim = forms.DateField(
-        required=False, label='Data até',
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        required=False, label='Data até', input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
     status = forms.ChoiceField(
         choices=[('', 'Todos')] + InspecaoEspecialidade.STATUS_CHOICES,
@@ -235,10 +236,10 @@ class VisitaTecnicaForm(forms.ModelForm):
 
 class VisitaFilterForm(forms.Form):
     data_inicio = forms.DateField(
-        required=False, label='Data de',
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        required=False, label='Data de', input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
     data_fim = forms.DateField(
-        required=False, label='Data até',
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        required=False, label='Data até', input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
