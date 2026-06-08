@@ -206,7 +206,8 @@ class InspecaoFilterForm(forms.Form):
 class VisitaTecnicaForm(forms.ModelForm):
     data_visita = forms.DateField(
         label='Data da visita',
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
 
     class Meta:

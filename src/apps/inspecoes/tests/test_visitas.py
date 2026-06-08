@@ -281,3 +281,16 @@ def test_form_edicao_renderiza(client, edificacao):
     resp = client.get(reverse('inspecoes:visita_update', args=[v.pk]))
     assert resp.status_code == 200
     assert b'Editar Visita' in resp.content
+
+
+@pytest.mark.django_db
+def test_form_edicao_renderiza_data_em_iso(client, edificacao):
+    """O input type=date precisa do valor em AAAA-MM-DD, senão some na edição."""
+    from apps.inspecoes.models import VisitaTecnica
+    U = get_user_model()
+    dono = U.objects.create_user(username='donag', password='1', first_name='Ana', last_name='Lima')
+    v = VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date(2026, 6, 5),
+        responsavel='Ana Lima', motivo='m', achados='x', conclusoes_encaminhamentos='x')
+    client.force_login(dono)
+    resp = client.get(reverse('inspecoes:visita_update', args=[v.pk]))
+    assert b'value="2026-06-05"' in resp.content
