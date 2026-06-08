@@ -1,7 +1,12 @@
 from datetime import date
 from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import Inspecao, InspecaoEspecialidade, Achado, OpcaoCampo, VisitaTecnica
 from apps.edificacoes.models import Edificacao
+
+DOMINIO_INSTITUCIONAL = '@mpdft.mp.br'
 
 
 class InspecaoForm(forms.ModelForm):
@@ -242,3 +247,66 @@ class VisitaFilterForm(forms.Form):
         required=False, label='Data até', input_formats=['%Y-%m-%d'],
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
+
+
+class SignUpForm(forms.Form):
+    """Cadastro de novo usuário (sem permissão de administrador)."""
+    nome_completo = forms.CharField(
+        label='Nome completo', max_length=200,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autofocus': True}),
+    )
+    email = forms.EmailField(
+        label='E-mail institucional',
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'nome@mpdft.mp.br'}),
+    )
+    password1 = forms.CharField(
+        label='Senha',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+    password2 = forms.CharField(
+        label='Confirmar senha',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+
+    def clean_nome_completo(self):
+        nome = self.cleaned_data['nome_completo'].strip()
+        if len(nome.split()) < 2:
+            raise forms.ValidationError('Informe o nome completo (nome e sobrenome).')
+        return nome
+
+    def clean_email(self):
+        email = self.cleaned_data['email'].strip().lower()
+        if not email.endswith(DOMINIO_INSTITUCIONAL):
+            raise forms.ValidationError('Use seu e-mail institucional (@mpdft.mp.br).')
+        U = get_user_model()
+        if U.objects.filter(username__iexact=email).exists() or U.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError('Já existe uma conta com este e-mail.')
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        p1 = cleaned.get('password1')
+        p2 = cleaned.get('password2')
+        if p1 and p2 and p1 != p2:
+            self.add_error('password2', 'As senhas não coincidem.')
+        if p1:
+            try:
+                validate_password(p1)
+            except DjangoValidationError as e:
+                self.add_error('password1', list(e.messages))
+        return cleaned
+
+    def save(self):
+        U = get_user_model()
+        email = self.cleaned_data['email']
+        partes = self.cleaned_data['nome_completo'].split()
+        first = partes[0]
+        last = ' '.join(partes[1:])[:150] if len(partes) > 1 else ''
+        user = U(
+            username=email, email=email,
+            first_name=first[:150], last_name=last,
+            is_staff=False, is_superuser=False, is_active=True,
+        )
+        user.set_password(self.cleaned_data['password1'])
+        user.save()
+        return user

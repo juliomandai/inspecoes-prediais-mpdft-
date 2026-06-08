@@ -17,7 +17,7 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.urls import reverse
 
 from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso, VisitaTecnica, VisitaFoto
-from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm, VisitaTecnicaForm, VisitaFilterForm
+from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm, VisitaTecnicaForm, VisitaFilterForm, SignUpForm
 
 
 def _redirect_detail(inspecao_pk, esp_pk=None):
@@ -56,6 +56,22 @@ def erro_403(request, exception=None):
 @login_required
 def home(request):
     return render(request, 'inspecoes/home.html')
+
+
+# ── Cadastro de novo usuário (público) ────────────────────────────────────────
+
+@require_http_methods(['GET', 'POST'])
+def signup(request):
+    if request.user.is_authenticated:
+        return redirect('inspecoes:home')
+    form = SignUpForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        from django.contrib.auth import login
+        user = form.save()
+        login(request, user)
+        messages.success(request, f'Conta criada com sucesso. Bem-vindo(a), {user.get_full_name()}!')
+        return redirect('inspecoes:home')
+    return render(request, 'registration/signup.html', {'form': form})
 
 
 # ── Inspeções (container por edificação) ──────────────────────────────────────

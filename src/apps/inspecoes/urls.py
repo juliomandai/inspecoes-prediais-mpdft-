@@ -7,6 +7,9 @@ urlpatterns = [
     # ── Página inicial (menu) ──────────────────────────────────────────────────
     path('', views.home, name='home'),
 
+    # ── Cadastro de novo usuário (público) ─────────────────────────────────────
+    path('cadastro/', views.signup, name='signup'),
+
     # ── Listagem e configurações ───────────────────────────────────────────────
     path('inspecoes/', views.inspecao_list, name='list'),
     path('configuracoes/', views.configuracoes, name='configuracoes'),
