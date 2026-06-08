@@ -1,7 +1,24 @@
 from django.db.models.signals import post_delete
+from django.db.backends.signals import connection_created
 from django.dispatch import receiver
 from django.contrib.auth.signals import user_logged_in
 from .models import Foto
+
+
+@receiver(connection_created)
+def configurar_sqlite(sender, connection, **kwargs):
+    """Melhora a concorrência do SQLite com vários usuários simultâneos.
+
+    - WAL (Write-Ahead Logging): permite leituras durante escritas.
+    - synchronous=NORMAL: seguro com WAL e mais rápido.
+    - busy_timeout: aguarda até 5s em vez de falhar com 'database is locked'.
+    """
+    if connection.vendor != 'sqlite':
+        return
+    cursor = connection.cursor()
+    cursor.execute('PRAGMA journal_mode=WAL;')
+    cursor.execute('PRAGMA synchronous=NORMAL;')
+    cursor.execute('PRAGMA busy_timeout=5000;')
 
 
 @receiver(post_delete, sender=Foto)

@@ -1099,7 +1099,7 @@ def visita_list(request, edif_pk):
     from .forms import VisitaFilterForm
     edificacao = get_object_or_404(Edificacao, pk=edif_pk)
     form = VisitaFilterForm(request.GET or None)
-    visitas = edificacao.visitas.all()
+    visitas = edificacao.visitas.annotate(num_fotos=Count('fotos'))
     if form.is_valid():
         if form.cleaned_data.get('data_inicio'):
             visitas = visitas.filter(data_visita__gte=form.cleaned_data['data_inicio'])

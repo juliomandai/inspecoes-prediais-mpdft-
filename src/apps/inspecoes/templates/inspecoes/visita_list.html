@@ -60,7 +60,7 @@
           <td>{{ v.data_visita|date:"d/m/Y" }}</td>
           <td>{{ v.participantes_display|truncatechars:50 }}</td>
           <td>{{ v.motivo|truncatechars:60 }}</td>
-          <td class="text-center">{{ v.fotos.count }}</td>
+          <td class="text-center">{{ v.num_fotos }}</td>
           <td class="text-center">
             <a href="{% url 'inspecoes:visita_detail' v.pk %}" class="btn btn-sm btn-outline-primary">
               <i class="bi bi-eye"></i> Ver

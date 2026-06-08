@@ -222,6 +222,20 @@ def test_visita_sem_disciplina_nao_salva(client, usuario_logado, edificacao):
 
 
 @pytest.mark.django_db
+def test_visita_list_sem_n_mais_1(client, usuario_logado, edificacao, django_assert_max_num_queries):
+    """A contagem de fotos é anotada — não deve crescer com o número de visitas."""
+    from apps.inspecoes.models import VisitaTecnica
+    for i in range(5):
+        VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(), disciplina='civil',
+            participantes='A', motivo=f'm{i}', achados='x', conclusoes_encaminhamentos='x')
+    url = reverse('inspecoes:visita_list', args=[edificacao.pk])
+    # Sem N+1, o número de queries é constante (não proporcional às 5 visitas)
+    with django_assert_max_num_queries(8):
+        resp = client.get(url)
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
 def test_visita_list_agrupa_por_disciplina(client, usuario_logado, edificacao):
     from apps.inspecoes.models import VisitaTecnica
     VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(), disciplina='civil',
