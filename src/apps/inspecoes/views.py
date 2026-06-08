@@ -21,10 +21,14 @@ from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterFo
 
 
 def _redirect_detail(inspecao_pk, esp_pk=None):
-    """Redireciona para o detalhe da inspeção abrindo a aba da especialidade correta."""
+    """Redireciona para o detalhe da inspeção abrindo a aba da especialidade correta.
+
+    Usa query param (?aba=) — preservado de forma confiável no redirect 302 —
+    em vez de fragmento (#), que alguns navegadores descartam após POST.
+    """
     url = reverse('inspecoes:detail', kwargs={'pk': inspecao_pk})
     if esp_pk:
-        url += f'#pane-{esp_pk}'
+        url += f'?aba={esp_pk}'
     return redirect(url)
 
 
@@ -146,9 +150,20 @@ def inspecao_detail(request, pk):
     backup_salvo = os.path.exists(
         os.path.join(settings.MEDIA_ROOT, 'backups', f'inspecao_{pk}.zip')
     )
+    # Determina qual aba (especialidade) deve abrir ativa
+    esps = list(inspecao.especialidades.all())
+    aba_param = request.GET.get('aba', '')
+    aba_ativa_pk = None
+    if aba_param.isdigit():
+        pk_aba = int(aba_param)
+        if any(e.pk == pk_aba for e in esps):
+            aba_ativa_pk = pk_aba
+    if aba_ativa_pk is None and esps:
+        aba_ativa_pk = esps[0].pk
     return render(request, 'inspecoes/detail.html', {
         'inspecao': inspecao,
         'backup_salvo': backup_salvo,
+        'aba_ativa_pk': aba_ativa_pk,
     })
 
 

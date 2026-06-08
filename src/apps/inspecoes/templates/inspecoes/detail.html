@@ -95,14 +95,14 @@
 <ul class="nav nav-tabs mb-0" id="tabEspecialidades" role="tablist">
   {% for esp in inspecao.especialidades.all %}
   <li class="nav-item" role="presentation">
-    <button class="nav-link {% if forloop.first %}active{% endif %}"
+    <button class="nav-link {% if esp.pk == aba_ativa_pk %}active{% endif %}"
             id="tab-{{ esp.pk }}"
             data-bs-toggle="tab"
             data-bs-target="#pane-{{ esp.pk }}"
             type="button" role="tab"
             aria-controls="pane-{{ esp.pk }}"
-            aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
-      <i class="bi bi-tools"></i> {{ esp.get_especialidade_display }}
+            aria-selected="{% if esp.pk == aba_ativa_pk %}true{% else %}false{% endif %}">
+      <i class="bi bi-tools" aria-hidden="true"></i> {{ esp.get_especialidade_display }}
       {% if esp.status == 'em_andamento' %}
       <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem">Em andamento</span>
       {% else %}
@@ -115,7 +115,7 @@
 
 <div class="tab-content border border-top-0 rounded-bottom" id="tabEspecialidadesContent">
   {% for esp in inspecao.especialidades.all %}
-  <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+  <div class="tab-pane fade {% if esp.pk == aba_ativa_pk %}show active{% endif %}"
        id="pane-{{ esp.pk }}"
        role="tabpanel"
        aria-labelledby="tab-{{ esp.pk }}">
@@ -327,14 +327,12 @@ async function prepararParaCampo() {
 }
 </script>
 <script>
+// A aba ativa já é definida no servidor (?aba=). Se viemos de um redirect
+// com ?aba=, rola até a barra de abas para o usuário ver o conteúdo correto.
 (function () {
-  var hash = window.location.hash;
-  if (!hash) return;
-  var tabEl = document.querySelector('[data-bs-target="' + hash + '"]');
-  if (tabEl) {
-    new bootstrap.Tab(tabEl).show();
-    tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  if (window.location.search.indexOf('aba=') === -1) return;
+  var tabs = document.getElementById('tabEspecialidades');
+  if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 })();
 </script>
 {% endblock %}
