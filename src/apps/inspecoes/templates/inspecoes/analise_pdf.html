@@ -94,6 +94,11 @@
     {# Coluna esquerda: Grau de Risco #}
     <td style="width:38%;vertical-align:top;padding-right:8pt">
       <h2 style="margin-top:0">2. Grau de Risco — Geral</h2>
+      {% if grafico_risco_img %}
+      <div style="text-align:center;margin-bottom:6pt">
+        <img src="{{ grafico_risco_img }}" style="width:120pt;height:120pt">
+      </div>
+      {% endif %}
       <table class="dados">
         <thead>
           <tr>
@@ -243,6 +248,11 @@
     {# Por Prazo #}
     <td style="width:42%;vertical-align:top;padding-left:8pt;border-left:1pt solid #ddd">
       <h2 style="margin-top:0">6. Distribuição por Prazo</h2>
+      {% if grafico_prazo_img %}
+      <div style="text-align:center;margin-bottom:6pt">
+        <img src="{{ grafico_prazo_img }}" style="width:175pt;height:101pt">
+      </div>
+      {% endif %}
       <table class="dados">
         <thead>
           <tr>

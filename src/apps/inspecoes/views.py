@@ -622,6 +622,91 @@ def _analise_data(achados_list):
     }
 
 
+# ── Gráficos para PDF (renderizados como imagem, pois o xhtml2pdf não roda JS) ─
+
+def _png_data_uri(img):
+    buf = io.BytesIO()
+    img.save(buf, 'PNG')
+    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+
+
+def _fonte(tamanho):
+    from PIL import ImageFont
+    for caminho in ('C:/Windows/Fonts/arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'):
+        try:
+            return ImageFont.truetype(caminho, tamanho)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _grafico_rosca_risco(n1, n2, n3):
+    """Rosca (donut) com a distribuição de prioridades. Retorna data URI PNG ou None."""
+    from PIL import Image, ImageDraw
+    total = n1 + n2 + n3
+    if total == 0:
+        return None
+    S = 4
+    size = 340 * S
+    img = Image.new('RGB', (size, size), 'white')
+    d = ImageDraw.Draw(img)
+    margem = 8 * S
+    box = [margem, margem, size - margem, size - margem]
+    ang = -90.0
+    for val, cor in ((n1, (204, 0, 0)), (n2, (204, 102, 0)), (n3, (0, 102, 0))):
+        if val <= 0:
+            continue
+        fim = ang + (val / total) * 360.0
+        d.pieslice(box, ang, fim, fill=cor)
+        ang = fim
+    # furo central
+    r = (size - 2 * margem) * 0.58 / 2
+    c = size / 2
+    d.ellipse([c - r, c - r, c + r, c + r], fill='white')
+    img = img.resize((340, 340), Image.LANCZOS)
+    return _png_data_uri(img)
+
+
+def _grafico_barras_prazo(por_prazo):
+    """Barras verticais com a quantidade de achados por prazo. data URI PNG ou None."""
+    from PIL import Image, ImageDraw
+    dados = [(p['label'], p['total']) for p in por_prazo if p.get('total', 0) > 0]
+    if not dados:
+        return None
+    S = 4
+    W, H = 520 * S, 300 * S
+    img = Image.new('RGB', (W, H), 'white')
+    d = ImageDraw.Draw(img)
+    f = _fonte(14 * S)
+    maxv = max(v for _, v in dados) or 1
+    pad_l, pad_b, pad_t, pad_r = 34 * S, 42 * S, 22 * S, 12 * S
+    plot_w = W - pad_l - pad_r
+    plot_h = H - pad_b - pad_t
+    base_y = pad_t + plot_h
+    gap = plot_w / len(dados)
+    bw = gap * 0.55
+    cor = (13, 110, 253)
+    for i, (lab, val) in enumerate(dados):
+        x = pad_l + i * gap + (gap - bw) / 2
+        bh = (val / maxv) * plot_h
+        d.rectangle([x, base_y - bh, x + bw, base_y], fill=cor)
+        d.text((x + bw / 2, base_y - bh - 6 * S), str(val), fill=(60, 60, 60), font=f, anchor='mb')
+        d.text((x + bw / 2, base_y + 8 * S), lab, fill=(60, 60, 60), font=f, anchor='ma')
+    d.line([pad_l, pad_t, pad_l, base_y], fill=(170, 170, 170), width=S)
+    d.line([pad_l, base_y, W - pad_r, base_y], fill=(170, 170, 170), width=S)
+    img = img.resize((520, 300), Image.LANCZOS)
+    return _png_data_uri(img)
+
+
+def _adicionar_graficos(ctx):
+    """Acrescenta ao contexto as imagens dos gráficos (risco e prazo)."""
+    ctx['grafico_risco_img'] = _grafico_rosca_risco(
+        len(ctx.get('p1', [])), len(ctx.get('p2', [])), len(ctx.get('p3', []))
+    )
+    ctx['grafico_prazo_img'] = _grafico_barras_prazo(ctx.get('por_prazo', []))
+    return ctx
+
+
 def _gerar_pdf(html_string, nome_arquivo):
     from xhtml2pdf import pisa
     buffer = io.BytesIO()
@@ -656,6 +741,7 @@ def especialidade_analise_pdf(request, pk):
     ctx = _analise_data(list(esp.achados.all()))
     ctx['especialidade'] = esp
     ctx['inspecao'] = esp.inspecao
+    _adicionar_graficos(ctx)
     html = render_to_string('inspecoes/analise_pdf.html', ctx, request=request)
     nome = (
         f"laudo_{esp.inspecao.edificacao.nome.replace(' ', '_')}"
