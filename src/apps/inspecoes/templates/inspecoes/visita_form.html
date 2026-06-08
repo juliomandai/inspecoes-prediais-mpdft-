@@ -24,6 +24,11 @@
           {{ form.data_visita }}
           {% if form.data_visita.errors %}<div class="text-danger small mt-1">{{ form.data_visita.errors }}</div>{% endif %}
         </div>
+        <div class="col-md-4">
+          <label for="{{ form.disciplina.id_for_label }}" class="form-label">{{ form.disciplina.label }}</label>
+          {{ form.disciplina }}
+          {% if form.disciplina.errors %}<div class="text-danger small mt-1">{{ form.disciplina.errors }}</div>{% endif %}
+        </div>
         <div class="col-12">
           <label class="form-label">Profissionais participantes</label>
           <div id="participantes-container">

@@ -1105,10 +1105,24 @@ def visita_list(request, edif_pk):
             visitas = visitas.filter(data_visita__gte=form.cleaned_data['data_inicio'])
         if form.cleaned_data.get('data_fim'):
             visitas = visitas.filter(data_visita__lte=form.cleaned_data['data_fim'])
+
+    # Agrupa as visitas por disciplina, na ordem das choices
+    visitas = list(visitas)
+    labels = dict(VisitaTecnica.DISCIPLINA_CHOICES)
+    grupos = []
+    for chave, nome in VisitaTecnica.DISCIPLINA_CHOICES:
+        itens = [v for v in visitas if v.disciplina == chave]
+        if itens:
+            grupos.append({'disciplina': nome, 'visitas': itens})
+    sem_disciplina = [v for v in visitas if not v.disciplina or v.disciplina not in labels]
+    if sem_disciplina:
+        grupos.append({'disciplina': 'Não informada', 'visitas': sem_disciplina})
+
     return render(request, 'inspecoes/visita_list.html', {
         'edificacao': edificacao,
         'filter_form': form,
         'visitas': visitas,
+        'grupos': grupos,
     })
 
 

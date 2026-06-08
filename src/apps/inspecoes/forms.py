@@ -215,11 +215,16 @@ class VisitaTecnicaForm(forms.ModelForm):
         input_formats=['%Y-%m-%d'],
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
     )
+    disciplina = forms.ChoiceField(
+        label='Disciplina',
+        choices=[('', '— Selecione —')] + VisitaTecnica.DISCIPLINA_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
 
     class Meta:
         model = VisitaTecnica
         # 'participantes' é tratado na view (campos dinâmicos via request.POST.getlist)
-        fields = ['data_visita', 'motivo', 'achados', 'conclusoes_encaminhamentos']
+        fields = ['data_visita', 'disciplina', 'motivo', 'achados', 'conclusoes_encaminhamentos']
         widgets = {
             'motivo': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
             'achados': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),

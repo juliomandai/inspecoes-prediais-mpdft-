@@ -37,34 +37,42 @@
 </div>
 
 {% if visitas %}
-<div class="table-responsive">
-  <table class="table table-hover table-bordered align-middle">
-    <thead class="table-primary">
-      <tr>
-        <th>Data</th>
-        <th>Participantes</th>
-        <th>Motivo</th>
-        <th class="text-center">Fotos</th>
-        <th class="text-center">Ação</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for v in visitas %}
-      <tr>
-        <td>{{ v.data_visita|date:"d/m/Y" }}</td>
-        <td>{{ v.participantes_display|truncatechars:50 }}</td>
-        <td>{{ v.motivo|truncatechars:60 }}</td>
-        <td class="text-center">{{ v.fotos.count }}</td>
-        <td class="text-center">
-          <a href="{% url 'inspecoes:visita_detail' v.pk %}" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-eye"></i> Ver
-          </a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% for grupo in grupos %}
+<div class="mb-4">
+  <h5 class="mb-2">
+    <i class="bi bi-bookmark-fill text-primary"></i> {{ grupo.disciplina }}
+    <span class="badge bg-secondary">{{ grupo.visitas|length }}</span>
+  </h5>
+  <div class="table-responsive">
+    <table class="table table-hover table-bordered align-middle mb-0">
+      <thead class="table-primary">
+        <tr>
+          <th>Data</th>
+          <th>Participantes</th>
+          <th>Motivo</th>
+          <th class="text-center">Fotos</th>
+          <th class="text-center">Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in grupo.visitas %}
+        <tr>
+          <td>{{ v.data_visita|date:"d/m/Y" }}</td>
+          <td>{{ v.participantes_display|truncatechars:50 }}</td>
+          <td>{{ v.motivo|truncatechars:60 }}</td>
+          <td class="text-center">{{ v.fotos.count }}</td>
+          <td class="text-center">
+            <a href="{% url 'inspecoes:visita_detail' v.pk %}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-eye"></i> Ver
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+{% endfor %}
 {% else %}
 <div class="alert alert-info">
   <i class="bi bi-info-circle"></i> Nenhuma visita registrada para esta localidade.

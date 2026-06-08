@@ -228,6 +228,14 @@ def visita_foto_upload_path(instance, filename):
 
 
 class VisitaTecnica(models.Model):
+    DISCIPLINA_CHOICES = [
+        ('arquitetura', 'Arquitetura'),
+        ('civil', 'Engenharia Civil'),
+        ('eletrica', 'Engenharia Elétrica'),
+        ('mecanica', 'Engenharia Mecânica'),
+        ('multidisciplinar', 'Multidisciplinar'),
+    ]
+
     edificacao = models.ForeignKey(
         'edificacoes.Edificacao',
         on_delete=models.PROTECT,
@@ -235,6 +243,7 @@ class VisitaTecnica(models.Model):
         related_name='visitas',
     )
     data_visita = models.DateField('Data da visita')
+    disciplina = models.CharField('Disciplina', max_length=20, choices=DISCIPLINA_CHOICES, blank=True)
     participantes = models.TextField('Profissionais participantes', help_text='Um nome por linha.')
     motivo = models.TextField('Motivo da visita')
     achados = models.TextField('Achados da visita', blank=True)

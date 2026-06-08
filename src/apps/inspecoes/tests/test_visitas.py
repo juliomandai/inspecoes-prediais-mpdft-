@@ -77,7 +77,7 @@ def test_visita_form_valido(edificacao):
     from apps.inspecoes.forms import VisitaTecnicaForm
     form = VisitaTecnicaForm(data={
         'data_visita': date.today().isoformat(),
-        'responsavel': 'João',
+        'disciplina': 'civil',
         'motivo': 'Vistoria',
         'achados': 'ok',
         'conclusoes_encaminhamentos': 'ok',
@@ -160,6 +160,7 @@ def test_cria_visita_via_post_com_foto(client, usuario_logado, edificacao):
     url = reverse('inspecoes:visita_create', args=[edificacao.pk])
     resp = client.post(url, {
         'data_visita': date.today().isoformat(),
+        'disciplina': 'civil',
         'participantes': 'Ze Silva',
         'motivo': 'Vistoria geral',
         'achados': 'tudo certo',
@@ -169,6 +170,8 @@ def test_cria_visita_via_post_com_foto(client, usuario_logado, edificacao):
     assert resp.status_code == 302
     v = VisitaTecnica.objects.get(edificacao=edificacao)
     assert v.participantes == 'Ze Silva'
+    assert v.disciplina == 'civil'
+    assert v.get_disciplina_display() == 'Engenharia Civil'
     assert v.criado_por_id == usuario_logado.pk
     assert v.fotos.count() == 1
     assert LogAcesso.objects.filter(tipo='visita_criada').exists()
@@ -180,6 +183,7 @@ def test_cria_visita_com_multiplos_participantes(client, usuario_logado, edifica
     url = reverse('inspecoes:visita_create', args=[edificacao.pk])
     resp = client.post(url, {
         'data_visita': date.today().isoformat(),
+        'disciplina': 'multidisciplinar',
         'participantes': ['Ana Lima', 'Beto Reis', ''],  # vazio deve ser ignorado
         'motivo': 'Vistoria conjunta',
         'achados': 'x', 'conclusoes_encaminhamentos': 'x',
@@ -196,11 +200,41 @@ def test_visita_sem_participante_nao_salva(client, usuario_logado, edificacao):
     url = reverse('inspecoes:visita_create', args=[edificacao.pk])
     resp = client.post(url, {
         'data_visita': date.today().isoformat(),
+        'disciplina': 'civil',
         'participantes': ['', '  '],
         'motivo': 'x', 'achados': 'x', 'conclusoes_encaminhamentos': 'x',
     })
     assert resp.status_code == 200  # re-renderiza o formulário com erro
     assert not VisitaTecnica.objects.filter(edificacao=edificacao).exists()
+
+
+@pytest.mark.django_db
+def test_visita_sem_disciplina_nao_salva(client, usuario_logado, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    url = reverse('inspecoes:visita_create', args=[edificacao.pk])
+    resp = client.post(url, {
+        'data_visita': date.today().isoformat(),
+        'participantes': 'Ze Silva',
+        'motivo': 'x', 'achados': 'x', 'conclusoes_encaminhamentos': 'x',
+    })
+    assert resp.status_code == 200  # disciplina é obrigatória
+    assert not VisitaTecnica.objects.filter(edificacao=edificacao).exists()
+
+
+@pytest.mark.django_db
+def test_visita_list_agrupa_por_disciplina(client, usuario_logado, edificacao):
+    from apps.inspecoes.models import VisitaTecnica
+    VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(), disciplina='civil',
+        participantes='A', motivo='MOTIVO_CIVIL', achados='x', conclusoes_encaminhamentos='x')
+    VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date.today(), disciplina='eletrica',
+        participantes='B', motivo='MOTIVO_ELET', achados='x', conclusoes_encaminhamentos='x')
+    resp = client.get(reverse('inspecoes:visita_list', args=[edificacao.pk]))
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert 'Engenharia Civil' in body
+    assert 'Engenharia Elétrica' in body
+    # o cabeçalho da disciplina aparece antes do motivo correspondente
+    assert body.index('Engenharia Civil') < body.index('MOTIVO_CIVIL')
 
 
 @pytest.mark.django_db
@@ -253,7 +287,8 @@ def test_criador_edita_visita(client, edificacao):
         participantes='Ana Lima', motivo='antigo', achados='x', conclusoes_encaminhamentos='x')
     client.force_login(dono)
     resp = client.post(reverse('inspecoes:visita_update', args=[v.pk]), {
-        'data_visita': date.today().isoformat(), 'participantes': ['Ana Lima', 'Beto Reis'],
+        'data_visita': date.today().isoformat(), 'disciplina': 'civil',
+        'participantes': ['Ana Lima', 'Beto Reis'],
         'motivo': 'novo motivo', 'achados': 'x', 'conclusoes_encaminhamentos': 'x',
     })
     assert resp.status_code == 302

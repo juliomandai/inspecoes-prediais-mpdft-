@@ -57,8 +57,8 @@ class VisitaFotoInline(admin.TabularInline):
 
 @admin.register(VisitaTecnica)
 class VisitaTecnicaAdmin(admin.ModelAdmin):
-    list_display = ['edificacao', 'data_visita', 'participantes_resumo', 'criado_em']
-    list_filter = ['edificacao']
+    list_display = ['edificacao', 'data_visita', 'disciplina', 'participantes_resumo', 'criado_em']
+    list_filter = ['edificacao', 'disciplina']
     search_fields = ['participantes', 'edificacao__nome', 'motivo']
     date_hierarchy = 'data_visita'
     inlines = [VisitaFotoInline]

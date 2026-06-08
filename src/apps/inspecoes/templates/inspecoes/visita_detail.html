@@ -25,6 +25,7 @@
     </div>
   </div>
   <div class="card-body">
+    {% if visita.disciplina %}<p><strong>Disciplina:</strong> {{ visita.get_disciplina_display }}</p>{% endif %}
     <p><strong>Profissionais participantes:</strong><br>{{ visita.participantes|linebreaksbr }}</p>
     <p><strong>Motivo:</strong><br>{{ visita.motivo|linebreaksbr }}</p>
     <p><strong>Achados:</strong><br>{{ visita.achados|linebreaksbr|default:"—" }}</p>
