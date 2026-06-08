@@ -4,8 +4,11 @@ from . import views
 app_name = 'inspecoes'
 
 urlpatterns = [
+    # ── Página inicial (menu) ──────────────────────────────────────────────────
+    path('', views.home, name='home'),
+
     # ── Listagem e configurações ───────────────────────────────────────────────
-    path('', views.inspecao_list, name='list'),
+    path('inspecoes/', views.inspecao_list, name='list'),
     path('configuracoes/', views.configuracoes, name='configuracoes'),
     path('logs/', views.log_acesso, name='log_acesso'),
 

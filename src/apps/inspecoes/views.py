@@ -51,6 +51,13 @@ def erro_403(request, exception=None):
     return render(request, '403.html', status=403)
 
 
+# ── Página inicial (menu) ─────────────────────────────────────────────────────
+
+@login_required
+def home(request):
+    return render(request, 'inspecoes/home.html')
+
+
 # ── Inspeções (container por edificação) ──────────────────────────────────────
 
 @login_required
