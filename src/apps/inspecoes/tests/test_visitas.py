@@ -70,3 +70,28 @@ def test_logacesso_tem_tipos_de_visita():
     tipos = dict(LogAcesso.TIPO_CHOICES)
     assert "visita_criada" in tipos
     assert "visita_excluida" in tipos
+
+
+@pytest.mark.django_db
+def test_visita_form_valido(edificacao):
+    from apps.inspecoes.forms import VisitaTecnicaForm
+    form = VisitaTecnicaForm(data={
+        'data_visita': date.today().isoformat(),
+        'responsavel': 'João',
+        'motivo': 'Vistoria',
+        'achados': 'ok',
+        'conclusoes_encaminhamentos': 'ok',
+    })
+    assert form.is_valid(), form.errors
+
+
+@pytest.mark.django_db
+def test_visita_form_rejeita_data_futura(edificacao):
+    from apps.inspecoes.forms import VisitaTecnicaForm
+    form = VisitaTecnicaForm(data={
+        'data_visita': (date.today() + timedelta(days=2)).isoformat(),
+        'responsavel': 'João', 'motivo': 'x',
+        'achados': 'x', 'conclusoes_encaminhamentos': 'x',
+    })
+    assert not form.is_valid()
+    assert 'data_visita' in form.errors
