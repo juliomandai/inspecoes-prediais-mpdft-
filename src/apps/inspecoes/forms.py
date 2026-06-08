@@ -10,6 +10,12 @@ DOMINIO_INSTITUCIONAL = '@mpdft.mp.br'
 
 
 class InspecaoForm(forms.ModelForm):
+    data_criacao = forms.DateField(
+        label='Data de criação da inspeção',
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
+    )
+
     class Meta:
         model = Inspecao
         fields = ['edificacao']
@@ -21,6 +27,18 @@ class InspecaoForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['edificacao'].queryset = Edificacao.objects.filter(ativo=True)
         self.fields['edificacao'].label = 'Edificação'
+        # Inicializa a data de criação com a do registro (ou hoje, na criação)
+        if self.instance and self.instance.pk and self.instance.criado_em:
+            from django.utils import timezone
+            self.fields['data_criacao'].initial = timezone.localtime(self.instance.criado_em).date()
+        else:
+            self.fields['data_criacao'].initial = date.today()
+
+    def clean_data_criacao(self):
+        data = self.cleaned_data['data_criacao']
+        if data and data > date.today():
+            raise forms.ValidationError('A data não pode ser futura.')
+        return data
 
 
 class EspecialidadeForm(forms.ModelForm):

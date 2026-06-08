@@ -112,11 +112,21 @@ def inspecao_list(request):
     })
 
 
+def _aplicar_data_criacao(inspecao, nova_data):
+    """Ajusta a data de criação preservando o horário original."""
+    from django.utils import timezone
+    atual = timezone.localtime(inspecao.criado_em)
+    novo = atual.replace(year=nova_data.year, month=nova_data.month, day=nova_data.day)
+    inspecao.criado_em = novo
+    inspecao.save(update_fields=['criado_em'])
+
+
 @login_required
 def inspecao_create(request):
     form = InspecaoForm(request.POST or None)
     if form.is_valid():
         inspecao = form.save()
+        _aplicar_data_criacao(inspecao, form.cleaned_data['data_criacao'])
         _log(request, 'inspecao_criada', f'Inspeção criada para "{inspecao.edificacao}".')
         messages.success(request, 'Inspeção criada. Adicione as especialidades abaixo.')
         return redirect('inspecoes:detail', pk=inspecao.pk)
@@ -147,7 +157,8 @@ def inspecao_update(request, pk):
     inspecao = get_object_or_404(Inspecao, pk=pk)
     form = InspecaoForm(request.POST or None, instance=inspecao)
     if form.is_valid():
-        form.save()
+        inspecao = form.save()
+        _aplicar_data_criacao(inspecao, form.cleaned_data['data_criacao'])
         messages.success(request, 'Inspeção atualizada com sucesso.')
         return redirect('inspecoes:detail', pk=pk)
     return render(request, 'inspecoes/form.html', {'form': form, 'inspecao': inspecao})
