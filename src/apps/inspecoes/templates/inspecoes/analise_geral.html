@@ -161,6 +161,9 @@
   </div>
 </div>
 
+{# ── Insights do Dashboard de Encerramento ───────────────────────────────────── #}
+{% include "inspecoes/_insights.html" %}
+
 {# ── 2. Grau de Risco + Estatísticas GUT ─────────────────────────────────────── #}
 <div class="row g-3 mb-4">
   <div class="col-lg-4">
@@ -481,4 +484,5 @@ new Chart(document.getElementById('chartRequisitos'), {
   }
 });
 </script>
+{% include "inspecoes/_insights_js.html" %}
 {% endblock %}

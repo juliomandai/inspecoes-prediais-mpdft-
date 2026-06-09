@@ -639,11 +639,109 @@ def _analise_data(achados_list):
         for k in _req_labels
     ]
 
+    # ── Índice de Saúde da Edificação (IQE 0–100) + % conformidade ────────────
+    pct_conformidade = round(total_conformes / total * 100) if total else 0
+    # Penaliza por severidade (P1=5, P2=2, P3=1), normalizado pelo pior caso (tudo P1).
+    if total:
+        penalidade = 5 * len(p1) + 2 * len(p2) + 1 * len(p3)
+        iqe = round(100 * (1 - penalidade / (5 * total)))
+    else:
+        iqe = 100
+    if iqe >= 80:
+        iqe_faixa, iqe_cor = 'Bom', 'success'
+    elif iqe >= 50:
+        iqe_faixa, iqe_cor = 'Atenção', 'warning'
+    else:
+        iqe_faixa, iqe_cor = 'Crítico', 'danger'
+
+    # ── Componentes GUT médios (G, U, T isolados) ─────────────────────────────
+    if total_nc:
+        g_media = round(sum(a.gravidade for a in nao_conformes) / total_nc, 1)
+        u_media = round(sum(a.urgencia for a in nao_conformes) / total_nc, 1)
+        t_media = round(sum(a.tendencia for a in nao_conformes) / total_nc, 1)
+    else:
+        g_media = u_media = t_media = 0
+
+    # ── Matriz Risco × Prazo ──────────────────────────────────────────────────
+    prazos_ordem = [p[0] for p in Achado.PRAZO_CHOICES]
+    prazo_lbls = dict(Achado.PRAZO_CHOICES)
+    matriz_risco_prazo = []
+    for prio in (1, 2, 3):
+        celulas = []
+        for pr in prazos_ordem:
+            qtd = sum(1 for a in nao_conformes
+                      if a.prioridade_risco == prio and a.prazo_meses == pr)
+            tipo = ''
+            if qtd:
+                if prio == 1 and pr >= 12:
+                    tipo = 'incoerencia'    # P1 com prazo longo
+                elif prio in (1, 2) and pr <= 3:
+                    tipo = 'ganho_rapido'   # alto risco, prazo curto
+            celulas.append({'prazo': pr, 'qtd': qtd, 'tipo': tipo})
+        matriz_risco_prazo.append({'prioridade': prio, 'celulas': celulas})
+    matriz_prazos = [prazo_lbls[p] for p in prazos_ordem]
+    n_incoerencias = sum(1 for a in nao_conformes
+                         if a.prioridade_risco == 1 and a.prazo_meses >= 12)
+    n_ganhos_rapidos = sum(1 for a in nao_conformes
+                           if a.prioridade_risco in (1, 2) and a.prazo_meses <= 3)
+
+    # ── Encaminhamento (direcionamento) ───────────────────────────────────────
+    dir_labels = dict(Achado.DIRECIONAMENTO_CHOICES)
+    dir_count = {k: 0 for k in dir_labels}
+    for a in nao_conformes:
+        dir_count[a.direcionamento] = dir_count.get(a.direcionamento, 0) + 1
+    por_direcionamento = [
+        {'key': k, 'label': dir_labels[k], 'total': dir_count.get(k, 0),
+         'pct': round(dir_count.get(k, 0) / total_nc * 100) if total_nc else 0}
+        for k in dir_labels
+    ]
+
+    # ── Concentração de risco por localização (soma GUT) ──────────────────────
+    for l in loc_map.values():
+        l['soma_gut'] = 0
+    for a in nao_conformes:
+        loc_map[a.localizacao]['soma_gut'] += a.gut_total
+    por_localizacao_gut = sorted(loc_map.values(), key=lambda x: -x['soma_gut'])
+    _max_soma = por_localizacao_gut[0]['soma_gut'] if por_localizacao_gut else 1
+    for l in por_localizacao_gut:
+        l['gut_pct'] = round(l['soma_gut'] / _max_soma * 100) if _max_soma else 0
+
+    # ── Pareto por grupo técnico (80/20) ──────────────────────────────────────
+    pareto = sorted(grupo_map.values(), key=lambda x: -x['total'])
+    _acum = 0
+    for g in pareto:
+        _acum += g['total']
+        g['acumulado'] = _acum
+        g['acumulado_pct'] = round(_acum / total_nc * 100) if total_nc else 0
+
+    # ── Cobertura fotográfica das evidências (sobre as não conformidades) ─────
+    com_foto = 0
+    for a in nao_conformes:
+        try:
+            if len(a.fotos.all()) > 0:
+                com_foto += 1
+        except Exception:
+            pass
+    cobertura_foto_pct = round(com_foto / total_nc * 100) if total_nc else 0
+
+    # ── Plano de ação priorizado (P1 primeiro, depois maior GUT) ──────────────
+    plano_acao = sorted(nao_conformes, key=lambda a: (a.prioridade_risco, -a.gut_total))[:15]
+
     # Charts JSON
     chart_risco = json.dumps({
         'labels': ['P1 — Crítico', 'P2 — Regular', 'P3 — Mínimo'],
         'data': [len(p1), len(p2), len(p3)],
         'colors': ['#dc3545', '#fd7e14', '#198754'],
+    })
+    chart_direcionamento = json.dumps({
+        'labels': [d['label'] for d in por_direcionamento],
+        'data': [d['total'] for d in por_direcionamento],
+        'colors': ['#6f42c1', '#0dcaf0', '#ffc107'],
+    })
+    chart_pareto = json.dumps({
+        'labels': [g['nome'] for g in pareto],
+        'data': [g['total'] for g in pareto],
+        'acumulado': [g['acumulado_pct'] for g in pareto],
     })
     chart_prazo = json.dumps({
         'labels': [p['label'] for p in por_prazo],
@@ -668,6 +766,19 @@ def _analise_data(achados_list):
         'chart_risco': chart_risco,
         'chart_prazo': chart_prazo,
         'chart_requisitos': chart_requisitos,
+        # Novos insights (Dashboard de Encerramento)
+        'iqe': iqe, 'iqe_faixa': iqe_faixa, 'iqe_cor': iqe_cor,
+        'pct_conformidade': pct_conformidade,
+        'g_media': g_media, 'u_media': u_media, 't_media': t_media,
+        'matriz_risco_prazo': matriz_risco_prazo, 'matriz_prazos': matriz_prazos,
+        'n_incoerencias': n_incoerencias, 'n_ganhos_rapidos': n_ganhos_rapidos,
+        'por_direcionamento': por_direcionamento,
+        'por_localizacao_gut': por_localizacao_gut,
+        'pareto': pareto,
+        'cobertura_foto_pct': cobertura_foto_pct, 'fotos_com': com_foto,
+        'plano_acao': plano_acao,
+        'chart_direcionamento': chart_direcionamento,
+        'chart_pareto': chart_pareto,
     }
 
 
@@ -784,7 +895,7 @@ def especialidade_analise(request, pk):
 @login_required
 def especialidade_analise_pdf(request, pk):
     esp = get_object_or_404(
-        InspecaoEspecialidade.objects.select_related('inspecao__edificacao').prefetch_related('achados'),
+        InspecaoEspecialidade.objects.select_related('inspecao__edificacao').prefetch_related('achados__fotos'),
         pk=pk,
     )
     ctx = _analise_data(list(esp.achados.all()))
@@ -839,7 +950,7 @@ def inspecao_analise(request, pk):
 def inspecao_analise_pdf(request, pk):
     inspecao = get_object_or_404(
         Inspecao.objects.select_related('edificacao').prefetch_related(
-            'especialidades', 'especialidades__achados',
+            'especialidades', 'especialidades__achados__fotos',
         ),
         pk=pk,
     )

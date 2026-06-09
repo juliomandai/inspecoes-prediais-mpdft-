@@ -1,0 +1,34 @@
+{# Inicialização dos gráficos novos (requer Chart.js já carregado). #}
+<script>
+(function () {
+  const dirData = {{ chart_direcionamento|safe }};
+  const parData = {{ chart_pareto|safe }};
+
+  const elDir = document.getElementById('chartDirecionamento');
+  if (elDir) new Chart(elDir, {
+    type: 'doughnut',
+    data: { labels: dirData.labels, datasets: [{ data: dirData.data, backgroundColor: dirData.colors, borderWidth: 2 }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: { display: false } } }
+  });
+
+  const elPar = document.getElementById('chartPareto');
+  if (elPar) new Chart(elPar, {
+    data: {
+      labels: parData.labels,
+      datasets: [
+        { type: 'bar', label: 'Não conformidades', data: parData.data, backgroundColor: '#0d6efd', borderRadius: 4, order: 2, yAxisID: 'y' },
+        { type: 'line', label: '% acumulado', data: parData.acumulado, borderColor: '#dc3545', backgroundColor: '#dc3545', tension: 0.3, yAxisID: 'y1', order: 1, datalabels: { display: false } }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: { display: false } },
+      scales: {
+        y:  { beginAtZero: true, ticks: { stepSize: 1 }, position: 'left' },
+        y1: { beginAtZero: true, max: 100, position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' } },
+        x:  { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+})();
+</script>

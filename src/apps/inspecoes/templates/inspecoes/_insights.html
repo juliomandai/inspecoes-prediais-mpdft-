@@ -1,0 +1,190 @@
+{# ── Bloco de insights do Dashboard de Encerramento ───────────────────────────
+   Requer as chaves geradas por _analise_data(): iqe, pct_conformidade,
+   g/u/t_media, por_direcionamento, matriz_risco_prazo, matriz_prazos,
+   n_incoerencias, n_ganhos_rapidos, pareto, por_localizacao_gut,
+   cobertura_foto_pct, fotos_com, plano_acao. #}
+
+{# 1. Índice de Saúde + Conformidade + Componentes GUT #}
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100 border-{{ iqe_cor }}">
+      <div class="card-body text-center py-4">
+        <div class="text-muted small text-uppercase">Índice de Saúde da Edificação</div>
+        <div class="display-3 fw-bold text-{{ iqe_cor }}">{{ iqe }}</div>
+        <div class="text-muted small">de 100 &middot; faixa
+          <span class="badge bg-{{ iqe_cor }}">{{ iqe_faixa }}</span>
+        </div>
+        <div class="progress mt-3" style="height:8px">
+          <div class="progress-bar bg-{{ iqe_cor }}" style="width:{{ iqe }}%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center py-4">
+        <div class="text-muted small text-uppercase">Conformidade</div>
+        <div class="display-3 fw-bold text-success">{{ pct_conformidade }}%</div>
+        <div class="text-muted small">{{ total_conformes }} de {{ total }} verificações</div>
+        <div class="progress mt-3" style="height:8px">
+          <div class="progress-bar bg-success" style="width:{{ pct_conformidade }}%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-sliders2"></i> Componentes GUT (médias)</div>
+      <div class="card-body d-flex justify-content-around align-items-center text-center">
+        <div><div class="text-muted small">Gravidade</div><div class="fs-2 fw-bold text-danger">{{ g_media }}</div></div>
+        <div><div class="text-muted small">Urgência</div><div class="fs-2 fw-bold text-warning">{{ u_media }}</div></div>
+        <div><div class="text-muted small">Tendência</div><div class="fs-2 fw-bold text-secondary">{{ t_media }}</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# 2. Encaminhamento (orçamento) #}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-signpost-split"></i> Encaminhamento — Subsídio para Orçamento
+</h5>
+<div class="row g-3 mb-4">
+  {% for d in por_direcionamento %}
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small">{{ d.label }}</div>
+        <div class="fs-2 fw-bold">{{ d.total }}</div>
+        <div class="text-muted small">{{ d.pct }}% das NC</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <div class="col-md-3">
+    <div class="card h-100">
+      <div class="card-body"><canvas id="chartDirecionamento" height="150"></canvas></div>
+    </div>
+  </div>
+</div>
+
+{# 3. Matriz Risco × Prazo #}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-grid-3x3-gap"></i> Matriz Risco × Prazo
+</h5>
+<div class="card mb-2">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered text-center mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Prioridade \ Prazo</th>
+            {% for p in matriz_prazos %}<th>{{ p }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for linha in matriz_risco_prazo %}
+          <tr>
+            <td class="fw-bold">
+              <span class="badge badge-p{{ linha.prioridade }}">P{{ linha.prioridade }}</span>
+            </td>
+            {% for c in linha.celulas %}
+            <td class="{% if c.tipo == 'incoerencia' %}table-danger{% elif c.tipo == 'ganho_rapido' %}table-success{% endif %}">
+              {% if c.qtd %}<span class="fw-bold">{{ c.qtd }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<p class="small text-muted mb-4">
+  <span class="badge bg-danger">{{ n_incoerencias }}</span> incoerência(s) — P1 crítico com prazo longo (≥ 12 meses).
+  <span class="badge bg-success ms-2">{{ n_ganhos_rapidos }}</span> ganho(s) rápido(s) — alto risco com prazo curto (≤ 3 meses).
+</p>
+
+{# 4. Pareto + Concentração por localização (soma GUT) #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-bar-chart-steps"></i> Pareto por Grupo Técnico (80/20)</div>
+      <div class="card-body"><canvas id="chartPareto" height="220"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-geo-alt-fill"></i> Concentração de Risco por Localização (soma GUT)</div>
+      <div class="card-body">
+        {% for l in por_localizacao_gut|slice:":8" %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-secondary" style="min-width:3rem">{{ l.soma_gut }}</span>
+          <div class="flex-grow-1">
+            <div class="progress" style="height:8px">
+              <div class="progress-bar bg-danger" style="width:{{ l.gut_pct }}%"></div>
+            </div>
+          </div>
+          <small class="text-muted text-truncate" style="max-width:220px">{{ l.localizacao }}</small>
+        </div>
+        {% empty %}
+        <p class="text-muted small mb-0">Nenhuma não conformidade registrada.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# 5. Cobertura fotográfica #}
+<div class="card mb-4">
+  <div class="card-body d-flex align-items-center gap-4 flex-wrap">
+    <div>
+      <div class="text-muted small text-uppercase">Cobertura Fotográfica das Evidências</div>
+      <div class="fs-1 fw-bold text-info">{{ cobertura_foto_pct }}%</div>
+      <div class="text-muted small">{{ fotos_com }} de {{ total_nc }} não conformidades com ao menos 1 foto</div>
+    </div>
+    <div class="flex-grow-1" style="min-width:200px">
+      <div class="progress" style="height:14px">
+        <div class="progress-bar bg-info" style="width:{{ cobertura_foto_pct }}%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# 6. Plano de ação priorizado #}
+<h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
+  <i class="bi bi-list-check"></i> Plano de Ação Priorizado
+</h5>
+<div class="card mb-4">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Achado</th>
+            <th>Localização</th>
+            <th class="text-center">GUT</th>
+            <th class="text-center">Risco</th>
+            <th>Prazo</th>
+            <th>Encaminhamento</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in plano_acao %}
+          <tr>
+            <td class="text-muted">{{ forloop.counter }}</td>
+            <td>{{ a.verificacao }}</td>
+            <td class="small text-muted">{{ a.localizacao }}</td>
+            <td class="text-center fw-bold">{{ a.gut_total }}</td>
+            <td class="text-center"><span class="badge badge-p{{ a.prioridade_risco }}">P{{ a.prioridade_risco }}</span></td>
+            <td class="small">{{ a.get_prazo_meses_display }}</td>
+            <td class="small">{{ a.get_direcionamento_display }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-3">Nenhuma não conformidade registrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
