@@ -974,6 +974,7 @@ def inspecao_analise_pdf(request, pk):
             'p3': len([a for a in nc if a.prioridade_risco == 3]),
         })
     ctx['por_especialidade'] = por_especialidade
+    _adicionar_graficos(ctx)
 
     html = render_to_string('inspecoes/analise_geral_pdf.html', ctx, request=request)
     nome = f"laudo_{inspecao.edificacao.nome.replace(' ', '_')}_{inspecao.criado_em.strftime('%Y%m%d')}.pdf"

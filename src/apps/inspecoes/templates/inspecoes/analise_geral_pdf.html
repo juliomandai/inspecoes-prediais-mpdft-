@@ -159,6 +159,11 @@
           </tr>
         </tfoot>
       </table>
+      {% if grafico_risco_img %}
+      <div style="text-align:center;margin-top:6pt">
+        <img src="{{ grafico_risco_img }}" style="width:120pt;height:120pt">
+      </div>
+      {% endif %}
     </td>
 
     <td style="width:62%;vertical-align:top;padding-left:8pt;border-left:1pt solid #ddd">
@@ -291,6 +296,11 @@
           {% endfor %}
         </tbody>
       </table>
+      {% if grafico_prazo_img %}
+      <div style="text-align:center;margin-top:6pt">
+        <img src="{{ grafico_prazo_img }}" style="width:175pt;height:101pt">
+      </div>
+      {% endif %}
     </td>
   </tr>
 </table>
