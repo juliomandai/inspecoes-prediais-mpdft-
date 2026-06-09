@@ -95,12 +95,11 @@
 </main>
 
 {# ── Modal de visualização ampliada de fotos (lightbox) ───────────────────── #}
-<div class="modal fade" id="modalFoto" tabindex="-1" aria-labelledby="modalFotoLabel" aria-hidden="true">
+<div class="modal fade" id="modalFoto" tabindex="-1" aria-label="Visualização de foto" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title text-truncate" id="modalFotoLabel">Foto</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      <div class="modal-header py-2 border-0">
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Fechar"></button>
       </div>
       <div class="modal-body text-center bg-dark p-2">
         <img id="modalFotoImg" src="" alt="" style="max-width:100%; max-height:78vh; object-fit:contain;">
@@ -130,17 +129,14 @@
     if (!modalEl || !window.bootstrap) return;
     var modal = new bootstrap.Modal(modalEl);
     var img = document.getElementById('modalFotoImg');
-    var titulo = document.getElementById('modalFotoLabel');
     document.addEventListener('click', function (ev) {
       var alvo = ev.target.closest('.js-foto-zoom');
       if (!alvo) return;
       ev.preventDefault();
       var url = alvo.getAttribute('data-foto-url');
-      var nome = alvo.getAttribute('data-foto-nome') || 'Foto';
       if (!url) return;
       img.src = url;
-      img.alt = nome;
-      titulo.textContent = nome;
+      img.alt = alvo.getAttribute('data-foto-nome') || '';
       modal.show();
     });
     // Libera a imagem ao fechar (evita flash da foto anterior).
