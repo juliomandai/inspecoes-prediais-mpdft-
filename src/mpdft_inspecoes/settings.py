@@ -117,5 +117,5 @@ DEFAULT_FROM_EMAIL = config(
 
 # Destinatário(s) das notificações de cadastro de novo usuário.
 NOTIFICAR_NOVO_USUARIO = config(
-    'NOTIFICAR_NOVO_USUARIO', default='julio.mandai@mpdft.mp.br', cast=Csv()
+    'NOTIFICAR_NOVO_USUARIO', default='juliomandai@gmail.com', cast=Csv()
 )
