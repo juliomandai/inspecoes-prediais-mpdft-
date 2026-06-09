@@ -101,10 +101,17 @@
       <div class="modal-header py-2 border-0">
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Fechar"></button>
       </div>
-      <div class="modal-body text-center bg-dark p-2">
-        <img id="modalFotoImg" src="" alt="" style="max-width:100%; max-height:78vh; object-fit:contain;">
+      <div id="modalFotoViewport" class="modal-body bg-dark p-0 d-flex align-items-center justify-content-center overflow-hidden"
+           style="height:78vh; touch-action:none;">
+        <img id="modalFotoImg" src="" alt="" draggable="false"
+             style="max-width:100%; max-height:78vh; object-fit:contain; transform-origin:0 0; will-change:transform; cursor:zoom-in; user-select:none; -webkit-user-drag:none;">
       </div>
-      <div class="modal-footer py-2">
+      <div class="modal-footer py-2 justify-content-between">
+        <div class="btn-group" role="group" aria-label="Zoom">
+          <button type="button" class="btn btn-outline-secondary" id="modalFotoMenos" title="Reduzir"><i class="bi bi-zoom-out"></i></button>
+          <button type="button" class="btn btn-outline-secondary" id="modalFotoReset" title="Tamanho original"><i class="bi bi-arrows-angle-contract"></i></button>
+          <button type="button" class="btn btn-outline-secondary" id="modalFotoMais" title="Ampliar"><i class="bi bi-zoom-in"></i></button>
+        </div>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
           <i class="bi bi-x-lg" aria-hidden="true"></i> Fechar
         </button>
@@ -123,12 +130,42 @@
 {% load static %}
 <script src="{% static 'js/pwa.js' %}"></script>
 <script>
-  // Lightbox de fotos: abre a imagem ampliada num modal, sem nova aba.
+  // Lightbox de fotos com zoom: abre a imagem ampliada num modal, sem nova aba.
   (function () {
     var modalEl = document.getElementById('modalFoto');
     if (!modalEl || !window.bootstrap) return;
     var modal = new bootstrap.Modal(modalEl);
+    var viewport = document.getElementById('modalFotoViewport');
     var img = document.getElementById('modalFotoImg');
+
+    var MIN = 1, MAX = 6;
+    var escala = 1, tx = 0, ty = 0;          // estado da transformação
+    var arrastando = false, x0 = 0, y0 = 0;  // arraste (pan)
+    var pinchDist = 0;                        // distância entre dois dedos
+
+    function aplicar() {
+      img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + escala + ')';
+      img.style.cursor = escala > 1 ? 'grab' : 'zoom-in';
+    }
+    function resetar() { escala = 1; tx = 0; ty = 0; aplicar(); }
+
+    // Zoom mantendo fixo o ponto (cx, cy) relativo ao viewport.
+    function zoomEm(novaEscala, cx, cy) {
+      novaEscala = Math.min(MAX, Math.max(MIN, novaEscala));
+      var r = viewport.getBoundingClientRect();
+      var px = cx - r.left, py = cy - r.top;
+      var fator = novaEscala / escala;
+      tx = px - fator * (px - tx);
+      ty = py - fator * (py - ty);
+      escala = novaEscala;
+      if (escala === 1) { tx = 0; ty = 0; }
+      aplicar();
+    }
+    function centro() {
+      var r = viewport.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+
     document.addEventListener('click', function (ev) {
       var alvo = ev.target.closest('.js-foto-zoom');
       if (!alvo) return;
@@ -137,10 +174,76 @@
       if (!url) return;
       img.src = url;
       img.alt = alvo.getAttribute('data-foto-nome') || '';
+      resetar();
       modal.show();
     });
-    // Libera a imagem ao fechar (evita flash da foto anterior).
-    modalEl.addEventListener('hidden.bs.modal', function () { img.src = ''; });
+
+    // Botões de zoom
+    document.getElementById('modalFotoMais').addEventListener('click', function () { var c = centro(); zoomEm(escala * 1.4, c.x, c.y); });
+    document.getElementById('modalFotoMenos').addEventListener('click', function () { var c = centro(); zoomEm(escala / 1.4, c.x, c.y); });
+    document.getElementById('modalFotoReset').addEventListener('click', resetar);
+
+    // Duplo clique / toque: alterna entre 1x e 2.5x no ponto clicado
+    img.addEventListener('dblclick', function (ev) {
+      ev.preventDefault();
+      if (escala > 1) resetar(); else zoomEm(2.5, ev.clientX, ev.clientY);
+    });
+
+    // Roda do mouse: zoom no cursor
+    viewport.addEventListener('wheel', function (ev) {
+      ev.preventDefault();
+      zoomEm(escala * (ev.deltaY < 0 ? 1.15 : 1 / 1.15), ev.clientX, ev.clientY);
+    }, { passive: false });
+
+    // Arraste com o mouse (pan quando ampliada)
+    img.addEventListener('mousedown', function (ev) {
+      if (escala <= 1) return;
+      ev.preventDefault();
+      arrastando = true; x0 = ev.clientX - tx; y0 = ev.clientY - ty;
+      img.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', function (ev) {
+      if (!arrastando) return;
+      tx = ev.clientX - x0; ty = ev.clientY - y0; aplicar();
+    });
+    window.addEventListener('mouseup', function () {
+      if (!arrastando) return;
+      arrastando = false; img.style.cursor = escala > 1 ? 'grab' : 'zoom-in';
+    });
+
+    // Toque: arraste com 1 dedo (quando ampliada) e pinça com 2 dedos
+    viewport.addEventListener('touchstart', function (ev) {
+      if (ev.touches.length === 2) {
+        var dx = ev.touches[0].clientX - ev.touches[1].clientX;
+        var dy = ev.touches[0].clientY - ev.touches[1].clientY;
+        pinchDist = Math.hypot(dx, dy);
+      } else if (ev.touches.length === 1 && escala > 1) {
+        arrastando = true; x0 = ev.touches[0].clientX - tx; y0 = ev.touches[0].clientY - ty;
+      }
+    }, { passive: false });
+    viewport.addEventListener('touchmove', function (ev) {
+      if (ev.touches.length === 2) {
+        ev.preventDefault();
+        var dx = ev.touches[0].clientX - ev.touches[1].clientX;
+        var dy = ev.touches[0].clientY - ev.touches[1].clientY;
+        var d = Math.hypot(dx, dy);
+        if (pinchDist > 0) {
+          var mx = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+          var my = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+          zoomEm(escala * (d / pinchDist), mx, my);
+        }
+        pinchDist = d;
+      } else if (arrastando && ev.touches.length === 1) {
+        ev.preventDefault();
+        tx = ev.touches[0].clientX - x0; ty = ev.touches[0].clientY - y0; aplicar();
+      }
+    }, { passive: false });
+    viewport.addEventListener('touchend', function (ev) {
+      if (ev.touches.length === 0) { arrastando = false; pinchDist = 0; }
+    });
+
+    // Libera a imagem e zera o zoom ao fechar.
+    modalEl.addEventListener('hidden.bs.modal', function () { img.src = ''; resetar(); });
   })();
 </script>
 {% block extra_js %}{% endblock %}
