@@ -1,7 +1,9 @@
-{# Estilos de impressão de alta fidelidade — mantêm o dashboard exatamente
-   como aparece na tela (cores, cards, gráficos e colunas lado a lado).
-   A4 paisagem garante largura suficiente (~1120px) para o grid "lg" do
-   Bootstrap continuar em múltiplas colunas, igual ao desktop. #}
+{% comment %}
+Estilos de impressão de alta fidelidade — mantêm o dashboard exatamente
+como aparece na tela (cores, cards, gráficos e colunas lado a lado).
+A4 paisagem garante largura suficiente (~1120px) para o grid "lg" do
+Bootstrap continuar em múltiplas colunas, igual ao desktop.
+{% endcomment %}
 <style>
 @media print {
   @page { size: A4 landscape; margin: 9mm; }
