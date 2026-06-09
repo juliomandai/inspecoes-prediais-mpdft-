@@ -65,6 +65,35 @@ def home(request):
 
 # ── Cadastro de novo usuário (público) ────────────────────────────────────────
 
+def _notificar_novo_usuario(user, request):
+    """Envia e-mail informando o cadastro de um novo usuário.
+
+    Falhas de envio são registradas e ignoradas — nunca impedem o cadastro.
+    """
+    from django.conf import settings
+    from django.core.mail import send_mail
+    from django.utils import timezone
+
+    destinatarios = getattr(settings, 'NOTIFICAR_NOVO_USUARIO', None)
+    if not destinatarios:
+        return
+    quando = timezone.localtime().strftime('%d/%m/%Y às %H:%M')
+    assunto = '[Inspeções Prediais MPDFT] Novo usuário cadastrado'
+    corpo = (
+        'Um novo usuário foi cadastrado na plataforma de Inspeções Prediais do MPDFT.\n\n'
+        f'Nome: {user.get_full_name() or "(não informado)"}\n'
+        f'Usuário (login): {user.username}\n'
+        f'E-mail: {user.email}\n'
+        f'Data/hora do cadastro: {quando}\n\n'
+        'Mensagem automática — não é necessário responder.'
+    )
+    try:
+        send_mail(assunto, corpo, settings.DEFAULT_FROM_EMAIL, destinatarios, fail_silently=False)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Falha ao enviar e-mail de novo usuário.')
+
+
 @require_http_methods(['GET', 'POST'])
 def signup(request):
     if request.user.is_authenticated:
@@ -73,6 +102,7 @@ def signup(request):
     if request.method == 'POST' and form.is_valid():
         from django.contrib.auth import login
         user = form.save()
+        _notificar_novo_usuario(user, request)
         login(request, user)
         messages.success(request, f'Conta criada com sucesso. Bem-vindo(a), {user.get_full_name()}!')
         return redirect('inspecoes:home')

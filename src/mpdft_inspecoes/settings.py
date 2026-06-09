@@ -95,3 +95,27 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# ── E-mail ────────────────────────────────────────────────────────────────────
+# Por padrão (sem SMTP configurado) os e-mails são apenas impressos no console,
+# evitando falhas em desenvolvimento. Em produção, defina as variáveis EMAIL_*
+# no .env para usar o servidor SMTP do MPDFT.
+EMAIL_BACKEND = config(
+    'EMAIL_BACKEND',
+    default='django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
+DEFAULT_FROM_EMAIL = config(
+    'DEFAULT_FROM_EMAIL', default='Inspeções Prediais MPDFT <nao-responder@mpdft.mp.br>'
+)
+
+# Destinatário(s) das notificações de cadastro de novo usuário.
+NOTIFICAR_NOVO_USUARIO = config(
+    'NOTIFICAR_NOVO_USUARIO', default='julio.mandai@mpdft.mp.br', cast=Csv()
+)
