@@ -11,15 +11,8 @@
   .card-stat.p2 { border-color: #fd7e14; }
   .card-stat.p3 { border-color: #198754; }
   .card-stat.info { border-color: #0d6efd; }
-  @media print {
-    .no-print { display: none !important; }
-    .card { break-inside: avoid; page-break-inside: avoid; }
-    body { background: #fff !important; }
-    .container { max-width: 100% !important; }
-    .navbar, footer { display: none !important; }
-    h5.section-title { margin-top: 1.5rem; }
-  }
 </style>
+{% include "inspecoes/_print_css.html" %}
 {% endblock %}
 
 {% block content %}
@@ -45,9 +38,10 @@
     <a href="{% url 'inspecoes:inspecao_analise' inspecao.pk %}" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-building"></i> Análise Geral da Edificação
     </a>
-    <a href="{% url 'inspecoes:analise_pdf' especialidade.pk %}" class="btn btn-danger btn-sm">
-      <i class="bi bi-file-earmark-pdf"></i> Baixar PDF
-    </a>
+    <button onclick="window.print()" class="btn btn-danger btn-sm"
+            title="Na janela que abrir, escolha o destino 'Salvar como PDF' para gerar um arquivo idêntico a esta análise.">
+      <i class="bi bi-file-earmark-pdf"></i> Salvar em PDF
+    </button>
     <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-printer"></i> Imprimir
     </button>

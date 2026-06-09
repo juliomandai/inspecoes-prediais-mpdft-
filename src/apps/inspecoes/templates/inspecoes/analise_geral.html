@@ -11,15 +11,8 @@
   .card-stat.p2 { border-color: #fd7e14; }
   .card-stat.p3 { border-color: #198754; }
   .card-stat.info { border-color: #0d6efd; }
-  @media print {
-    .no-print { display: none !important; }
-    .card { break-inside: avoid; page-break-inside: avoid; }
-    body { background: #fff !important; }
-    .container { max-width: 100% !important; }
-    .navbar, footer { display: none !important; }
-    h5.section-title { margin-top: 1.5rem; }
-  }
 </style>
+{% include "inspecoes/_print_css.html" %}
 {% endblock %}
 
 {% block content %}
@@ -41,13 +34,22 @@
     <a href="{% url 'inspecoes:detail' inspecao.pk %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left"></i> Voltar
     </a>
-    <a href="{% url 'inspecoes:inspecao_analise_pdf' inspecao.pk %}" class="btn btn-danger btn-sm">
-      <i class="bi bi-file-earmark-pdf"></i> Baixar PDF Geral
-    </a>
+    <button onclick="window.print()" class="btn btn-danger btn-sm"
+            title="Na janela que abrir, escolha o destino 'Salvar como PDF' para gerar um arquivo idêntico a este painel.">
+      <i class="bi bi-file-earmark-pdf"></i> Salvar em PDF
+    </button>
     <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-printer"></i> Imprimir
     </button>
   </div>
+</div>
+
+{# Cabeçalho exibido apenas na impressão / PDF #}
+<div class="d-none d-print-block mb-3 text-center">
+  <h3 class="fw-bold mb-1">LAUDO DE INSPEÇÃO PREDIAL — GERAL</h3>
+  <p class="mb-0"><strong>Local:</strong> {{ inspecao.edificacao }}</p>
+  <p class="mb-0"><strong>Especialidades:</strong> todas &mdash; <strong>Emitido em:</strong> {% now "d/m/Y" %}</p>
+  <hr>
 </div>
 
 {# ── Resumo por especialidade ────────────────────────────────────────────────── #}

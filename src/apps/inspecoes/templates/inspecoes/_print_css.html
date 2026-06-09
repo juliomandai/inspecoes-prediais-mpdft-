@@ -1,0 +1,54 @@
+{# Estilos de impressão de alta fidelidade — mantêm o dashboard exatamente
+   como aparece na tela (cores, cards, gráficos e colunas lado a lado).
+   A4 paisagem garante largura suficiente (~1120px) para o grid "lg" do
+   Bootstrap continuar em múltiplas colunas, igual ao desktop. #}
+<style>
+@media print {
+  @page { size: A4 landscape; margin: 9mm; }
+
+  /* Preserva TODAS as cores de fundo (badges, barras, células, acentos). */
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html, body {
+    background: #fff !important;
+    background-image: none !important;
+  }
+
+  /* Esconde tudo que não faz parte do laudo. */
+  .navbar, footer, .no-print, #banner-offline, .skip-link,
+  nav[aria-label="breadcrumb"] { display: none !important; }
+
+  /* Usa a largura total da página. */
+  main.container, .container {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Não imprime as URLs dos links nem sublinhados. */
+  a, a:hover { text-decoration: none !important; color: inherit !important; }
+  a[href]::after { content: "" !important; }
+
+  /* Cartões inteiros, sem quebra no meio. */
+  .card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    box-shadow: none !important;
+    border: 1px solid #dee2e6 !important;
+  }
+
+  /* Mantém títulos junto do conteúdo que introduzem. */
+  .section-title, h2, h3, h4, h5 { page-break-after: avoid; break-after: avoid; }
+
+  /* Gráficos e progressos não estouram a página. */
+  canvas { max-width: 100% !important; height: auto !important; }
+  .progress { border: 0.5px solid #ced4da; }
+
+  /* Evita que o conteúdo principal seja cortado. */
+  #conteudo { animation: none !important; }
+}
+</style>
