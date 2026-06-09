@@ -1,35 +1,27 @@
-import base64
 import json
 import io
 import zipfile
 import os
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
-from django.db.models import Count, Q, Min
+from django.db.models import Count, Q
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template.loader import render_to_string
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 
 from django.urls import reverse
 
-from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso, VisitaTecnica, VisitaFoto
-from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm, VisitaTecnicaForm, VisitaFilterForm, SignUpForm
-from .imagens import comprimir_imagem
+from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso
+from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm
 
 
 def _redirect_detail(inspecao_pk, esp_pk=None):
-    """Redireciona para o detalhe da inspeção abrindo a aba da especialidade correta.
-
-    Usa query param (?aba=) — preservado de forma confiável no redirect 302 —
-    em vez de fragmento (#), que alguns navegadores descartam após POST.
-    """
+    """Redireciona para o detalhe da inspeção abrindo a aba da especialidade correta."""
     url = reverse('inspecoes:detail', kwargs={'pk': inspecao_pk})
     if esp_pk:
-        url += f'?aba={esp_pk}'
+        url += f'#pane-{esp_pk}'
     return redirect(url)
 
 
@@ -56,29 +48,6 @@ def erro_403(request, exception=None):
     return render(request, '403.html', status=403)
 
 
-# ── Página inicial (menu) ─────────────────────────────────────────────────────
-
-@login_required
-def home(request):
-    return render(request, 'inspecoes/home.html')
-
-
-# ── Cadastro de novo usuário (público) ────────────────────────────────────────
-
-@require_http_methods(['GET', 'POST'])
-def signup(request):
-    if request.user.is_authenticated:
-        return redirect('inspecoes:home')
-    form = SignUpForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        from django.contrib.auth import login
-        user = form.save()
-        login(request, user)
-        messages.success(request, f'Conta criada com sucesso. Bem-vindo(a), {user.get_full_name()}!')
-        return redirect('inspecoes:home')
-    return render(request, 'registration/signup.html', {'form': form})
-
-
 # ── Inspeções (container por edificação) ──────────────────────────────────────
 
 @login_required
@@ -87,7 +56,6 @@ def inspecao_list(request):
     qs = Inspecao.objects.select_related('edificacao').prefetch_related('especialidades').annotate(
         num_especialidades=Count('especialidades', distinct=True),
         num_achados=Count('especialidades__achados', distinct=True),
-        data_inicio=Min('especialidades__data_inspecao'),
     )
 
     if form.is_valid():
@@ -117,21 +85,11 @@ def inspecao_list(request):
     })
 
 
-def _aplicar_data_criacao(inspecao, nova_data):
-    """Ajusta a data de criação preservando o horário original."""
-    from django.utils import timezone
-    atual = timezone.localtime(inspecao.criado_em)
-    novo = atual.replace(year=nova_data.year, month=nova_data.month, day=nova_data.day)
-    inspecao.criado_em = novo
-    inspecao.save(update_fields=['criado_em'])
-
-
 @login_required
 def inspecao_create(request):
     form = InspecaoForm(request.POST or None)
     if form.is_valid():
         inspecao = form.save()
-        _aplicar_data_criacao(inspecao, form.cleaned_data['data_criacao'])
         _log(request, 'inspecao_criada', f'Inspeção criada para "{inspecao.edificacao}".')
         messages.success(request, 'Inspeção criada. Adicione as especialidades abaixo.')
         return redirect('inspecoes:detail', pk=inspecao.pk)
@@ -151,20 +109,9 @@ def inspecao_detail(request, pk):
     backup_salvo = os.path.exists(
         os.path.join(settings.MEDIA_ROOT, 'backups', f'inspecao_{pk}.zip')
     )
-    # Determina qual aba (especialidade) deve abrir ativa
-    esps = list(inspecao.especialidades.all())
-    aba_param = request.GET.get('aba', '')
-    aba_ativa_pk = None
-    if aba_param.isdigit():
-        pk_aba = int(aba_param)
-        if any(e.pk == pk_aba for e in esps):
-            aba_ativa_pk = pk_aba
-    if aba_ativa_pk is None and esps:
-        aba_ativa_pk = esps[0].pk
     return render(request, 'inspecoes/detail.html', {
         'inspecao': inspecao,
         'backup_salvo': backup_salvo,
-        'aba_ativa_pk': aba_ativa_pk,
     })
 
 
@@ -173,8 +120,7 @@ def inspecao_update(request, pk):
     inspecao = get_object_or_404(Inspecao, pk=pk)
     form = InspecaoForm(request.POST or None, instance=inspecao)
     if form.is_valid():
-        inspecao = form.save()
-        _aplicar_data_criacao(inspecao, form.cleaned_data['data_criacao'])
+        form.save()
         messages.success(request, 'Inspeção atualizada com sucesso.')
         return redirect('inspecoes:detail', pk=pk)
     return render(request, 'inspecoes/form.html', {'form': form, 'inspecao': inspecao})
@@ -317,12 +263,11 @@ def achado_create(request, esp_pk):
         achado.save()
         for arquivo in request.FILES.getlist('fotos'):
             if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
-                cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
                 Foto.objects.create(
                     achado=achado,
-                    arquivo=cf,
-                    nome_original=nome,
-                    tamanho_bytes=tamanho,
+                    arquivo=arquivo,
+                    nome_original=arquivo.name,
+                    tamanho_bytes=arquivo.size,
                 )
         _log(request, 'achado_criado',
              f'Achado criado: "{achado.verificacao}" em {esp.get_especialidade_display()} — "{esp.inspecao.edificacao}".')
@@ -389,12 +334,11 @@ def foto_upload(request, achado_pk):
     if arquivo.size > MAX_UPLOAD_SIZE:
         return JsonResponse({'erro': 'Arquivo muito grande. Máximo: 10 MB.'}, status=400)
 
-    cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
     foto = Foto.objects.create(
         achado=achado,
-        arquivo=cf,
-        nome_original=nome,
-        tamanho_bytes=tamanho,
+        arquivo=arquivo,
+        nome_original=arquivo.name,
+        tamanho_bytes=arquivo.size,
     )
     return JsonResponse({'id': foto.pk, 'url': foto.arquivo.url, 'nome': foto.nome_original})
 
@@ -405,122 +349,6 @@ def foto_delete(request, pk):
     foto = get_object_or_404(Foto.objects.select_related('achado__especialidade'), pk=pk)
     foto.delete()
     return HttpResponse(status=204)
-
-
-# ── PWA — Service Worker, Manifest e página offline ──────────────────────────
-
-def service_worker(request):
-    """Serve o service worker com escopo raiz e sem cache."""
-    from django.contrib.staticfiles import finders
-    path = finders.find('sw.js')
-    if not path:
-        from django.http import Http404
-        raise Http404('sw.js não encontrado')
-    with open(path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    resp = HttpResponse(content, content_type='application/javascript')
-    resp['Service-Worker-Allowed'] = '/'
-    resp['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    return resp
-
-
-def web_manifest(request):
-    """Serve o manifest.json."""
-    from django.contrib.staticfiles import finders
-    path = finders.find('manifest.json')
-    if not path:
-        from django.http import Http404
-        raise Http404('manifest.json não encontrado')
-    with open(path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    return HttpResponse(content, content_type='application/manifest+json')
-
-
-def offline_page(request):
-    """Página de fallback quando o usuário está offline."""
-    return render(request, 'inspecoes/offline.html')
-
-
-# ── API — Sincronização de achados offline ────────────────────────────────────
-
-@login_required
-@csrf_exempt
-@require_POST
-def achado_sincronizar(request):
-    """
-    Recebe um achado criado offline (JSON) e persiste no banco.
-    Utilizado pelo service worker e pelo pwa.js durante a sincronização.
-    """
-    try:
-        dados = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
-
-    esp_pk = dados.get('esp_pk')
-    if not esp_pk:
-        return JsonResponse({'erro': 'esp_pk obrigatório.'}, status=400)
-
-    try:
-        esp = InspecaoEspecialidade.objects.select_related('inspecao').get(pk=esp_pk)
-    except InspecaoEspecialidade.DoesNotExist:
-        return JsonResponse({'erro': 'Especialidade não encontrada.'}, status=404)
-
-    if not esp.pode_editar:
-        return JsonResponse({'erro': 'Especialidade finalizada. Reabra antes de sincronizar.'}, status=400)
-
-    em_conformidade = bool(dados.get('em_conformidade', False))
-
-    try:
-        achado = Achado.objects.create(
-            especialidade=esp,
-            localizacao=dados.get('localizacao', ''),
-            sub_localizacao=dados.get('sub_localizacao', ''),
-            verificacao=dados.get('verificacao', ''),
-            grupo_tecnico='' if em_conformidade else dados.get('grupo_tecnico', ''),
-            em_conformidade=em_conformidade,
-            descricao_nao_conformidade='' if em_conformidade else dados.get('descricao_nao_conformidade', ''),
-            requisito_afetado='' if em_conformidade else dados.get('requisito_afetado', ''),
-            gravidade=int(dados.get('gravidade', 1)),
-            urgencia=int(dados.get('urgencia', 1)),
-            tendencia=int(dados.get('tendencia', 1)),
-            prioridade_risco=3 if em_conformidade else int(dados.get('prioridade_risco', 3)),
-            recomendacao='' if em_conformidade else dados.get('recomendacao', ''),
-            direcionamento=dados.get('direcionamento', 'manutencao'),
-            prazo_meses=int(dados.get('prazo_meses', 12)),
-        )
-    except Exception as e:
-        return JsonResponse({'erro': f'Erro ao criar achado: {e}'}, status=400)
-
-    # Processar fotos enviadas como base64
-    fotos_salvas = 0
-    for foto_data in dados.get('fotos', []):
-        try:
-            nome = foto_data.get('nome', 'foto.jpg')
-            tipo = foto_data.get('tipo', 'image/jpeg')
-            if tipo not in ALLOWED_CONTENT_TYPES:
-                continue
-            b64 = foto_data.get('dados_b64', '')
-            if not b64:
-                continue
-            conteudo = base64.b64decode(b64)
-            if len(conteudo) > MAX_UPLOAD_SIZE:
-                continue
-            cf, nome_c, tamanho = comprimir_imagem(conteudo, nome)
-            Foto.objects.create(
-                achado=achado,
-                arquivo=cf,
-                nome_original=nome_c,
-                tamanho_bytes=tamanho,
-            )
-            fotos_salvas += 1
-        except Exception:
-            pass
-
-    _log(request, 'achado_criado',
-         f'[OFFLINE SYNC] Achado criado: "{achado.verificacao}" em '
-         f'{esp.get_especialidade_display()} — "{esp.inspecao.edificacao}".')
-
-    return JsonResponse({'ok': True, 'achado_pk': achado.pk, 'fotos_salvas': fotos_salvas}, status=201)
 
 
 # ── Análise — helper compartilhado ────────────────────────────────────────────
@@ -641,91 +469,6 @@ def _analise_data(achados_list):
     }
 
 
-# ── Gráficos para PDF (renderizados como imagem, pois o xhtml2pdf não roda JS) ─
-
-def _png_data_uri(img):
-    buf = io.BytesIO()
-    img.save(buf, 'PNG')
-    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
-
-
-def _fonte(tamanho):
-    from PIL import ImageFont
-    for caminho in ('C:/Windows/Fonts/arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'):
-        try:
-            return ImageFont.truetype(caminho, tamanho)
-        except OSError:
-            continue
-    return ImageFont.load_default()
-
-
-def _grafico_rosca_risco(n1, n2, n3):
-    """Rosca (donut) com a distribuição de prioridades. Retorna data URI PNG ou None."""
-    from PIL import Image, ImageDraw
-    total = n1 + n2 + n3
-    if total == 0:
-        return None
-    S = 4
-    size = 340 * S
-    img = Image.new('RGB', (size, size), 'white')
-    d = ImageDraw.Draw(img)
-    margem = 8 * S
-    box = [margem, margem, size - margem, size - margem]
-    ang = -90.0
-    for val, cor in ((n1, (204, 0, 0)), (n2, (204, 102, 0)), (n3, (0, 102, 0))):
-        if val <= 0:
-            continue
-        fim = ang + (val / total) * 360.0
-        d.pieslice(box, ang, fim, fill=cor)
-        ang = fim
-    # furo central
-    r = (size - 2 * margem) * 0.58 / 2
-    c = size / 2
-    d.ellipse([c - r, c - r, c + r, c + r], fill='white')
-    img = img.resize((340, 340), Image.LANCZOS)
-    return _png_data_uri(img)
-
-
-def _grafico_barras_prazo(por_prazo):
-    """Barras verticais com a quantidade de achados por prazo. data URI PNG ou None."""
-    from PIL import Image, ImageDraw
-    dados = [(p['label'], p['total']) for p in por_prazo if p.get('total', 0) > 0]
-    if not dados:
-        return None
-    S = 4
-    W, H = 520 * S, 300 * S
-    img = Image.new('RGB', (W, H), 'white')
-    d = ImageDraw.Draw(img)
-    f = _fonte(14 * S)
-    maxv = max(v for _, v in dados) or 1
-    pad_l, pad_b, pad_t, pad_r = 34 * S, 42 * S, 22 * S, 12 * S
-    plot_w = W - pad_l - pad_r
-    plot_h = H - pad_b - pad_t
-    base_y = pad_t + plot_h
-    gap = plot_w / len(dados)
-    bw = gap * 0.55
-    cor = (13, 110, 253)
-    for i, (lab, val) in enumerate(dados):
-        x = pad_l + i * gap + (gap - bw) / 2
-        bh = (val / maxv) * plot_h
-        d.rectangle([x, base_y - bh, x + bw, base_y], fill=cor)
-        d.text((x + bw / 2, base_y - bh - 6 * S), str(val), fill=(60, 60, 60), font=f, anchor='mb')
-        d.text((x + bw / 2, base_y + 8 * S), lab, fill=(60, 60, 60), font=f, anchor='ma')
-    d.line([pad_l, pad_t, pad_l, base_y], fill=(170, 170, 170), width=S)
-    d.line([pad_l, base_y, W - pad_r, base_y], fill=(170, 170, 170), width=S)
-    img = img.resize((520, 300), Image.LANCZOS)
-    return _png_data_uri(img)
-
-
-def _adicionar_graficos(ctx):
-    """Acrescenta ao contexto as imagens dos gráficos (risco e prazo)."""
-    ctx['grafico_risco_img'] = _grafico_rosca_risco(
-        len(ctx.get('p1', [])), len(ctx.get('p2', [])), len(ctx.get('p3', []))
-    )
-    ctx['grafico_prazo_img'] = _grafico_barras_prazo(ctx.get('por_prazo', []))
-    return ctx
-
-
 def _gerar_pdf(html_string, nome_arquivo):
     from xhtml2pdf import pisa
     buffer = io.BytesIO()
@@ -760,7 +503,6 @@ def especialidade_analise_pdf(request, pk):
     ctx = _analise_data(list(esp.achados.all()))
     ctx['especialidade'] = esp
     ctx['inspecao'] = esp.inspecao
-    _adicionar_graficos(ctx)
     html = render_to_string('inspecoes/analise_pdf.html', ctx, request=request)
     nome = (
         f"laudo_{esp.inspecao.edificacao.nome.replace(' ', '_')}"
@@ -954,173 +696,6 @@ def inspecao_backup_download(request, pk):
     return response
 
 
-# ── Restaurar backup ──────────────────────────────────────────────────────────
-
-def _restaurar_backup(arquivo_zip, request):
-    """
-    Lê um arquivo ZIP de backup e recria a inspeção no banco de dados.
-    Cria uma NOVA inspeção — nunca sobrescreve dados existentes.
-    Retorna o objeto Inspecao criado.
-    """
-    from apps.edificacoes.models import Edificacao
-    from datetime import date as DateType
-
-    # Mapeamentos de rótulo → valor de campo
-    ESP_MAP = {
-        'Engenharia Civil': 'civil',
-        'Engenharia Mecânica': 'mecanica',
-        'Engenharia Elétrica': 'eletrica',
-    }
-    STATUS_MAP = {
-        'Em andamento': 'em_andamento',
-        'Finalizada': 'finalizada',
-    }
-    PRAZO_MAP = {
-        '1 mês': 1, '3 meses': 3, '6 meses': 6,
-        '12 meses': 12, '18 meses': 18, '24 meses': 24,
-    }
-    DIRECAO_MAP = {
-        'Garantia de obra': 'garantia',
-        'Manutenção': 'manutencao',
-        'Nova contratação': 'nova_contratacao',
-    }
-
-    conteudo = arquivo_zip.read()
-    try:
-        zf_obj = zipfile.ZipFile(io.BytesIO(conteudo), 'r')
-    except zipfile.BadZipFile:
-        raise ValueError('O arquivo enviado não é um ZIP válido.')
-
-    with zf_obj as zf:
-        if 'dados.json' not in zf.namelist():
-            raise ValueError('Arquivo de backup inválido: dados.json não encontrado dentro do ZIP.')
-
-        dados = json.loads(zf.read('dados.json').decode('utf-8'))
-
-        # Localizar edificação pelo nome
-        nome_edif = dados.get('inspecao', {}).get('edificacao', '')
-        if not nome_edif:
-            raise ValueError('Backup inválido: nome da edificação não encontrado.')
-        try:
-            edificacao = Edificacao.objects.get(nome__iexact=nome_edif)
-        except Edificacao.DoesNotExist:
-            raise ValueError(
-                f'Edificação "{nome_edif}" não está cadastrada no sistema. '
-                f'Cadastre-a em Edificações antes de restaurar o backup.'
-            )
-
-        # Criar nova inspeção
-        inspecao = Inspecao.objects.create(edificacao=edificacao)
-
-        for esp_data in dados.get('especialidades', []):
-            esp_key = ESP_MAP.get(esp_data.get('especialidade', ''))
-            if not esp_key:
-                continue
-
-            try:
-                data_insp = DateType.fromisoformat(esp_data.get('data_inspecao', ''))
-            except (ValueError, TypeError):
-                data_insp = DateType.today()
-
-            # Evitar duplicata se especialidade já existir na nova inspeção
-            esp, _ = InspecaoEspecialidade.objects.get_or_create(
-                inspecao=inspecao,
-                especialidade=esp_key,
-                defaults={
-                    'profissional': esp_data.get('profissional', ''),
-                    'data_inspecao': data_insp,
-                    'status': STATUS_MAP.get(esp_data.get('status', ''), 'em_andamento'),
-                },
-            )
-
-            for achado_data in esp_data.get('achados', []):
-                em_conf = bool(achado_data.get('em_conformidade', False))
-                g = int(achado_data.get('gravidade', 1) or 1)
-                u = int(achado_data.get('urgencia', 1) or 1)
-                t = int(achado_data.get('tendencia', 1) or 1)
-                gut = g * u * t
-
-                if em_conf:
-                    prioridade = 3
-                elif gut >= 27:
-                    prioridade = 1
-                elif gut >= 8:
-                    prioridade = 2
-                else:
-                    prioridade = 3
-
-                prazo = PRAZO_MAP.get(str(achado_data.get('prazo_meses', '')), 12)
-                direcao = DIRECAO_MAP.get(str(achado_data.get('direcionamento', '')), 'manutencao')
-
-                achado = Achado.objects.create(
-                    especialidade=esp,
-                    localizacao=achado_data.get('localizacao', ''),
-                    sub_localizacao=achado_data.get('sub_localizacao', ''),
-                    verificacao=achado_data.get('verificacao', ''),
-                    em_conformidade=em_conf,
-                    grupo_tecnico='' if em_conf else achado_data.get('grupo_tecnico', ''),
-                    requisito_afetado='' if em_conf else achado_data.get('requisito_afetado', ''),
-                    descricao_nao_conformidade='' if em_conf else achado_data.get('descricao_nao_conformidade', ''),
-                    recomendacao='' if em_conf else achado_data.get('recomendacao', ''),
-                    gravidade=g,
-                    urgencia=u,
-                    tendencia=t,
-                    prioridade_risco=prioridade,
-                    direcionamento=direcao,
-                    prazo_meses=prazo,
-                )
-
-                # Restaurar fotos do ZIP
-                for foto_path_zip in achado_data.get('fotos', []):
-                    try:
-                        foto_bytes = zf.read(foto_path_zip)
-                    except KeyError:
-                        continue  # foto não está no ZIP
-                    nome_original = foto_path_zip.split('/')[-1]
-                    ext = nome_original.rsplit('.', 1)[-1].lower()
-                    tipo = 'image/jpeg' if ext in ('jpg', 'jpeg') else 'image/png'
-                    if tipo not in ALLOWED_CONTENT_TYPES:
-                        continue
-                    Foto.objects.create(
-                        achado=achado,
-                        arquivo=ContentFile(foto_bytes, name=nome_original),
-                        nome_original=nome_original,
-                        tamanho_bytes=len(foto_bytes),
-                    )
-
-    _log(request, 'inspecao_criada',
-         f'Inspeção restaurada do backup: "{edificacao.nome}" — Inspeção #{inspecao.pk}.')
-    return inspecao
-
-
-@login_required
-@require_http_methods(['GET', 'POST'])
-def inspecao_restaurar_backup(request):
-    """Página de upload de backup ZIP para restaurar uma inspeção."""
-    if request.method == 'POST':
-        arquivo = request.FILES.get('backup_zip')
-        if not arquivo:
-            messages.error(request, 'Nenhum arquivo selecionado.')
-            return redirect('inspecoes:restaurar_backup')
-        if not arquivo.name.lower().endswith('.zip'):
-            messages.error(request, 'O arquivo deve ter extensão .zip.')
-            return redirect('inspecoes:restaurar_backup')
-        try:
-            inspecao = _restaurar_backup(arquivo, request)
-            messages.success(
-                request,
-                f'Backup restaurado com sucesso! Inspeção #{inspecao.pk} — "{inspecao.edificacao}" criada.'
-            )
-            return redirect('inspecoes:detail', pk=inspecao.pk)
-        except ValueError as e:
-            messages.error(request, str(e))
-        except Exception as e:
-            messages.error(request, f'Erro inesperado ao restaurar backup: {e}')
-        return redirect('inspecoes:restaurar_backup')
-
-    return render(request, 'inspecoes/restaurar_backup.html')
-
-
 # ── Log de acesso ─────────────────────────────────────────────────────────────
 
 @login_required
@@ -1192,189 +767,3 @@ def configuracoes(request):
         }
 
     return render(request, 'inspecoes/configuracoes.html', {'grupos': grupos})
-
-
-# ── Visitas técnicas ──────────────────────────────────────────────────────────
-
-@login_required
-def visita_localidades(request):
-    from apps.edificacoes.models import Edificacao
-    localidades = (
-        Edificacao.objects.filter(ativo=True)
-        .annotate(num_visitas=Count('visitas', distinct=True))
-        .order_by('nome')
-    )
-    return render(request, 'inspecoes/visita_localidades.html', {
-        'localidades': localidades,
-    })
-
-
-@login_required
-def visita_list(request, edif_pk):
-    from apps.edificacoes.models import Edificacao
-    from .forms import VisitaFilterForm
-    edificacao = get_object_or_404(Edificacao, pk=edif_pk)
-    form = VisitaFilterForm(request.GET or None)
-    visitas = edificacao.visitas.annotate(num_fotos=Count('fotos'))
-    if form.is_valid():
-        if form.cleaned_data.get('data_inicio'):
-            visitas = visitas.filter(data_visita__gte=form.cleaned_data['data_inicio'])
-        if form.cleaned_data.get('data_fim'):
-            visitas = visitas.filter(data_visita__lte=form.cleaned_data['data_fim'])
-
-    # Agrupa as visitas por disciplina, na ordem das choices
-    visitas = list(visitas)
-    labels = dict(VisitaTecnica.DISCIPLINA_CHOICES)
-    grupos = []
-    for chave, nome in VisitaTecnica.DISCIPLINA_CHOICES:
-        itens = [v for v in visitas if v.disciplina == chave]
-        if itens:
-            grupos.append({'disciplina': nome, 'visitas': itens})
-    sem_disciplina = [v for v in visitas if not v.disciplina or v.disciplina not in labels]
-    if sem_disciplina:
-        grupos.append({'disciplina': 'Não informada', 'visitas': sem_disciplina})
-
-    return render(request, 'inspecoes/visita_list.html', {
-        'edificacao': edificacao,
-        'filter_form': form,
-        'visitas': visitas,
-        'grupos': grupos,
-    })
-
-
-def _coletar_participantes(request):
-    """Lê os campos dinâmicos de participantes e retorna a lista limpa de nomes."""
-    return [n.strip() for n in request.POST.getlist('participantes') if n.strip()]
-
-
-@login_required
-def visita_create(request, edif_pk):
-    from apps.edificacoes.models import Edificacao
-    edificacao = get_object_or_404(Edificacao, pk=edif_pk)
-    form = VisitaTecnicaForm(request.POST or None)
-    participantes = _coletar_participantes(request) if request.method == 'POST' else [request.user.get_full_name()]
-    erro_participantes = None
-    if request.method == 'POST' and form.is_valid():
-        if not participantes:
-            erro_participantes = 'Informe ao menos um profissional participante.'
-        else:
-            visita = form.save(commit=False)
-            visita.edificacao = edificacao
-            visita.criado_por = request.user
-            visita.participantes = '\n'.join(participantes)
-            visita.save()
-            for arquivo in request.FILES.getlist('fotos'):
-                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
-                    cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
-                    VisitaFoto.objects.create(
-                        visita=visita,
-                        arquivo=cf,
-                        nome_original=nome,
-                        tamanho_bytes=tamanho,
-                    )
-            _log(request, 'visita_criada',
-                 f'Visita técnica criada em "{edificacao.nome}" ({visita.data_visita:%d/%m/%Y}) '
-                 f'por {visita.participantes_display}.')
-            messages.success(request, 'Visita técnica registrada com sucesso.')
-            return redirect('inspecoes:visita_detail', pk=visita.pk)
-    return render(request, 'inspecoes/visita_form.html', {
-        'form': form,
-        'edificacao': edificacao,
-        'participantes': participantes or [''],
-        'erro_participantes': erro_participantes,
-        'fotos_existentes': [],
-    })
-
-
-def _pode_editar_visita(user, visita):
-    if user.is_staff or user.is_superuser:
-        return True
-    return visita.criado_por_id == user.id
-
-
-@login_required
-def visita_detail(request, pk):
-    visita = get_object_or_404(
-        VisitaTecnica.objects.select_related('edificacao').prefetch_related('fotos'),
-        pk=pk,
-    )
-    return render(request, 'inspecoes/visita_detail.html', {
-        'visita': visita,
-        'pode_editar': _pode_editar_visita(request.user, visita),
-    })
-
-
-def _acesso_negado_visita(request, visita):
-    messages.error(
-        request,
-        'Acesso negado. Apenas quem registrou a visita pode realizar esta ação.',
-    )
-    return redirect('inspecoes:visita_detail', pk=visita.pk)
-
-
-@login_required
-def visita_update(request, pk):
-    visita = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
-    if not _pode_editar_visita(request.user, visita):
-        return _acesso_negado_visita(request, visita)
-    form = VisitaTecnicaForm(request.POST or None, instance=visita)
-    participantes = _coletar_participantes(request) if request.method == 'POST' else visita.participantes_lista
-    erro_participantes = None
-    if request.method == 'POST' and form.is_valid():
-        if not participantes:
-            erro_participantes = 'Informe ao menos um profissional participante.'
-        else:
-            visita = form.save(commit=False)
-            visita.participantes = '\n'.join(participantes)
-            visita.save()
-            messages.success(request, 'Visita atualizada com sucesso.')
-            return redirect('inspecoes:visita_detail', pk=visita.pk)
-    return render(request, 'inspecoes/visita_form.html', {
-        'form': form,
-        'edificacao': visita.edificacao,
-        'visita': visita,
-        'participantes': participantes or [''],
-        'erro_participantes': erro_participantes,
-        'fotos_existentes': visita.fotos.all(),
-    })
-
-
-@login_required
-@require_POST
-def visita_delete(request, pk):
-    visita = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
-    if not _pode_editar_visita(request.user, visita):
-        return _acesso_negado_visita(request, visita)
-    edif_pk = visita.edificacao_id
-    _log(request, 'visita_excluida',
-         f'Visita técnica excluída de "{visita.edificacao.nome}" ({visita.data_visita:%d/%m/%Y}).')
-    visita.delete()
-    messages.success(request, 'Visita excluída com sucesso.')
-    return redirect('inspecoes:visita_list', edif_pk=edif_pk)
-
-
-@login_required
-@require_POST
-def visita_foto_upload(request, visita_pk):
-    visita = get_object_or_404(VisitaTecnica, pk=visita_pk)
-    arquivo = request.FILES.get('arquivo')
-    if not arquivo:
-        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
-    if arquivo.content_type not in ALLOWED_CONTENT_TYPES:
-        return JsonResponse({'erro': 'Formato inválido. Use JPEG ou PNG.'}, status=400)
-    if arquivo.size > MAX_UPLOAD_SIZE:
-        return JsonResponse({'erro': 'Arquivo muito grande. Máximo: 10 MB.'}, status=400)
-    cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
-    foto = VisitaFoto.objects.create(
-        visita=visita, arquivo=cf,
-        nome_original=nome, tamanho_bytes=tamanho,
-    )
-    return JsonResponse({'id': foto.pk, 'url': foto.arquivo.url, 'nome': foto.nome_original})
-
-
-@login_required
-@require_http_methods(['DELETE'])
-def visita_foto_delete(request, pk):
-    foto = get_object_or_404(VisitaFoto, pk=pk)
-    foto.delete()
-    return HttpResponse(status=204)
