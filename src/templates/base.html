@@ -44,11 +44,6 @@
         <li class="nav-item">
           <a class="nav-link" href="{% url 'inspecoes:visita_localidades' %}"><i class="bi bi-clipboard-check" aria-hidden="true"></i> Visitas</a>
         </li>
-        {% if request.user.is_staff %}
-        <li class="nav-item">
-          <a class="nav-link" href="{% url 'edificacoes:list' %}"><i class="bi bi-buildings" aria-hidden="true"></i> Edificações</a>
-        </li>
-        {% endif %}
         <li class="nav-item">
           <a class="nav-link" href="{% url 'inspecoes:configuracoes' %}"><i class="bi bi-sliders" aria-hidden="true"></i> Configurações</a>
         </li>
