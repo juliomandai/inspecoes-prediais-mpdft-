@@ -1,6 +1,13 @@
 {# Inicialização dos gráficos novos (requer Chart.js já carregado). #}
 <script>
 (function () {
+  // Tooltips (ex.: explicação do Índice de Saúde da Edificação)
+  if (window.bootstrap) {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+      new bootstrap.Tooltip(el);
+    });
+  }
+
   const dirData = {{ chart_direcionamento|safe }};
   const parData = {{ chart_pareto|safe }};
 

@@ -11,7 +11,14 @@ cobertura_foto_pct, fotos_com, plano_acao.
   <div class="col-md-4">
     <div class="card h-100 border-{{ iqe_cor }}">
       <div class="card-body text-center py-4">
-        <div class="text-muted small text-uppercase">Índice de Saúde da Edificação</div>
+        <div class="text-muted small text-uppercase">
+          Índice de Saúde da Edificação
+          <i class="bi bi-info-circle ms-1 text-primary" style="cursor:help"
+             tabindex="0" role="button"
+             data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true"
+             data-bs-title="Nota de 0 a 100 que sintetiza a gravidade das não conformidades.<br><br>Parte de 100 (tudo conforme) e penaliza cada não conformidade conforme a prioridade — <b>P1 Crítico</b> pesa 5, <b>P2 Regular</b> pesa 2 e <b>P3 Mínimo</b> pesa 1 — em relação ao total de verificações.<br><br>Quanto <b>maior</b>, melhor a saúde da edificação.<br>Faixas: <b>≥ 80</b> Bom &middot; <b>50–79</b> Atenção &middot; <b>&lt; 50</b> Crítico.">
+          </i>
+        </div>
         <div class="display-3 fw-bold text-{{ iqe_cor }}">{{ iqe }}</div>
         <div class="text-muted small">de 100 &middot; faixa
           <span class="badge bg-{{ iqe_cor }}">{{ iqe_faixa }}</span>
