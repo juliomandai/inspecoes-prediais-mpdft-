@@ -36,10 +36,12 @@
     <strong>Fotos</strong>
     <div class="d-flex flex-wrap gap-2 mt-2">
       {% for foto in visita.fotos.all %}
-      <a href="{{ foto.arquivo.url }}" target="_blank" rel="noopener" title="{{ foto.nome_original }}">
+      <button type="button" class="btn p-0 border-0 bg-transparent js-foto-zoom"
+              data-foto-url="{{ foto.arquivo.url }}" data-foto-nome="{{ foto.nome_original }}"
+              title="Ampliar {{ foto.nome_original }}" style="cursor:zoom-in;">
         <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}" width="90" height="90" loading="lazy"
              style="height:90px;width:90px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;">
-      </a>
+      </button>
       {% endfor %}
     </div>
     {% endif %}
