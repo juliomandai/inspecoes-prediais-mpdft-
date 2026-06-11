@@ -504,15 +504,20 @@
 
   }; /* fim INFO */
 
-  /* ── Abre o modal ao clicar em qualquer botão de explicação ─────────────── */
+  /* ── Modal de explicações: instância única (singleton) ──────────────────────
+     Uma só instância bootstrap.Modal por elemento evita backdrops órfãos que
+     impediam o fechamento. O fechamento (X, "Fechar", ESC, clique fora) é tratado
+     nativamente pelo Bootstrap via data-bs-dismiss — não duplicar com JS. */
+  var _modalEl = document.getElementById('modalIndicador');
+  var _modal   = (_modalEl && window.bootstrap) ? bootstrap.Modal.getOrCreateInstance(_modalEl) : null;
+
   document.querySelectorAll('.btn-indicador-info').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var info = INFO[btn.dataset.infoId];
-      if (!info) return;
+      if (!info || !_modal) return;
       document.getElementById('modalIndicadorLabel').textContent = info.title;
       document.getElementById('modalIndicadorBody').innerHTML   = info.body;
-      var modal = new bootstrap.Modal(document.getElementById('modalIndicador'));
-      modal.show();
+      _modal.show();
     });
   });
 

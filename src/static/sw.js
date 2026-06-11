@@ -1,8 +1,8 @@
 'use strict';
 
 // ── Versão dos caches — incrementar ao publicar novas versões ─────────────────
-const CACHE_PAGINAS  = 'inspecoes-paginas-v1';
-const CACHE_ESTATICO = 'inspecoes-estatico-v1';
+const CACHE_PAGINAS  = 'inspecoes-paginas-v2';
+const CACHE_ESTATICO = 'inspecoes-estatico-v2';
 const CACHES_VALIDOS = [CACHE_PAGINAS, CACHE_ESTATICO];
 
 // ── Install ────────────────────────────────────────────────────────────────────

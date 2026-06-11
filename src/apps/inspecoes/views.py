@@ -639,7 +639,7 @@ def _analise_data(achados_list):
         for k in _req_labels
     ]
 
-    # ── Índice de Saúde da Edificação (IQE 0–100) + % conformidade ────────────
+    # ── Índice de Qualidade da Edificação (IQE 0–100) + % conformidade ──────────
     pct_conformidade = round(total_conformes / total * 100) if total else 0
     # Penaliza por severidade (P1=5, P2=2, P3=1), normalizado pelo pior caso (tudo P1).
     if total:
