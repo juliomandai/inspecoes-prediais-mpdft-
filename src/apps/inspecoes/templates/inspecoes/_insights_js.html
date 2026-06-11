@@ -1,13 +1,14 @@
-{# Inicialização dos gráficos novos (requer Chart.js já carregado). #}
+{# Gráficos e modal de explicações dos indicadores (requer Chart.js já carregado). #}
 <script>
 (function () {
-  // Tooltips (ex.: explicação do Índice de Saúde da Edificação)
+  /* ── Tooltips Bootstrap ──────────────────────────────────────────────────── */
   if (window.bootstrap) {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
       new bootstrap.Tooltip(el);
     });
   }
 
+  /* ── Gráficos de insights ────────────────────────────────────────────────── */
   const dirData = {{ chart_direcionamento|safe }};
   const parData = {{ chart_pareto|safe }};
 
@@ -23,8 +24,8 @@
     data: {
       labels: parData.labels,
       datasets: [
-        { type: 'bar', label: 'Não conformidades', data: parData.data, backgroundColor: '#0d6efd', borderRadius: 4, order: 2, yAxisID: 'y' },
-        { type: 'line', label: '% acumulado', data: parData.acumulado, borderColor: '#dc3545', backgroundColor: '#dc3545', tension: 0.3, yAxisID: 'y1', order: 1, datalabels: { display: false } }
+        { type: 'bar',  label: 'Não conformidades', data: parData.data,      backgroundColor: '#0d6efd', borderRadius: 4, order: 2, yAxisID: 'y' },
+        { type: 'line', label: '% acumulado',        data: parData.acumulado, borderColor: '#dc3545', backgroundColor: '#dc3545', tension: 0.3, yAxisID: 'y1', order: 1, datalabels: { display: false } }
       ]
     },
     options: {
@@ -37,5 +38,483 @@
       }
     }
   });
+
+  /* ── Explicações dos 16 indicadores ─────────────────────────────────────── */
+  const INFO = {
+
+    iqe: {
+      title: 'Índice de Qualidade da Edificação (IQE)',
+      body: `
+        <p>O <strong>IQE</strong> é um número de 0 a 100 que sintetiza a saúde geral da edificação inspecionada.
+        Diferente de um simples percentual de conformidade, ele <strong>penaliza mais os problemas mais graves</strong>:
+        um achado P1 (Crítico) pesa 5&times;, um P2 (Regular) pesa 2&times; e um P3 (Mínimo) pesa 1&times;.</p>
+
+        <div class="bg-light rounded p-3 my-3 font-monospace small">
+          Penalidade = (5 &times; n_P1) + (2 &times; n_P2) + (1 &times; n_P3)<br>
+          IQE = 100 &times; [1 &minus; Penalidade &divide; (5 &times; total_achados)]
+        </div>
+
+        <p>O divisor <code>5 &times; total</code> representa o pior cenário possível — todos os achados P1 —
+        garantindo que o IQE sempre fique entre 0 e 100.</p>
+
+        <table class="table table-sm table-bordered">
+          <thead class="table-dark"><tr><th>Faixa</th><th>Classificação</th><th>O que fazer</th></tr></thead>
+          <tbody>
+            <tr class="table-success">
+              <td><strong>&ge; 80</strong></td><td>Bom</td>
+              <td>Edificação em condições satisfatórias. Manter manutenção preventiva e acompanhar os itens P2/P3 para evitar degradação.</td>
+            </tr>
+            <tr class="table-warning">
+              <td><strong>50 – 79</strong></td><td>Atenção</td>
+              <td>Necessita intervenções programadas. Planejar ações corretivas nos próximos 6 a 12 meses, priorizando os itens P1 identificados.</td>
+            </tr>
+            <tr class="table-danger">
+              <td><strong>&lt; 50</strong></td><td>Crítico</td>
+              <td>Situação de alerta com comprometimento significativo. Intervenção urgente; avaliar restrição de uso parcial se necessário.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="mb-0 text-muted small">O IQE permite <strong>comparar edificações distintas</strong> em uma mesma escala
+        e acompanhar a evolução da saúde predial entre campanhas de inspeção, medindo o impacto real das intervenções realizadas.</p>
+      `
+    },
+
+    conformidade: {
+      title: 'Percentual de Conformidade',
+      body: `
+        <p>Mede a proporção bruta de verificações aprovadas sobre o total realizado,
+        <strong>sem ponderação pela gravidade</strong> dos problemas encontrados:</p>
+
+        <div class="bg-light rounded p-3 my-3 font-monospace small">
+          % Conformidade = (total conformes &divide; total verificações) &times; 100
+        </div>
+
+        <p>Diferente do IQE, esta métrica indica apenas <em>quantos</em> itens estão em ordem,
+        não <em>quão graves</em> são os que não estão.</p>
+
+        <div class="alert alert-warning py-2 px-3">
+          <strong>Exemplo:</strong> Uma edificação com 80% de conformidade pode ter IQE = 40
+          se os 20% não conformes forem predominantemente P1 (Crítico). Por isso, os dois
+          indicadores devem ser lidos em conjunto — o % de conformidade revela a extensão dos
+          problemas e o IQE revela a severidade.
+        </div>
+      `
+    },
+
+    componentes_gut: {
+      title: 'Componentes GUT Médios (G, U, T isolados)',
+      body: `
+        <p>Enquanto o índice GUT combina os três fatores em um produto (G &times; U &times; T),
+        este card mostra as <strong>médias separadas</strong> de Gravidade, Urgência e Tendência
+        sobre todas as não conformidades — revelando a natureza predominante dos problemas.</p>
+
+        <div class="bg-light rounded p-3 my-3 font-monospace small">
+          G_média = SOMA(gravidade de cada NC) &divide; total_NC<br>
+          U_média = SOMA(urgência de cada NC) &divide; total_NC<br>
+          T_média = SOMA(tendência de cada NC) &divide; total_NC
+        </div>
+
+        <table class="table table-sm table-bordered mt-3">
+          <thead class="table-dark"><tr><th>Padrão identificado</th><th>Interpretação prática</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>G alta + T baixa</strong></td>
+              <td>Problemas graves, mas estabilizados. Podem ser resolvidos de forma planejada, sem urgência imediata.</td>
+            </tr>
+            <tr>
+              <td><strong>T alta + G baixa</strong></td>
+              <td>Problemas menores em evolução acelerada. Requerem intervenção preventiva urgente para evitar agravamento futuro.</td>
+            </tr>
+            <tr>
+              <td><strong>U alta + prazo longo</strong></td>
+              <td>Incoerência no planejamento — itens urgentes com prazo excessivo. Ver Matriz Risco &times; Prazo para identificar esses casos.</td>
+            </tr>
+            <tr>
+              <td><strong>G + U + T altas</strong></td>
+              <td>Cenário crítico generalizado. A edificação requer intervenção em múltiplas frentes simultaneamente.</td>
+            </tr>
+          </tbody>
+        </table>
+      `
+    },
+
+    dist_risco: {
+      title: 'Distribuição de Risco — Gráfico de Rosca',
+      body: `
+        <p>O gráfico de rosca mostra a <strong>proporção de não conformidades</strong> em cada nível
+        de prioridade, com cores padronizadas e fixas para facilitar a leitura rápida:</p>
+
+        <table class="table table-sm table-bordered my-3">
+          <thead class="table-dark"><tr><th>Prioridade</th><th>Cor</th><th>Critério de classificação</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="badge" style="background:#dc3545">P1 — Crítico</span></td>
+              <td>Vermelho</td>
+              <td>Risco iminente à segurança ou funcionalidade comprometida. Requer ação imediata ou no menor prazo possível.</td>
+            </tr>
+            <tr>
+              <td><span class="badge" style="background:#fd7e14">P2 — Regular</span></td>
+              <td>Laranja</td>
+              <td>Problema com impacto moderado. Pode ser programado para médio prazo sem risco imediato.</td>
+            </tr>
+            <tr>
+              <td><span class="badge" style="background:#198754">P3 — Mínimo</span></td>
+              <td>Verde</td>
+              <td>Baixo impacto funcional ou estético. Pode ser incorporado ao plano de manutenção de longo prazo.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="mb-0 text-muted small">Se a rosca é predominantemente <strong>vermelha</strong>,
+        a edificação exige atenção urgente. Se a maior fatia é <strong>verde</strong>, a situação está
+        sob controle com itens de baixa criticidade. A distribuição ideal concentra a maior parte dos
+        achados em P3, com poucos ou nenhum P1.</p>
+      `
+    },
+
+    estatisticas_gut: {
+      title: 'Estatísticas GUT e Top Achados Críticos',
+      body: `
+        <p>Este painel reúne as <strong>estatísticas descritivas</strong> do índice GUT
+        (produto G &times; U &times; T, de 1 a 125) calculadas sobre todas as não conformidades:</p>
+
+        <ul>
+          <li><strong>Máximo:</strong> pior caso identificado — o achado de maior criticidade combinada da inspeção.</li>
+          <li><strong>Média:</strong> referência central para comparação entre edificações e entre campanhas de inspeção.</li>
+          <li><strong>Mínimo:</strong> caso menos crítico entre os não conformes — limite inferior do intervalo.</li>
+          <li><strong>Desvio Padrão:</strong> medida de dispersão dos índices.
+            Valor <em>alto</em> indica grande heterogeneidade: coexistência de situações muito críticas (GUT 80–125)
+            com situações triviais (GUT 1–5).
+            Valor <em>baixo</em> indica que os problemas têm criticidade uniforme.</li>
+        </ul>
+
+        <p>O <strong>Top 10 Achados</strong> lista as não conformidades de maior índice GUT, com barras
+        proporcionais ao valor máximo encontrado. É o insumo direto para decisão imediata — os problemas
+        que, pela combinação de gravidade, urgência e tendência, concentram o maior risco.</p>
+
+        <div class="alert alert-info py-2 px-3 mb-0">
+          <strong>Diferença do Plano de Ação:</strong> o Top 10 ranqueia por GUT bruto (produto G&times;U&times;T),
+          sem considerar a prioridade de risco. O Plano de Ação ordena primeiro por prioridade (P1 antes de P2/P3)
+          e depois por GUT — mais adequado para execução operacional das equipes.
+        </div>
+      `
+    },
+
+    grupo_tecnico: {
+      title: 'Análise por Grupo Técnico',
+      body: `
+        <p>Os achados não conformes são agrupados pelos <strong>sistemas construtivos afetados</strong>,
+        com contagem separada por prioridade (P1/P2/P3) em cada grupo. Os grupos com mais itens P1
+        aparecem no topo da tabela.</p>
+
+        <p>Esta análise responde à pergunta estratégica:
+        <strong>"Qual sistema predial está em pior estado?"</strong> A resposta orienta a prioridade
+        de contratos de manutenção especializada, revisão de especificações técnicas e concentração
+        de recursos de engenharia.</p>
+
+        <table class="table table-sm table-bordered my-3">
+          <thead class="table-dark"><tr><th>Grupo técnico</th><th>Exemplos de sistemas cobertos</th></tr></thead>
+          <tbody>
+            <tr><td>Esquadrias</td><td>Portas, janelas, portões, fachadas envidraçadas</td></tr>
+            <tr><td>Instalações Hidrossanitárias</td><td>Água fria/quente, esgoto, pluvial, gás</td></tr>
+            <tr><td>Acabamento</td><td>Pisos, revestimentos, pintura, forros, louças</td></tr>
+            <tr><td>Instalações Mecânicas</td><td>Ar-condicionado, elevadores, bombas, climatização</td></tr>
+            <tr><td>Instalações Elétricas</td><td>Quadros, cabeamento, iluminação, SPDA, CFTV</td></tr>
+            <tr><td>Estrutura</td><td>Fundações, lajes, pilares, vigas, estruturas de concreto/aço</td></tr>
+            <tr><td>Impermeabilização</td><td>Coberturas, calhas, terraços, áreas molhadas</td></tr>
+            <tr><td>Cobertura</td><td>Telhados, rufos, telhas, domos, policarbonatos</td></tr>
+            <tr><td>Equipamentos Prediais</td><td>Geradores, no-breaks, bombas de recalque, cisternas</td></tr>
+            <tr><td>Acessibilidade</td><td>Rampas, banheiros adaptados, sinalizações</td></tr>
+          </tbody>
+        </table>
+
+        <p class="mb-0 text-muted small"><strong>Exemplo de uso:</strong> Se "Instalações Hidrossanitárias"
+        concentra 60% dos achados P1, o contrato de manutenção hidráulica ou o projeto de reforma
+        deve ser a prioridade imediata para aquela edificação.</p>
+      `
+    },
+
+    pareto: {
+      title: 'Pareto por Grupo Técnico — Análise 80/20',
+      body: `
+        <p>O <strong>Princípio de Pareto</strong> (regra 80/20) estabelece que aproximadamente
+        80% dos problemas derivam de 20% das causas. Aplicado à inspeção predial, o sistema:</p>
+
+        <ol>
+          <li>Ordena os grupos técnicos pelo volume de não conformidades (maior para menor)</li>
+          <li>Calcula o percentual de cada grupo sobre o total de não conformidades</li>
+          <li>Acumula os percentuais em ordem decrescente</li>
+          <li>Exibe um gráfico de barras com uma linha de % acumulado sobreposta</li>
+        </ol>
+
+        <p>O ponto em que a linha acumulada cruza <strong>80%</strong> indica os poucos grupos técnicos
+        responsáveis pela maior parte das não conformidades.
+        <strong>Concentrar esforços nesses grupos otimiza o uso dos recursos</strong> e maximiza a
+        melhoria do IQE na próxima campanha de inspeção.</p>
+
+        <div class="alert alert-primary py-2 px-3 mb-0">
+          <strong>Exemplo hipotético:</strong> Se Instalações Elétricas (36%), Hidrossanitárias (24%) e
+          Acabamento (20%) somam 80% das NCs, corrigir esses três grupos já resolve a maior parte dos
+          problemas da edificação — os demais grupos têm impacto marginal comparativo.
+        </div>
+      `
+    },
+
+    matriz_risco: {
+      title: 'Matriz Risco × Prazo',
+      body: `
+        <p>Cruza a <strong>Prioridade de Risco</strong> (P1/P2/P3) com o <strong>Prazo de Resolução</strong>
+        estimado (1, 3, 6, 12, 18, 24 meses), criando uma tabela 3&times;6 que destaca automaticamente
+        duas situações críticas de gestão:</p>
+
+        <div class="alert alert-danger py-2 px-3 mb-2">
+          <strong>🔴 Incoerências (fundo vermelho):</strong> Achados P1 (Crítico) com prazo &ge; 12 meses.
+          Isso representa uma contradição técnica — um item urgente e de alto risco não pode aguardar um ano
+          ou mais para ser resolvido. O sistema alerta o gestor para revisar esses casos: ou reclassifica
+          a prioridade ou reduz o prazo estimado.
+        </div>
+
+        <div class="alert alert-success py-2 px-3 mb-3">
+          <strong>🟢 Ganhos Rápidos (fundo verde):</strong> Achados P1 ou P2 com prazo &le; 3 meses.
+          São não conformidades de alta criticidade que podem ser resolvidas rapidamente — candidatos
+          ideais para ação imediata, pois produzem a maior melhoria do IQE no menor tempo possível.
+        </div>
+
+        <p>Os totais de <strong>incoerências</strong> e <strong>ganhos rápidos</strong> são exibidos
+        como indicadores abaixo da matriz, para facilitar a revisão do plano de manutenção pela equipe.</p>
+
+        <p class="mb-0 text-muted small">Esta é uma das análises mais estratégicas do painel: ela detecta
+        automaticamente inconsistências no planejamento que passariam despercebidas numa simples lista de achados.</p>
+      `
+    },
+
+    encaminhamento: {
+      title: 'Análise de Encaminhamento (Direcionamento)',
+      body: `
+        <p>Mostra a distribuição das não conformidades pelos três tipos de encaminhamento, conectando
+        os achados técnicos diretamente aos <strong>processos administrativos</strong> necessários:</p>
+
+        <table class="table table-sm table-bordered my-3">
+          <thead class="table-dark"><tr><th>Direcionamento</th><th>O que significa para o MPDFT</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Garantia de obra</strong></td>
+              <td>O problema é coberto pela garantia da construtora ou fornecedor. A solução deve ser
+              acionada por notificação extrajudicial ou termo de garantia, <strong>sem custo adicional</strong>
+              ao MPDFT. Identificar e cobrar esses itens dentro do prazo de garantia é prioritário.</td>
+            </tr>
+            <tr>
+              <td><strong>Manutenção</strong></td>
+              <td>A solução está no escopo das equipes internas ou de contratos de manutenção já em vigor.
+              Esta contagem é a base para <strong>dimensionamento de contratos e previsão orçamentária</strong>
+              do exercício corrente.</td>
+            </tr>
+            <tr>
+              <td><strong>Nova contratação</strong></td>
+              <td>Requer abertura de novo processo licitatório. Insumo direto para o
+              <strong>planejamento de compras</strong> e previsão de créditos orçamentários futuros.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="mb-0 text-muted small">Esta análise alimenta diretamente o planejamento orçamentário
+        e a programação de processos administrativos do MPDFT — transformando achados técnicos
+        em demandas administrativas quantificadas.</p>
+      `
+    },
+
+    conc_localizacao: {
+      title: 'Concentração de Risco por Localização (soma GUT)',
+      body: `
+        <p>Além da contagem simples de achados por local, este indicador calcula a
+        <strong>soma do índice GUT</strong> de todas as não conformidades de cada localização,
+        ordenando os locais pelo <em>risco real acumulado</em> — não apenas pelo volume de problemas.</p>
+
+        <div class="alert alert-info py-2 px-3 mb-3">
+          <strong>Por que soma GUT, não apenas contagem?</strong><br>
+          Um local com 3 achados P1 (GUT 100 cada) tem soma GUT = 300 e é muito mais crítico
+          do que um local com 15 achados P3 (GUT 2 cada, soma = 30).
+          A contagem simples induziria à conclusão errada sobre onde concentrar esforços.
+        </div>
+
+        <p>Cada localização é exibida com:</p>
+        <ul>
+          <li>Contagem de achados por prioridade (P1/P2/P3)</li>
+          <li>Soma total do índice GUT</li>
+          <li>Barra de progresso proporcional à localização de maior risco</li>
+        </ul>
+
+        <p class="mb-0 text-muted small">A localização com a maior barra é onde a intervenção
+        terá o maior impacto na melhoria do IQE. Use este indicador para priorizar blocos,
+        pavimentos ou setores da edificação quando os recursos forem limitados.</p>
+      `
+    },
+
+    por_localizacao: {
+      title: 'Não Conformidades por Localização (contagem)',
+      body: `
+        <p>Contagem de achados não conformes por localização física da edificação,
+        segregada por prioridade (P1/P2/P3).</p>
+
+        <p>Esta visão responde: <strong>"Onde estão concentrados os problemas?"</strong> —
+        útil para planejar intervenções por bloco, pavimento ou setor da edificação.</p>
+
+        <div class="alert alert-secondary py-2 px-3 mb-0">
+          <strong>Complemento recomendado:</strong> para uma visão ponderada pela criticidade
+          (não apenas volume), consulte o indicador
+          <em>Concentração de Risco por Localização (soma GUT)</em>, que ordena os locais
+          pelo risco real acumulado. Um local com muitos achados P3 pode ser menos urgente
+          do que outro com poucos achados P1.
+        </div>
+      `
+    },
+
+    por_prazo: {
+      title: 'Distribuição por Prazo de Resolução',
+      body: `
+        <p>Agrupa todas as não conformidades pelos prazos estimados para correção,
+        permitindo ao gestor visualizar o <strong>cronograma de demandas</strong>:</p>
+
+        <table class="table table-sm table-bordered my-3">
+          <thead class="table-dark"><tr><th>Horizonte</th><th>O que representa</th></tr></thead>
+          <tbody>
+            <tr class="table-danger">
+              <td><strong>1 – 3 meses</strong></td>
+              <td>Demandas imediatas — devem ser incluídas no orçamento corrente e iniciadas o quanto antes.</td>
+            </tr>
+            <tr class="table-warning">
+              <td><strong>6 – 12 meses</strong></td>
+              <td>Planejamento de médio prazo — base para processos de contratação que levam meses para concluir.</td>
+            </tr>
+            <tr class="table-success">
+              <td><strong>18 – 24 meses</strong></td>
+              <td>Horizonte de longo prazo — intervenções de maior escopo ou que aguardam ciclos orçamentários futuros.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="mb-0 text-muted small"><strong>Atenção:</strong> a Matriz Risco &times; Prazo
+        identifica automaticamente quando um item P1 tem prazo longo (incoerência) e quando
+        itens de alto risco têm prazo curto (ganho rápido) — use os dois indicadores juntos
+        para uma leitura completa do planejamento.</p>
+      `
+    },
+
+    requisito_afetado: {
+      title: 'Análise por Requisito de Desempenho Afetado',
+      body: `
+        <p>Classifica os achados pelo <strong>requisito de desempenho predial</strong> comprometido,
+        indicando quais dimensões de qualidade da edificação estão mais impactadas:</p>
+
+        <table class="table table-sm table-bordered my-3">
+          <thead class="table-dark"><tr><th>Requisito</th><th>Exemplos de não conformidades típicas</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Segurança Estrutural</strong></td><td>Trincas, recalques, corrosão de armaduras, deformações excessivas em lajes ou vigas</td></tr>
+            <tr><td><strong>Acessibilidade</strong></td><td>Rampas inadequadas, banheiros sem adaptação, ausência de sinalização tátil</td></tr>
+            <tr><td><strong>Saúde e Qualidade do Ar</strong></td><td>Infiltrações com mofo, sistemas de ar-condicionado sem manutenção, odores de esgoto</td></tr>
+            <tr><td><strong>Funcionalidade</strong></td><td>Esquadrias travadas, instalações inoperantes, elevadores com falha, iluminação insuficiente</td></tr>
+            <tr><td><strong>Estética</strong></td><td>Pintura descascada, revestimentos soltos, pisos danificados, grafites</td></tr>
+            <tr><td><strong>Eficiência Energética</strong></td><td>Iluminação obsoleta, equipamentos ineficientes, isolamento térmico precário</td></tr>
+            <tr><td><strong>Sustentabilidade</strong></td><td>Vazamentos em torneiras e válvulas, descarte inadequado de resíduos</td></tr>
+            <tr><td><strong>Durabilidade</strong></td><td>Impermeabilização deteriorada, proteções anticorrosão vencidas, juntas de dilatação abertas</td></tr>
+          </tbody>
+        </table>
+
+        <p class="mb-0 text-muted small">Esta análise auxilia na comunicação com gestores não técnicos:
+        em vez de falar em grupos construtivos, apresenta o impacto nos requisitos de desempenho que
+        afetam diretamente os usuários e a função institucional das edificações do MPDFT.</p>
+      `
+    },
+
+    cobertura_foto: {
+      title: 'Cobertura Fotográfica das Evidências',
+      body: `
+        <p>Calcula o percentual de não conformidades que possuem ao menos uma foto de evidência registrada:</p>
+
+        <div class="bg-light rounded p-3 my-3 font-monospace small">
+          % Cobertura = (achados NC com &ge; 1 foto &divide; total NC) &times; 100
+        </div>
+
+        <p>Alta cobertura fotográfica <strong>(&gt; 80%)</strong> é fundamental para:</p>
+        <ul>
+          <li>Fortalecer a validade técnica e jurídica dos achados junto às construtoras (acionamento de garantia)</li>
+          <li>Embasar processos administrativos de contratação e licitação no MPDFT</li>
+          <li>Documentar o estado da edificação para comparação histórica entre inspeções</li>
+          <li>Reduzir contestações sobre a existência ou gravidade dos problemas identificados</li>
+        </ul>
+
+        <p class="mb-0 text-muted small">As fotos são comprimidas automaticamente para até 2.000&times;2.000 px
+        e armazenadas com data e hora de upload, garantindo rastreabilidade completa do registro fotográfico.</p>
+      `
+    },
+
+    plano_acao: {
+      title: 'Plano de Ação Priorizado',
+      body: `
+        <p>Lista automática das <strong>15 não conformidades mais críticas</strong>,
+        ordenadas por dois critérios em cascata:</p>
+
+        <ol>
+          <li><strong>Prioridade de risco:</strong> P1 (Crítico) sempre antes de P2; P2 antes de P3</li>
+          <li><strong>Índice GUT decrescente:</strong> dentro de cada prioridade, maior GUT primeiro</li>
+        </ol>
+
+        <p>Para cada item são exibidos: localização, descrição da verificação, prazo estimado,
+        direcionamento e índice GUT. Este plano pode ser exportado em PDF e entregue diretamente
+        às equipes responsáveis como <strong>checklist de trabalho</strong>.</p>
+
+        <div class="alert alert-success py-2 px-3 mb-3">
+          <strong>Pronto para usar:</strong> O Plano de Ação gerado automaticamente pode ser utilizado
+          diretamente em reuniões de planejamento de manutenção, briefings com contratadas ou como
+          justificativa técnica em processos de compras — sem retrabalho de formatação ou ordenação manual.
+        </div>
+
+        <div class="alert alert-secondary py-2 px-3 mb-0">
+          <strong>Diferença do Top 10 GUT:</strong> o Top 10 ranqueia por criticidade bruta (produto G&times;U&times;T),
+          sem considerar a prioridade de risco. O Plano de Ação prioriza primeiro os itens P1,
+          independentemente do GUT — o que é mais adequado para execução operacional.
+        </div>
+      `
+    },
+
+    por_especialidade: {
+      title: 'Resumo por Especialidade',
+      body: `
+        <p>Consolida o resultado de cada especialidade inspecionada (Civil, Mecânica, Elétrica)
+        em uma única tabela comparativa, mostrando:</p>
+
+        <ul>
+          <li><strong>Total de verificações</strong> realizadas por cada especialidade</li>
+          <li><strong>Não conformidades (NC)</strong> identificadas em cada disciplina</li>
+          <li><strong>Distribuição P1/P2/P3</strong> por especialidade — revela qual disciplina concentra os problemas mais graves</li>
+          <li><strong>Status da especialidade:</strong> Em andamento ou Finalizada</li>
+          <li><strong>Acesso direto</strong> à análise individual de cada especialidade</li>
+        </ul>
+
+        <p>Esta visão permite identificar se os problemas críticos se concentram em uma única
+        disciplina — por exemplo, se Engenharia Elétrica responde por 70% dos achados P1,
+        isso indica que os investimentos nessa área são urgentes e prioritários.</p>
+
+        <p class="mb-0 text-muted small">Para aprofundar a análise de uma disciplina específica,
+        utilize o botão <em>Análise</em> em cada linha para acessar o painel completo
+        de 16 indicadores daquela especialidade.</p>
+      `
+    }
+
+  }; /* fim INFO */
+
+  /* ── Abre o modal ao clicar em qualquer botão de explicação ─────────────── */
+  document.querySelectorAll('.btn-indicador-info').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var info = INFO[btn.dataset.infoId];
+      if (!info) return;
+      document.getElementById('modalIndicadorLabel').textContent = info.title;
+      document.getElementById('modalIndicadorBody').innerHTML   = info.body;
+      var modal = new bootstrap.Modal(document.getElementById('modalIndicador'));
+      modal.show();
+    });
+  });
+
 })();
 </script>

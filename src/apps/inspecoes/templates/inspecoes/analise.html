@@ -102,6 +102,11 @@
     <div class="card h-100">
       <div class="card-header fw-semibold">
         <i class="bi bi-pie-chart"></i> Grau de Risco — Geral
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="dist_risco" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
       </div>
       <div class="card-body d-flex flex-column justify-content-center">
         <canvas id="chartRisco" height="200"></canvas>
@@ -133,6 +138,11 @@
     <div class="card h-100">
       <div class="card-header fw-semibold">
         <i class="bi bi-bar-chart-line"></i> Estatísticas GUT &amp; Top Achados Críticos
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="estatisticas_gut" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
       </div>
       <div class="card-body">
         <div class="row g-3 mb-3 text-center">
@@ -178,6 +188,11 @@
 {# ── 3. Matriz Grupo Técnico × Prioridade ────────────────────────────────────── #}
 <h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
   <i class="bi bi-table"></i> Análise por Grupo Técnico
+  <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+          style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+          data-info-id="grupo_tecnico" title="Entender este indicador">
+    <i class="bi bi-question-circle-fill"></i>
+  </button>
 </h5>
 <div class="card mb-4">
   <div class="card-body p-0">
@@ -229,6 +244,11 @@
 <div class="card mb-4">
   <div class="card-header fw-semibold">
     <i class="bi bi-bar-chart"></i> Requisito Afetado × Quantidade
+    <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+            style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+            data-info-id="requisito_afetado" title="Entender este indicador">
+      <i class="bi bi-question-circle-fill"></i>
+    </button>
   </div>
   <div class="card-body">
     <canvas id="chartRequisitos" style="max-height:280px"></canvas>
@@ -241,6 +261,11 @@
     <div class="card h-100">
       <div class="card-header fw-semibold">
         <i class="bi bi-geo-alt"></i> Não Conformidades por Localização
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="por_localizacao" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
@@ -282,6 +307,11 @@
     <div class="card h-100">
       <div class="card-header fw-semibold">
         <i class="bi bi-calendar-range"></i> Distribuição por Prazo
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="por_prazo" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
       </div>
       <div class="card-body">
         <canvas id="chartPrazo" height="200"></canvas>
@@ -407,6 +437,7 @@
   </div>
 </div>
 
+{% include "inspecoes/_info_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}

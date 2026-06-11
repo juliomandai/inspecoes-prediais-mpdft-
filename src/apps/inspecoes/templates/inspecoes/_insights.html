@@ -13,11 +13,11 @@ cobertura_foto_pct, fotos_com, plano_acao.
       <div class="card-body text-center py-4">
         <div class="text-muted small text-uppercase">
           Índice de Saúde da Edificação
-          <i class="bi bi-info-circle ms-1 text-primary" style="cursor:help"
-             tabindex="0" role="button"
-             data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true"
-             data-bs-title="Nota de 0 a 100 que sintetiza a gravidade das não conformidades.<br><br>Parte de 100 (tudo conforme) e penaliza cada não conformidade conforme a prioridade — <b>P1 Crítico</b> pesa 5, <b>P2 Regular</b> pesa 2 e <b>P3 Mínimo</b> pesa 1 — em relação ao total de verificações.<br><br>Quanto <b>maior</b>, melhor a saúde da edificação.<br>Faixas: <b>≥ 80</b> Bom &middot; <b>50–79</b> Atenção &middot; <b>&lt; 50</b> Crítico.">
-          </i>
+          <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                  style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                  data-info-id="iqe" title="Entender este indicador">
+            <i class="bi bi-question-circle-fill"></i>
+          </button>
         </div>
         <div class="display-3 fw-bold text-{{ iqe_cor }}">{{ iqe }}</div>
         <div class="text-muted small">de 100 &middot; faixa
@@ -32,7 +32,14 @@ cobertura_foto_pct, fotos_com, plano_acao.
   <div class="col-md-4">
     <div class="card h-100">
       <div class="card-body text-center py-4">
-        <div class="text-muted small text-uppercase">Conformidade</div>
+        <div class="text-muted small text-uppercase">
+          Conformidade
+          <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                  style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                  data-info-id="conformidade" title="Entender este indicador">
+            <i class="bi bi-question-circle-fill"></i>
+          </button>
+        </div>
         <div class="display-3 fw-bold text-success">{{ pct_conformidade }}%</div>
         <div class="text-muted small">{{ total_conformes }} de {{ total }} verificações</div>
         <div class="progress mt-3" style="height:8px">
@@ -43,7 +50,14 @@ cobertura_foto_pct, fotos_com, plano_acao.
   </div>
   <div class="col-md-4">
     <div class="card h-100">
-      <div class="card-header fw-semibold"><i class="bi bi-sliders2"></i> Componentes GUT (médias)</div>
+      <div class="card-header fw-semibold">
+        <i class="bi bi-sliders2"></i> Componentes GUT (médias)
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="componentes_gut" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
+      </div>
       <div class="card-body d-flex justify-content-around align-items-center text-center">
         <div><div class="text-muted small">Gravidade</div><div class="fs-2 fw-bold text-danger">{{ g_media }}</div></div>
         <div><div class="text-muted small">Urgência</div><div class="fs-2 fw-bold text-warning">{{ u_media }}</div></div>
@@ -56,6 +70,11 @@ cobertura_foto_pct, fotos_com, plano_acao.
 {# 2. Encaminhamento (orçamento) #}
 <h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
   <i class="bi bi-signpost-split"></i> Encaminhamento — Subsídio para Orçamento
+  <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+          style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+          data-info-id="encaminhamento" title="Entender este indicador">
+    <i class="bi bi-question-circle-fill"></i>
+  </button>
 </h5>
 <div class="row g-3 mb-4">
   {% for d in por_direcionamento %}
@@ -79,6 +98,11 @@ cobertura_foto_pct, fotos_com, plano_acao.
 {# 3. Matriz Risco × Prazo #}
 <h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
   <i class="bi bi-grid-3x3-gap"></i> Matriz Risco × Prazo
+  <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+          style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+          data-info-id="matriz_risco" title="Entender este indicador">
+    <i class="bi bi-question-circle-fill"></i>
+  </button>
 </h5>
 <div class="card mb-2">
   <div class="card-body p-0">
@@ -117,13 +141,27 @@ cobertura_foto_pct, fotos_com, plano_acao.
 <div class="row g-3 mb-4">
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold"><i class="bi bi-bar-chart-steps"></i> Pareto por Grupo Técnico (80/20)</div>
+      <div class="card-header fw-semibold">
+        <i class="bi bi-bar-chart-steps"></i> Pareto por Grupo Técnico (80/20)
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="pareto" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
+      </div>
       <div class="card-body"><canvas id="chartPareto" height="220"></canvas></div>
     </div>
   </div>
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold"><i class="bi bi-geo-alt-fill"></i> Concentração de Risco por Localização (soma GUT)</div>
+      <div class="card-header fw-semibold">
+        <i class="bi bi-geo-alt-fill"></i> Concentração de Risco por Localização (soma GUT)
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="conc_localizacao" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
+      </div>
       <div class="card-body">
         {% for l in por_localizacao_gut|slice:":8" %}
         <div class="d-flex align-items-center gap-2 mb-2">
@@ -147,7 +185,14 @@ cobertura_foto_pct, fotos_com, plano_acao.
 <div class="card mb-4">
   <div class="card-body d-flex align-items-center gap-4 flex-wrap">
     <div>
-      <div class="text-muted small text-uppercase">Cobertura Fotográfica das Evidências</div>
+      <div class="text-muted small text-uppercase">
+        Cobertura Fotográfica das Evidências
+        <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+                data-info-id="cobertura_foto" title="Entender este indicador">
+          <i class="bi bi-question-circle-fill"></i>
+        </button>
+      </div>
       <div class="fs-1 fw-bold text-info">{{ cobertura_foto_pct }}%</div>
       <div class="text-muted small">{{ fotos_com }} de {{ total_nc }} não conformidades com ao menos 1 foto</div>
     </div>
@@ -162,6 +207,11 @@ cobertura_foto_pct, fotos_com, plano_acao.
 {# 6. Plano de ação priorizado #}
 <h5 class="text-uppercase text-muted fw-semibold mb-3 section-title">
   <i class="bi bi-list-check"></i> Plano de Ação Priorizado
+  <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+          style="font-size:.85em;vertical-align:middle;line-height:1;border:none"
+          data-info-id="plano_acao" title="Entender este indicador">
+    <i class="bi bi-question-circle-fill"></i>
+  </button>
 </h5>
 <div class="card mb-4">
   <div class="card-body p-0">
