@@ -525,6 +525,11 @@
      impediam o fechamento. O fechamento (X, "Fechar", ESC, clique fora) é tratado
      nativamente pelo Bootstrap via data-bs-dismiss — não duplicar com JS. */
   var _modalEl = document.getElementById('modalIndicador');
+  /* Move o modal para filho direto de <body> para evitar stacking context de
+     elementos pai com z-index menor que o backdrop (1040), que bloqueava cliques. */
+  if (_modalEl && _modalEl.parentElement !== document.body) {
+    document.body.appendChild(_modalEl);
+  }
   var _modal   = (_modalEl && window.bootstrap) ? bootstrap.Modal.getOrCreateInstance(_modalEl) : null;
 
   /* Clique delegado: funciona para qualquer botão presente na página. */
