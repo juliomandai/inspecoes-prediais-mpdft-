@@ -174,29 +174,45 @@
     },
 
     estatisticas_gut: {
-      title: 'Estatísticas GUT e Top Achados Críticos',
+      title: 'Estatísticas do Índice GUT',
       body: `
-        <p>Este painel reúne as <strong>estatísticas descritivas</strong> do índice GUT
-        (produto G &times; U &times; T, de 1 a 125) calculadas sobre todas as não conformidades:</p>
+        <p>Para as não conformidades identificadas, o sistema calcula as <strong>estatísticas
+        descritivas</strong> do índice GUT (produto G &times; U &times; T, de 1 a 125):</p>
 
         <ul>
-          <li><strong>Máximo:</strong> pior caso identificado — o achado de maior criticidade combinada da inspeção.</li>
-          <li><strong>Média:</strong> referência central para comparação entre edificações e entre campanhas de inspeção.</li>
-          <li><strong>Mínimo:</strong> caso menos crítico entre os não conformes — limite inferior do intervalo.</li>
+          <li><strong>GUT Máximo:</strong> pior caso identificado — o achado de maior criticidade combinada da inspeção.</li>
+          <li><strong>GUT Médio:</strong> média aritmética dos índices. Referência central para comparação entre edificações e entre campanhas de inspeção.</li>
+          <li><strong>GUT Mínimo:</strong> caso menos crítico entre os não conformes — limite inferior do intervalo.</li>
           <li><strong>Desvio Padrão:</strong> medida de dispersão dos índices.
             Valor <em>alto</em> indica grande heterogeneidade: coexistência de situações muito críticas (GUT 80–125)
             com situações triviais (GUT 1–5).
             Valor <em>baixo</em> indica que os problemas têm criticidade uniforme.</li>
         </ul>
 
-        <p>O <strong>Top 10 Achados</strong> lista as não conformidades de maior índice GUT, com barras
-        proporcionais ao valor máximo encontrado. É o insumo direto para decisão imediata — os problemas
-        que, pela combinação de gravidade, urgência e tendência, concentram o maior risco.</p>
+        <p class="mb-0 text-muted small">Logo abaixo das estatísticas, o painel exibe o
+        <strong>Top 10 Achados por GUT</strong> — clique no <i class="bi bi-question-circle-fill"></i>
+        ao lado daquele título para entender o ranking.</p>
+      `
+    },
 
-        <div class="alert alert-info py-2 px-3 mb-0">
-          <strong>Diferença do Plano de Ação:</strong> o Top 10 ranqueia por GUT bruto (produto G&times;U&times;T),
-          sem considerar a prioridade de risco. O Plano de Ação ordena primeiro por prioridade (P1 antes de P2/P3)
-          e depois por GUT — mais adequado para execução operacional das equipes.
+    top_gut: {
+      title: 'Top 10 Achados por GUT',
+      body: `
+        <p>O sistema exibe um <strong>ranking dos 10 achados com maior índice GUT</strong>, apresentado
+        com barras de progresso proporcionais ao valor máximo encontrado. Este ranking é o insumo direto
+        para a <strong>tomada de decisão imediata</strong>: são os problemas que, pela combinação de
+        gravidade, urgência e tendência, concentram o maior risco e merecem atenção prioritária da equipe.</p>
+
+        <p>A cor do selo de cada item indica a prioridade de risco do achado
+        (<span class="badge" style="background:#dc3545">P1</span>
+        <span class="badge" style="background:#fd7e14">P2</span>
+        <span class="badge" style="background:#198754">P3</span>), e o número é o índice GUT calculado.</p>
+
+        <div class="alert alert-warning py-2 px-3 mb-0">
+          <strong>Diferença do Plano de Ação:</strong> o Top 10 GUT ranqueia por criticidade bruta
+          (produto G&times;U&times;T), sem considerar a prioridade de risco. O Plano de Ação ordena
+          primeiro por prioridade (P1 antes de P2 e P3) e depois por GUT — mais adequado para
+          execução operacional das equipes.
         </div>
       `
     },
@@ -511,15 +527,32 @@
   var _modalEl = document.getElementById('modalIndicador');
   var _modal   = (_modalEl && window.bootstrap) ? bootstrap.Modal.getOrCreateInstance(_modalEl) : null;
 
-  document.querySelectorAll('.btn-indicador-info').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var info = INFO[btn.dataset.infoId];
-      if (!info || !_modal) return;
-      document.getElementById('modalIndicadorLabel').textContent = info.title;
-      document.getElementById('modalIndicadorBody').innerHTML   = info.body;
-      _modal.show();
-    });
+  /* Clique delegado: funciona para qualquer botão presente na página. */
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('.btn-indicador-info');
+    if (!btn || !_modal) return;
+    var info = INFO[btn.dataset.infoId];
+    if (!info) {
+      console.warn('[indicadores] explicação não encontrada para:', btn.dataset.infoId);
+      return;
+    }
+    document.getElementById('modalIndicadorLabel').textContent = info.title;
+    document.getElementById('modalIndicadorBody').innerHTML   = info.body;
+    _modal.show();
   });
+
+  /* Rede de segurança: ao fechar, remove backdrops órfãos e destrava o body.
+     Garante que a tela nunca fique cinza/congelada mesmo se algo der errado. */
+  if (_modalEl) {
+    _modalEl.addEventListener('hidden.bs.modal', function () {
+      if (!document.querySelector('.modal.show')) {
+        document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+      }
+    });
+  }
 
 })();
 </script>

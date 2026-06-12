@@ -235,7 +235,13 @@
             <div class="fs-3 fw-bold text-secondary">{{ gut_desvio }}</div>
           </div>
         </div>
-        <p class="text-muted small mb-2 fw-semibold">Top achados por índice GUT:</p>
+        <p class="text-muted small mb-2 fw-semibold">Top achados por índice GUT:
+          <button type="button" class="btn-indicador-info btn btn-link p-0 ms-1 text-muted no-print"
+                  style="font-size:.95em;vertical-align:middle;line-height:1;border:none"
+                  data-info-id="top_gut" title="Entender este indicador">
+            <i class="bi bi-question-circle-fill"></i>
+          </button>
+        </p>
         {% for a in top_gut %}
         <div class="d-flex align-items-center gap-2 mb-1">
           <span class="badge badge-p{{ a.prioridade_risco }}" style="min-width:2.8rem;text-align:center">
