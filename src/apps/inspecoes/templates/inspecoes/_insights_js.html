@@ -541,16 +541,40 @@
     _modal.show();
   });
 
-  /* Rede de segurança: ao fechar, remove backdrops órfãos e destrava o body.
-     Garante que a tela nunca fique cinza/congelada mesmo se algo der errado. */
+  /* Handlers explícitos nos botões de fechar: .js-modal-fechar não tem
+     data-bs-dismiss, portanto hide() é chamado exatamente uma vez por clique,
+     sem o double-call que impedia o Bootstrap de remover o backdrop.
+     Se _isTransitioning=true (animação de abertura ainda correndo), aguarda
+     shown.bs.modal antes de fechar — evita que hide() seja bloqueado. */
+  if (_modal && _modalEl) {
+    _modalEl.querySelectorAll('.js-modal-fechar').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (_modal._isTransitioning) {
+          _modalEl.addEventListener('shown.bs.modal', function handler() {
+            _modalEl.removeEventListener('shown.bs.modal', handler);
+            _modal.hide();
+          });
+        } else {
+          _modal.hide();
+        }
+      });
+    });
+  }
+
+  /* Rede de segurança dupla: limpa backdrops órfãos e destrava o body
+     tanto em hidden.bs.modal (caminho normal) quanto 600ms após hide.bs.modal
+     (fallback quando a animação do backdrop não completa). */
+  function _limparBackdrop() {
+    if (document.querySelector('.modal.show')) return; // outro modal ainda aberto
+    document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+  }
   if (_modalEl) {
-    _modalEl.addEventListener('hidden.bs.modal', function () {
-      if (!document.querySelector('.modal.show')) {
-        document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
-        document.body.classList.remove('modal-open');
-        document.body.style.removeProperty('overflow');
-        document.body.style.removeProperty('padding-right');
-      }
+    _modalEl.addEventListener('hidden.bs.modal', _limparBackdrop);
+    _modalEl.addEventListener('hide.bs.modal', function () {
+      setTimeout(_limparBackdrop, 600);
     });
   }
 
