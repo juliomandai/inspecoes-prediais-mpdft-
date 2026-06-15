@@ -22,7 +22,6 @@ urlpatterns = [
     path('inspecoes/<int:pk>/excluir/', views.inspecao_delete, name='delete'),
     path('inspecoes/<int:pk>/analise/', views.inspecao_analise, name='inspecao_analise'),
     path('inspecoes/<int:pk>/analise/pdf/', views.inspecao_analise_pdf, name='inspecao_analise_pdf'),
-    path('inspecoes/<int:pk>/backup/', views.inspecao_backup, name='backup'),
     path('inspecoes/<int:pk>/backup/salvo/', views.inspecao_backup_download, name='backup_download'),
 
     # ── Especialidades ─────────────────────────────────────────────────────────

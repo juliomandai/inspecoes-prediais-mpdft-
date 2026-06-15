@@ -1088,27 +1088,13 @@ def _salvar_backup_em_disco(inspecao):
 
 
 @login_required
-def inspecao_backup(request, pk):
-    inspecao = get_object_or_404(
-        Inspecao.objects.select_related('edificacao').prefetch_related(
-            'especialidades__achados__fotos',
-        ),
-        pk=pk,
-    )
-    zip_bytes, nome_arquivo = _gerar_zip_backup(inspecao)
-    response = HttpResponse(zip_bytes, content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
-    return response
-
-
-@login_required
 def inspecao_backup_download(request, pk):
     """Baixa o backup salvo automaticamente ao finalizar a inspeção."""
     from django.conf import settings
     inspecao = get_object_or_404(Inspecao.objects.select_related('edificacao'), pk=pk)
     caminho = os.path.join(settings.MEDIA_ROOT, 'backups', f'inspecao_{pk}.zip')
     if not os.path.exists(caminho):
-        messages.error(request, 'Backup automático não encontrado. Use o botão "Backup" para gerar um agora.')
+        messages.error(request, 'Backup automático não encontrado para esta inspeção.')
         return _redirect_detail(pk)
     nome_edificacao = inspecao.edificacao.nome.replace(' ', '_')
     nome_arquivo = f'backup_inspecao_{nome_edificacao}_{inspecao.criado_em.strftime("%Y%m%d")}.zip'
