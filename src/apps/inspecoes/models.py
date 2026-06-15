@@ -53,7 +53,7 @@ class InspecaoEspecialidade(models.Model):
         related_name='especialidades',
     )
     especialidade = models.CharField('Especialidade', max_length=20, choices=ESPECIALIDADE_CHOICES)
-    profissional = models.CharField('Profissional responsável', max_length=200)
+    profissional = models.TextField('Profissionais responsáveis', help_text='Um nome por linha.')
     data_inspecao = models.DateField('Data da inspeção')
     status = models.CharField('Status', max_length=20, choices=STATUS_CHOICES, default='em_andamento')
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -76,6 +76,16 @@ class InspecaoEspecialidade(models.Model):
     def clean(self):
         if self.data_inspecao and self.data_inspecao > date.today():
             raise ValidationError({'data_inspecao': 'A data da inspeção não pode ser futura.'})
+        if not self.profissionais_lista:
+            raise ValidationError({'profissional': 'Informe ao menos um profissional responsável.'})
+
+    @property
+    def profissionais_lista(self):
+        return [p.strip() for p in self.profissional.splitlines() if p.strip()]
+
+    @property
+    def profissionais_display(self):
+        return ', '.join(self.profissionais_lista)
 
     @property
     def pode_editar(self):

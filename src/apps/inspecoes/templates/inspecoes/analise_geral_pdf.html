@@ -73,7 +73,7 @@
     {% for item in por_especialidade %}
     <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
       <td style="font-weight:bold">{{ item.especialidade.get_especialidade_display }}</td>
-      <td>{{ item.especialidade.profissional }}</td>
+      <td>{{ item.especialidade.profissionais_display }}</td>
       <td>{{ item.especialidade.data_inspecao|date:"d/m/Y" }}</td>
       <td style="text-align:center">{{ item.total }}</td>
       <td style="text-align:center;font-weight:bold;color:#b91c1c">{{ item.total_nc }}</td>

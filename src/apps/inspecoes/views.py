@@ -223,24 +223,37 @@ def inspecao_delete(request, pk):
 
 # ── Especialidades ─────────────────────────────────────────────────────────────
 
+def _profissionais_do_post(request):
+    """Coleta os nomes dos inputs dinâmicos 'profissionais' (um por campo)."""
+    return [n.strip() for n in request.POST.getlist('profissionais') if n.strip()]
+
+
 @login_required
 def especialidade_create(request, inspecao_pk):
     inspecao = get_object_or_404(Inspecao, pk=inspecao_pk)
     form = EspecialidadeForm(request.POST or None, inspecao=inspecao)
-    if form.is_valid():
-        esp = form.save(commit=False)
-        esp.inspecao = inspecao
-        try:
-            esp.full_clean()
-            esp.save()
-            _log(request, 'especialidade_criada', f'{esp.get_especialidade_display()} criada em "{inspecao.edificacao}".')
-            messages.success(request, f'{esp.get_especialidade_display()} adicionada com sucesso.')
-        except Exception as e:
-            messages.error(request, f'Erro ao salvar: {e}')
-        return redirect('inspecoes:detail', pk=inspecao_pk)
+    profissionais = _profissionais_do_post(request)
+    erro_profissionais = None
+    if request.method == 'POST' and form.is_valid():
+        if not profissionais:
+            erro_profissionais = 'Informe ao menos um profissional responsável.'
+        else:
+            esp = form.save(commit=False)
+            esp.inspecao = inspecao
+            esp.profissional = '\n'.join(profissionais)
+            try:
+                esp.full_clean()
+                esp.save()
+                _log(request, 'especialidade_criada', f'{esp.get_especialidade_display()} criada em "{inspecao.edificacao}".')
+                messages.success(request, f'{esp.get_especialidade_display()} adicionada com sucesso.')
+                return redirect('inspecoes:detail', pk=inspecao_pk)
+            except Exception as e:
+                messages.error(request, f'Erro ao salvar: {e}')
     return render(request, 'inspecoes/especialidade_form.html', {
         'form': form,
         'inspecao': inspecao,
+        'profissionais': profissionais or [''],
+        'erro_profissionais': erro_profissionais,
     })
 
 
@@ -248,14 +261,14 @@ def _pode_editar_especialidade(user, esp):
     """Retorna True se o usuário tem permissão para editar esta especialidade."""
     if user.is_staff or user.is_superuser:
         return True
-    return user.get_full_name() == esp.profissional
+    return user.get_full_name() in esp.profissionais_lista
 
 
 def _acesso_negado_especialidade(request, esp):
     messages.error(
         request,
-        f'Acesso negado. Apenas o profissional responsável '
-        f'("{esp.profissional}") pode realizar esta ação.',
+        f'Acesso negado. Apenas os profissionais responsáveis '
+        f'("{esp.profissionais_display}") podem realizar esta ação.',
     )
     return _redirect_detail(esp.inspecao_id, esp.pk)
 
@@ -266,14 +279,23 @@ def especialidade_update(request, pk):
     if not _pode_editar_especialidade(request.user, esp):
         return _acesso_negado_especialidade(request, esp)
     form = EspecialidadeForm(request.POST or None, instance=esp, inspecao=esp.inspecao)
-    if form.is_valid():
-        form.save()
-        messages.success(request, 'Especialidade atualizada com sucesso.')
-        return _redirect_detail(esp.inspecao_id, esp.pk)
+    profissionais = _profissionais_do_post(request) if request.method == 'POST' else esp.profissionais_lista
+    erro_profissionais = None
+    if request.method == 'POST' and form.is_valid():
+        if not profissionais:
+            erro_profissionais = 'Informe ao menos um profissional responsável.'
+        else:
+            esp = form.save(commit=False)
+            esp.profissional = '\n'.join(profissionais)
+            esp.save()
+            messages.success(request, 'Especialidade atualizada com sucesso.')
+            return _redirect_detail(esp.inspecao_id, esp.pk)
     return render(request, 'inspecoes/especialidade_form.html', {
         'form': form,
         'inspecao': esp.inspecao,
         'especialidade': esp,
+        'profissionais': profissionais or [''],
+        'erro_profissionais': erro_profissionais,
     })
 
 
