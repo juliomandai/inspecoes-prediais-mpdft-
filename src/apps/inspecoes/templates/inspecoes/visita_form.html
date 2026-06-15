@@ -1,18 +1,29 @@
 {% extends 'base.html' %}
-{% block title %}{% if visita %}Editar Visita{% else %}Nova Visita{% endif %} — {{ edificacao.nome }}{% endblock %}
+{% block title %}{% if visita %}Editar Visita{% elif visita_pai %}Nova Subvisita{% else %}Nova Visita{% endif %} — {{ edificacao.nome }}{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0">{% if visita %}Editar Visita{% else %}Nova Visita Técnica{% endif %}</h4>
-    <small class="text-muted">{{ edificacao.nome }}</small>
+    <h4 class="mb-0">{% if visita %}Editar Visita{% elif visita_pai %}Nova Subvisita de Acompanhamento{% else %}Nova Visita Técnica{% endif %}</h4>
+    <small class="text-muted">
+      {{ edificacao.nome }}
+      {% if visita_pai %}&mdash; acompanhamento da visita de {{ visita_pai.data_visita|date:"d/m/Y" }}{% endif %}
+    </small>
   </div>
   {% if visita %}
   <a href="{% url 'inspecoes:visita_detail' visita.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
+  {% elif visita_pai %}
+  <a href="{% url 'inspecoes:visita_detail' visita_pai.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
   {% else %}
   <a href="{% url 'inspecoes:visita_list' edificacao.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
   {% endif %}
 </div>
+{% if visita_pai %}
+<div class="alert alert-info py-2 px-3 small">
+  <i class="bi bi-info-circle"></i> Esta subvisita registra a evolução do problema documentado na visita
+  de <strong>{{ visita_pai.data_visita|date:"d/m/Y" }}</strong>, mantendo o histórico até a solução.
+</div>
+{% endif %}
 
 <form method="post" enctype="multipart/form-data" id="visita-form">
   {% csrf_token %}

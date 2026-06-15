@@ -252,12 +252,22 @@ class VisitaTecnica(models.Model):
         verbose_name='Localidade',
         related_name='visitas',
     )
+    visita_pai = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='subvisitas',
+        verbose_name='Visita de origem',
+        help_text='Preenchido quando esta é uma subvisita de acompanhamento.',
+    )
     data_visita = models.DateField('Data da visita')
     disciplina = models.CharField('Disciplina', max_length=20, choices=DISCIPLINA_CHOICES, blank=True)
     participantes = models.TextField('Profissionais participantes', help_text='Um nome por linha.')
     motivo = models.TextField('Motivo da visita')
     achados = models.TextField('Achados da visita', blank=True)
     conclusoes_encaminhamentos = models.TextField('Conclusões e encaminhamentos', blank=True)
+    concluida = models.BooleanField('Concluída', default=False)
+    concluida_em = models.DateTimeField('Concluída em', null=True, blank=True)
     criado_por = models.ForeignKey(
         get_user_model(), on_delete=models.SET_NULL,
         null=True, blank=True, related_name='visitas_criadas',
@@ -285,6 +295,16 @@ class VisitaTecnica(models.Model):
     @property
     def participantes_display(self):
         return ', '.join(self.participantes_lista)
+
+    @property
+    def is_subvisita(self):
+        return self.visita_pai_id is not None
+
+    @property
+    def pode_receber_subvisita(self):
+        """Só visitas principais (não subvisitas) e ainda não concluídas
+        aceitam novas subvisitas de acompanhamento."""
+        return not self.is_subvisita and not self.concluida
 
 
 class VisitaFoto(models.Model):
@@ -314,6 +334,9 @@ class LogAcesso(models.Model):
         ('achado_excluido', 'Achado excluído'),
         ('visita_criada', 'Visita técnica criada'),
         ('visita_excluida', 'Visita técnica excluída'),
+        ('visita_concluida', 'Visita técnica concluída'),
+        ('visita_reaberta', 'Visita técnica reaberta'),
+        ('subvisita_criada', 'Subvisita de acompanhamento criada'),
     ]
 
     usuario = models.ForeignKey(

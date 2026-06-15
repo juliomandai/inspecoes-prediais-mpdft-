@@ -390,3 +390,87 @@ def test_especialidade_edicao_renderiza_data_em_iso(client, edificacao):
     resp = client.get(reverse('inspecoes:especialidade_update', args=[esp.pk]))
     assert resp.status_code == 200
     assert b'value="2026-06-05"' in resp.content
+
+
+# ── Conclusão e subvisitas de acompanhamento ────────────────────────────────
+
+@pytest.fixture
+def visita_aberta(db, edificacao, usuario_logado):
+    from apps.inspecoes.models import VisitaTecnica
+    return VisitaTecnica.objects.create(
+        edificacao=edificacao, data_visita=date(2026, 1, 10), disciplina='civil',
+        criado_por=usuario_logado, participantes='Ze Silva', motivo='Infiltracao na laje',
+        achados='Mancha ativa', conclusoes_encaminhamentos='Acompanhar',
+    )
+
+
+@pytest.mark.django_db
+def test_concluir_visita_marca_concluida(client, usuario_logado, visita_aberta):
+    from apps.inspecoes.models import LogAcesso
+    resp = client.post(reverse('inspecoes:visita_concluir', args=[visita_aberta.pk]))
+    assert resp.status_code == 302
+    visita_aberta.refresh_from_db()
+    assert visita_aberta.concluida is True
+    assert visita_aberta.concluida_em is not None
+    assert LogAcesso.objects.filter(tipo='visita_concluida').exists()
+
+
+@pytest.mark.django_db
+def test_reabrir_visita(client, usuario_logado, visita_aberta):
+    visita_aberta.concluida = True
+    visita_aberta.save()
+    resp = client.post(reverse('inspecoes:visita_reabrir', args=[visita_aberta.pk]))
+    assert resp.status_code == 302
+    visita_aberta.refresh_from_db()
+    assert visita_aberta.concluida is False
+    assert visita_aberta.concluida_em is None
+
+
+@pytest.mark.django_db
+def test_cria_subvisita_quando_aberta(client, usuario_logado, visita_aberta):
+    from apps.inspecoes.models import VisitaTecnica, LogAcesso
+    url = reverse('inspecoes:visita_subvisita_create', args=[visita_aberta.pk])
+    resp = client.post(url, {
+        'data_visita': date(2026, 3, 5).isoformat(),
+        'disciplina': 'civil',
+        'participantes': 'Ze Silva',
+        'motivo': 'Retorno de acompanhamento',
+        'achados': 'Mancha reduzida apos reparo',
+        'conclusoes_encaminhamentos': 'Seguir monitorando',
+    })
+    assert resp.status_code == 302
+    sub = VisitaTecnica.objects.get(visita_pai=visita_aberta)
+    assert sub.edificacao_id == visita_aberta.edificacao_id
+    assert sub.is_subvisita is True
+    assert LogAcesso.objects.filter(tipo='subvisita_criada').exists()
+
+
+@pytest.mark.django_db
+def test_subvisita_bloqueada_quando_concluida(client, usuario_logado, visita_aberta):
+    from apps.inspecoes.models import VisitaTecnica
+    visita_aberta.concluida = True
+    visita_aberta.save()
+    url = reverse('inspecoes:visita_subvisita_create', args=[visita_aberta.pk])
+    resp = client.post(url, {
+        'data_visita': date(2026, 3, 5).isoformat(), 'disciplina': 'civil',
+        'participantes': 'Ze Silva', 'motivo': 'x', 'achados': 'x',
+        'conclusoes_encaminhamentos': 'x',
+    })
+    assert resp.status_code == 302
+    assert not VisitaTecnica.objects.filter(visita_pai=visita_aberta).exists()
+
+
+@pytest.mark.django_db
+def test_subvisita_nao_aparece_na_lista_principal(client, usuario_logado, visita_aberta):
+    from apps.inspecoes.models import VisitaTecnica
+    VisitaTecnica.objects.create(
+        edificacao=visita_aberta.edificacao, visita_pai=visita_aberta,
+        data_visita=date(2026, 3, 5), disciplina='civil', criado_por=usuario_logado,
+        participantes='Ze Silva', motivo='Retorno', achados='x', conclusoes_encaminhamentos='x',
+    )
+    url = reverse('inspecoes:visita_list', args=[visita_aberta.edificacao.pk])
+    resp = client.get(url)
+    assert resp.status_code == 200
+    # Só a visita principal é listada; a subvisita aparece no detalhe, não na lista.
+    assert resp.content.count(b'Retorno') == 0
+    assert b'Infiltracao na laje' in resp.content

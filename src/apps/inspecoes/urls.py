@@ -52,6 +52,9 @@ urlpatterns = [
     path('visitas/<int:pk>/', views.visita_detail, name='visita_detail'),
     path('visitas/<int:pk>/editar/', views.visita_update, name='visita_update'),
     path('visitas/<int:pk>/excluir/', views.visita_delete, name='visita_delete'),
+    path('visitas/<int:pk>/concluir/', views.visita_concluir, name='visita_concluir'),
+    path('visitas/<int:pk>/reabrir/', views.visita_reabrir, name='visita_reabrir'),
+    path('visitas/<int:pk>/subvisita/', views.visita_subvisita_create, name='visita_subvisita_create'),
     path('visitas/<int:visita_pk>/fotos/', views.visita_foto_upload, name='visita_foto_upload'),
     path('visitas/fotos/<int:pk>/', views.visita_foto_delete, name='visita_foto_delete'),
 

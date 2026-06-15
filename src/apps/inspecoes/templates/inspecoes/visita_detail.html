@@ -5,19 +5,57 @@
 <div class="card mb-4">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
-      <h4 class="mb-0">{{ visita.edificacao.nome }}</h4>
-      <small class="text-muted">Visita técnica — {{ visita.data_visita|date:"d/m/Y" }}</small>
+      <h4 class="mb-0">
+        {{ visita.edificacao.nome }}
+        {% if visita.is_subvisita %}
+        <span class="badge bg-info text-dark ms-1">Subvisita</span>
+        {% elif visita.concluida %}
+        <span class="badge bg-success ms-1"><i class="bi bi-check2-all"></i> Concluída</span>
+        {% else %}
+        <span class="badge bg-warning text-dark ms-1"><i class="bi bi-hourglass-split"></i> Em acompanhamento</span>
+        {% endif %}
+      </h4>
+      <small class="text-muted">
+        {% if visita.is_subvisita %}
+        Subvisita de acompanhamento &mdash; {{ visita.data_visita|date:"d/m/Y" }}
+        {% else %}
+        Visita técnica &mdash; {{ visita.data_visita|date:"d/m/Y" }}
+        {% endif %}
+      </small>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+      {% if visita.is_subvisita %}
+      <a href="{% url 'inspecoes:visita_detail' visita.visita_pai.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Visita de origem
+      </a>
+      {% else %}
       <a href="{% url 'inspecoes:visita_list' visita.edificacao.pk %}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left"></i> Voltar
       </a>
+      {% endif %}
+
       {% if pode_editar %}
+      {% if not visita.is_subvisita and not visita.concluida %}
+      <a href="{% url 'inspecoes:visita_subvisita_create' visita.pk %}" class="btn btn-info btn-sm">
+        <i class="bi bi-plus-circle"></i> Adicionar subvisita
+      </a>
+      <form method="post" action="{% url 'inspecoes:visita_concluir' visita.pk %}"
+            onsubmit="return confirm('Marcar esta visita como concluída? O acompanhamento será encerrado e não será possível adicionar novas subvisitas até reabri-la.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check2-all"></i> Concluído</button>
+      </form>
+      {% elif not visita.is_subvisita and visita.concluida %}
+      <form method="post" action="{% url 'inspecoes:visita_reabrir' visita.pk %}"
+            onsubmit="return confirm('Reabrir esta visita para registrar novas subvisitas?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reabrir</button>
+      </form>
+      {% endif %}
       <a href="{% url 'inspecoes:visita_update' visita.pk %}" class="btn btn-outline-primary btn-sm">
         <i class="bi bi-pencil"></i> Editar
       </a>
       <form method="post" action="{% url 'inspecoes:visita_delete' visita.pk %}"
-            onsubmit="return confirm('Excluir esta visita? As fotos vinculadas também serão removidas.');">
+            onsubmit="return confirm('Excluir esta visita? As fotos{% if not visita.is_subvisita %} e subvisitas{% endif %} vinculadas também serão removidas.');">
         {% csrf_token %}
         <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i> Excluir</button>
       </form>
@@ -25,6 +63,12 @@
     </div>
   </div>
   <div class="card-body">
+    {% if visita.concluida %}
+    <div class="alert alert-success py-2 px-3">
+      <i class="bi bi-check2-all"></i> Problema marcado como <strong>solucionado/concluído</strong>
+      {% if visita.concluida_em %}em {{ visita.concluida_em|date:"d/m/Y H:i" }}{% endif %}.
+    </div>
+    {% endif %}
     {% if visita.disciplina %}<p><strong>Disciplina:</strong> {{ visita.get_disciplina_display }}</p>{% endif %}
     <p><strong>Profissionais participantes:</strong><br>{{ visita.participantes|linebreaksbr }}</p>
     <p><strong>Motivo:</strong><br>{{ visita.motivo|linebreaksbr }}</p>
@@ -47,4 +91,48 @@
     {% endif %}
   </div>
 </div>
+
+{% if not visita.is_subvisita %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Histórico de acompanhamento</h5>
+    {% if pode_editar and not visita.concluida %}
+    <a href="{% url 'inspecoes:visita_subvisita_create' visita.pk %}" class="btn btn-info btn-sm">
+      <i class="bi bi-plus-circle"></i> Adicionar subvisita
+    </a>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if subvisitas %}
+    <ul class="list-group list-group-flush">
+      {% for sub in subvisitas %}
+      <li class="list-group-item px-0">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <span class="badge bg-secondary">{{ sub.data_visita|date:"d/m/Y" }}</span>
+            <span class="ms-1">{{ sub.participantes_display|truncatechars:60 }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            {% if sub.fotos.all %}<span class="text-muted small"><i class="bi bi-camera"></i> {{ sub.fotos.all|length }}</span>{% endif %}
+            <a href="{% url 'inspecoes:visita_detail' sub.pk %}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-eye"></i> Ver
+            </a>
+          </div>
+        </div>
+        {% if sub.achados %}<div class="small text-muted mt-1">{{ sub.achados|truncatechars:140 }}</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted mb-0">
+      {% if visita.concluida %}
+      Nenhuma subvisita registrada. Esta visita está concluída.
+      {% else %}
+      Nenhuma subvisita ainda. Registre uma subvisita a cada retorno para acompanhar a evolução do problema até a solução.
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}

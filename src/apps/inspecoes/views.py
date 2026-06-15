@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso, VisitaTecnica, VisitaFoto
 from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm, VisitaTecnicaForm, VisitaFilterForm, SignUpForm
@@ -1351,7 +1352,11 @@ def visita_localidades(request):
     from apps.edificacoes.models import Edificacao
     localidades = (
         Edificacao.objects.filter(ativo=True)
-        .annotate(num_visitas=Count('visitas', distinct=True))
+        .annotate(num_visitas=Count(
+            'visitas',
+            filter=Q(visitas__visita_pai__isnull=True),
+            distinct=True,
+        ))
         .order_by('nome')
     )
     return render(request, 'inspecoes/visita_localidades.html', {
@@ -1365,7 +1370,11 @@ def visita_list(request, edif_pk):
     from .forms import VisitaFilterForm
     edificacao = get_object_or_404(Edificacao, pk=edif_pk)
     form = VisitaFilterForm(request.GET or None)
-    visitas = edificacao.visitas.annotate(num_fotos=Count('fotos'))
+    # Apenas visitas principais; as subvisitas aparecem dentro do detalhe da visita.
+    visitas = edificacao.visitas.filter(visita_pai__isnull=True).annotate(
+        num_fotos=Count('fotos', distinct=True),
+        num_subvisitas=Count('subvisitas', distinct=True),
+    )
     if form.is_valid():
         if form.cleaned_data.get('data_inicio'):
             visitas = visitas.filter(data_visita__gte=form.cleaned_data['data_inicio'])
@@ -1445,11 +1454,15 @@ def _pode_editar_visita(user, visita):
 @login_required
 def visita_detail(request, pk):
     visita = get_object_or_404(
-        VisitaTecnica.objects.select_related('edificacao').prefetch_related('fotos'),
+        VisitaTecnica.objects.select_related('edificacao', 'visita_pai').prefetch_related(
+            'fotos', 'subvisitas__fotos',
+        ),
         pk=pk,
     )
+    subvisitas = visita.subvisitas.order_by('data_visita', 'criado_em')
     return render(request, 'inspecoes/visita_detail.html', {
         'visita': visita,
+        'subvisitas': subvisitas,
         'pode_editar': _pode_editar_visita(request.user, visita),
     })
 
@@ -1486,6 +1499,91 @@ def visita_update(request, pk):
         'participantes': participantes or [''],
         'erro_participantes': erro_participantes,
         'fotos_existentes': visita.fotos.all(),
+    })
+
+
+@login_required
+@require_POST
+def visita_concluir(request, pk):
+    visita = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
+    if not _pode_editar_visita(request.user, visita):
+        return _acesso_negado_visita(request, visita)
+    if visita.is_subvisita:
+        messages.error(request, 'Subvisitas de acompanhamento não são concluídas isoladamente.')
+        return redirect('inspecoes:visita_detail', pk=visita.pk)
+    if not visita.concluida:
+        visita.concluida = True
+        visita.concluida_em = timezone.now()
+        visita.save(update_fields=['concluida', 'concluida_em', 'atualizado_em'])
+        _log(request, 'visita_concluida',
+             f'Visita técnica concluída em "{visita.edificacao.nome}" ({visita.data_visita:%d/%m/%Y}).')
+        messages.success(request, 'Visita marcada como concluída.')
+    return redirect('inspecoes:visita_detail', pk=visita.pk)
+
+
+@login_required
+@require_POST
+def visita_reabrir(request, pk):
+    visita = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
+    if not _pode_editar_visita(request.user, visita):
+        return _acesso_negado_visita(request, visita)
+    if visita.concluida:
+        visita.concluida = False
+        visita.concluida_em = None
+        visita.save(update_fields=['concluida', 'concluida_em', 'atualizado_em'])
+        _log(request, 'visita_reaberta',
+             f'Visita técnica reaberta em "{visita.edificacao.nome}" ({visita.data_visita:%d/%m/%Y}).')
+        messages.success(request, 'Visita reaberta. Já é possível registrar novas subvisitas.')
+    return redirect('inspecoes:visita_detail', pk=visita.pk)
+
+
+@login_required
+def visita_subvisita_create(request, pk):
+    visita_pai = get_object_or_404(VisitaTecnica.objects.select_related('edificacao'), pk=pk)
+    if not _pode_editar_visita(request.user, visita_pai):
+        return _acesso_negado_visita(request, visita_pai)
+    if not visita_pai.pode_receber_subvisita:
+        if visita_pai.is_subvisita:
+            messages.error(request, 'Não é possível criar subvisita de uma subvisita.')
+            return redirect('inspecoes:visita_detail', pk=visita_pai.pk)
+        messages.error(request, 'Esta visita está concluída. Reabra-a para registrar novas subvisitas.')
+        return redirect('inspecoes:visita_detail', pk=visita_pai.pk)
+
+    if request.method == 'POST':
+        form = VisitaTecnicaForm(request.POST)
+        participantes = _coletar_participantes(request)
+    else:
+        form = VisitaTecnicaForm(initial={'disciplina': visita_pai.disciplina})
+        participantes = visita_pai.participantes_lista or [request.user.get_full_name()]
+    erro_participantes = None
+    if request.method == 'POST' and form.is_valid():
+        if not participantes:
+            erro_participantes = 'Informe ao menos um profissional participante.'
+        else:
+            sub = form.save(commit=False)
+            sub.edificacao = visita_pai.edificacao
+            sub.visita_pai = visita_pai
+            sub.criado_por = request.user
+            sub.participantes = '\n'.join(participantes)
+            sub.save()
+            for arquivo in request.FILES.getlist('fotos'):
+                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                    cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
+                    VisitaFoto.objects.create(
+                        visita=sub, arquivo=cf, nome_original=nome, tamanho_bytes=tamanho,
+                    )
+            _log(request, 'subvisita_criada',
+                 f'Subvisita de acompanhamento criada em "{visita_pai.edificacao.nome}" '
+                 f'({sub.data_visita:%d/%m/%Y}) para a visita de {visita_pai.data_visita:%d/%m/%Y}.')
+            messages.success(request, 'Subvisita de acompanhamento registrada com sucesso.')
+            return redirect('inspecoes:visita_detail', pk=visita_pai.pk)
+    return render(request, 'inspecoes/visita_form.html', {
+        'form': form,
+        'edificacao': visita_pai.edificacao,
+        'visita_pai': visita_pai,
+        'participantes': participantes or [''],
+        'erro_participantes': erro_participantes,
+        'fotos_existentes': [],
     })
 
 

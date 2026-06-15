@@ -50,6 +50,7 @@
           <th>Data</th>
           <th>Participantes</th>
           <th>Motivo</th>
+          <th class="text-center">Situação</th>
           <th class="text-center">Fotos</th>
           <th class="text-center">Ação</th>
         </tr>
@@ -60,6 +61,14 @@
           <td>{{ v.data_visita|date:"d/m/Y" }}</td>
           <td>{{ v.participantes_display|truncatechars:50 }}</td>
           <td>{{ v.motivo|truncatechars:60 }}</td>
+          <td class="text-center">
+            {% if v.concluida %}
+            <span class="badge bg-success"><i class="bi bi-check2-all"></i> Concluída</span>
+            {% else %}
+            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Em acompanhamento</span>
+            {% endif %}
+            {% if v.num_subvisitas %}<span class="badge bg-info text-dark" title="Subvisitas de acompanhamento">+{{ v.num_subvisitas }}</span>{% endif %}
+          </td>
           <td class="text-center">{{ v.num_fotos }}</td>
           <td class="text-center">
             <a href="{% url 'inspecoes:visita_detail' v.pk %}" class="btn btn-sm btn-outline-primary">
