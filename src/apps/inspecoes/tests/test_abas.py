@@ -65,3 +65,34 @@ def test_criar_achado_redireciona_para_aba_da_especialidade(client, cenario):
     assert resp.status_code == 302
     assert resp.url.endswith(f'?aba={ele.pk}')
     assert Achado.objects.filter(especialidade=ele).exists()
+
+
+@pytest.mark.django_db
+def test_achado_nao_conforme_sem_gut_mostra_erro(client, cenario):
+    """Achado não conforme sem notas GUT deve dar erro de validação, não 500."""
+    from apps.inspecoes.models import Achado, OpcaoCampo
+    insp, civ, ele = cenario
+    OpcaoCampo.objects.create(campo='localizacao', label='Terreo', ativo=True)
+    resp = client.post(reverse('inspecoes:achado_create', args=[ele.pk]), {
+        'localizacao': 'Terreo', 'verificacao': 'Fissura', 'grupo_tecnico': '',
+        'requisito_afetado': '', 'prioridade_risco': 1,
+        'direcionamento': 'manutencao', 'prazo_meses': 12,
+        # gravidade/urgencia/tendencia omitidos de proposito
+    })
+    assert resp.status_code == 200  # re-renderiza com erro
+    assert not Achado.objects.filter(especialidade=ele).exists()
+
+
+@pytest.mark.django_db
+def test_achado_nao_conforme_com_gut_salva_e_calcula(client, cenario):
+    from apps.inspecoes.models import Achado, OpcaoCampo
+    insp, civ, ele = cenario
+    OpcaoCampo.objects.create(campo='localizacao', label='Terreo', ativo=True)
+    resp = client.post(reverse('inspecoes:achado_create', args=[ele.pk]), {
+        'localizacao': 'Terreo', 'verificacao': 'Fissura', 'grupo_tecnico': '',
+        'requisito_afetado': '', 'gravidade': 4, 'urgencia': 3, 'tendencia': 2,
+        'prioridade_risco': 1, 'direcionamento': 'manutencao', 'prazo_meses': 12,
+    })
+    assert resp.status_code == 302
+    achado = Achado.objects.get(especialidade=ele)
+    assert achado.gut_total == 24

@@ -175,9 +175,14 @@ class Achado(models.Model):
                     raise ValidationError({campo: 'A nota deve ser entre 1 e 5.'})
 
     def save(self, *args, **kwargs):
+        # Defesa: as colunas GUT são NOT NULL. Nunca persiste None
+        # (a coluna usa default 1) para evitar IntegrityError em qualquer caminho.
+        self.gravidade = self.gravidade or 1
+        self.urgencia = self.urgencia or 1
+        self.tendencia = self.tendencia or 1
         if self.em_conformidade:
             self.gut_total = 0
-        elif self.gravidade and self.urgencia and self.tendencia:
+        else:
             self.gut_total = self.gravidade * self.urgencia * self.tendencia
         super().save(*args, **kwargs)
 

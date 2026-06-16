@@ -185,6 +185,11 @@ class AchadoForm(forms.ModelForm):
             cleaned['direcionamento'] = 'manutencao'
             cleaned['prazo_meses'] = 12
             cleaned['prioridade_risco'] = 3
+        else:
+            # Não conforme: as notas GUT são obrigatórias (base da análise).
+            for campo in ('gravidade', 'urgencia', 'tendencia'):
+                if cleaned.get(campo) is None:
+                    self.add_error(campo, 'Informe uma nota de 1 a 5.')
         return cleaned
 
 
