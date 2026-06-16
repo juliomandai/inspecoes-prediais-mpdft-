@@ -73,11 +73,9 @@ class InspecaoEspecialidade(models.Model):
     def __str__(self):
         return f'{self.inspecao.edificacao} — {self.get_especialidade_display()}'
 
-    def clean(self):
-        if self.data_inspecao and self.data_inspecao > date.today():
-            raise ValidationError({'data_inspecao': 'A data da inspeção não pode ser futura.'})
-        if not self.profissionais_lista:
-            raise ValidationError({'profissional': 'Informe ao menos um profissional responsável.'})
+    # Datas futuras são permitidas (pré-cadastro antes de ir ao local) e a
+    # exigência de ao menos um profissional é validada na view, que monta o
+    # campo 'profissional' a partir dos inputs dinâmicos.
 
     @property
     def profissionais_lista(self):

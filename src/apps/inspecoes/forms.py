@@ -34,12 +34,6 @@ class InspecaoForm(forms.ModelForm):
         else:
             self.fields['data_criacao'].initial = date.today()
 
-    def clean_data_criacao(self):
-        data = self.cleaned_data['data_criacao']
-        if data and data > date.today():
-            raise forms.ValidationError('A data não pode ser futura.')
-        return data
-
 
 class EspecialidadeForm(forms.ModelForm):
     data_inspecao = forms.DateField(

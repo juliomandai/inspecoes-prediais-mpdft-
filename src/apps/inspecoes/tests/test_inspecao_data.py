@@ -59,12 +59,31 @@ def test_form_edicao_mostra_data_em_iso(client, usuario_logado, edificacao):
 
 
 @pytest.mark.django_db
-def test_data_criacao_futura_barrada(client, usuario_logado, edificacao):
+def test_especialidade_aceita_data_futura(client, usuario_logado, edificacao):
+    """Especialidade pode ter data de inspeção futura (pré-cadastro)."""
+    from apps.inspecoes.models import Inspecao, InspecaoEspecialidade
+    insp = Inspecao.objects.create(edificacao=edificacao)
+    futura = date.today() + timedelta(days=10)
+    url = reverse('inspecoes:especialidade_create', args=[insp.pk])
+    resp = client.post(url, {
+        'especialidade': 'civil',
+        'profissionais': 'Fulano de Tal',
+        'data_inspecao': futura.isoformat(),
+    })
+    assert resp.status_code == 302
+    esp = InspecaoEspecialidade.objects.get(inspecao=insp)
+    assert esp.data_inspecao == futura
+
+
+@pytest.mark.django_db
+def test_data_criacao_futura_permitida(client, usuario_logado, edificacao):
+    """Datas futuras são permitidas para pré-cadastrar uma inspeção."""
     from apps.inspecoes.models import Inspecao
     futura = (date.today() + timedelta(days=3)).isoformat()
     resp = client.post(reverse('inspecoes:create'), {
         'edificacao': edificacao.pk,
         'data_criacao': futura,
     })
-    assert resp.status_code == 200  # re-renderiza com erro
-    assert Inspecao.objects.count() == 0
+    assert resp.status_code == 302
+    insp = Inspecao.objects.get(edificacao=edificacao)
+    assert insp.criado_em.date().isoformat() == futura
