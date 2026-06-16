@@ -138,15 +138,18 @@ def test_lista_localidades_mostra_edificacoes_ativas(client, usuario_logado):
 @pytest.mark.django_db
 def test_visita_list_filtra_por_data(client, usuario_logado, edificacao):
     from apps.inspecoes.models import VisitaTecnica
+    # Motivos distintos e improváveis de colidir com tokens CSRF/HTML aleatórios.
+    motivo_jan = "MotivoVisitaJaneiroZZZ"
+    motivo_jun = "MotivoVisitaJunhoZZZ"
     VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date(2026, 1, 10),
-                                 participantes="A", motivo="m1", achados="x", conclusoes_encaminhamentos="x")
+                                 participantes="A", motivo=motivo_jan, achados="x", conclusoes_encaminhamentos="x")
     VisitaTecnica.objects.create(edificacao=edificacao, data_visita=date(2026, 6, 10),
-                                 participantes="A", motivo="m2", achados="x", conclusoes_encaminhamentos="x")
+                                 participantes="A", motivo=motivo_jun, achados="x", conclusoes_encaminhamentos="x")
     url = reverse('inspecoes:visita_list', args=[edificacao.pk])
     resp = client.get(url, {'data_inicio': '2026-05-01', 'data_fim': '2026-12-31'})
     assert resp.status_code == 200
-    assert b'm2' in resp.content
-    assert b'm1' not in resp.content
+    assert motivo_jun.encode() in resp.content
+    assert motivo_jan.encode() not in resp.content
 
 
 @pytest.mark.django_db
