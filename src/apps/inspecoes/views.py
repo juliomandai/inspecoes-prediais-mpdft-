@@ -424,6 +424,55 @@ def achado_delete(request, pk):
     return _redirect_detail(inspecao_pk, esp_pk)
 
 
+@login_required
+def achado_duplicate(request, pk):
+    original = get_object_or_404(Achado.objects.select_related('especialidade__inspecao'), pk=pk)
+    esp = original.especialidade
+    if not esp.pode_editar:
+        messages.error(request, 'Não é possível duplicar achados de uma especialidade finalizada. Reabra primeiro.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+
+    if request.method == 'POST':
+        form = AchadoForm(request.POST)
+        if form.is_valid():
+            novo = form.save(commit=False)
+            novo.especialidade = esp
+            novo.save()
+            for arquivo in request.FILES.getlist('fotos'):
+                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                    cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
+                    Foto.objects.create(achado=novo, arquivo=cf, nome_original=nome, tamanho_bytes=tamanho)
+            _log(request, 'achado_criado',
+                 f'Achado duplicado de #{original.pk}: "{novo.verificacao}" em '
+                 f'{esp.get_especialidade_display()} — "{esp.inspecao.edificacao}".')
+            messages.success(request, 'Achado duplicado com sucesso.')
+            return _redirect_detail(esp.inspecao_id, esp.pk)
+    else:
+        initial = {
+            'verificacao': original.verificacao,
+            'grupo_tecnico': original.grupo_tecnico,
+            'em_conformidade': original.em_conformidade,
+            'descricao_nao_conformidade': original.descricao_nao_conformidade,
+            'requisito_afetado': original.requisito_afetado,
+            'gravidade': original.gravidade,
+            'urgencia': original.urgencia,
+            'tendencia': original.tendencia,
+            'prioridade_risco': original.prioridade_risco,
+            'recomendacao': original.recomendacao,
+            'direcionamento': original.direcionamento,
+            'prazo_meses': original.prazo_meses,
+            # localizacao e sub_localizacao em branco: o usuário deve definir
+        }
+        form = AchadoForm(initial=initial)
+
+    return render(request, 'inspecoes/achado_form.html', {
+        'form': form,
+        'especialidade': esp,
+        'fotos_existentes': [],
+        'duplicando_de': original,
+    })
+
+
 # ── Fotos ──────────────────────────────────────────────────────────────────────
 
 ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/png'}

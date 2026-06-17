@@ -1,11 +1,17 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}{% if achado %}Editar Achado{% else %}Novo Achado{% endif %} — Inspeções Prediais MPDFT{% endblock %}
+{% block title %}{% if achado %}Editar Achado{% elif duplicando_de %}Duplicar Achado{% else %}Novo Achado{% endif %} — Inspeções Prediais MPDFT{% endblock %}
 
 {% block content %}
+{% if duplicando_de %}
+<div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
+  <i class="bi bi-copy"></i>
+  <span>Duplicando o achado <strong>"{{ duplicando_de.verificacao }}"</strong> — defina a nova localização abaixo e ajuste os demais campos se necessário.</span>
+</div>
+{% endif %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h4 class="mb-0">{% if achado %}Editar Achado{% else %}Novo Achado{% endif %}</h4>
+    <h4 class="mb-0">{% if achado %}Editar Achado{% elif duplicando_de %}Duplicar Achado{% else %}Novo Achado{% endif %}</h4>
     <small class="text-muted">
       {{ especialidade.inspecao.edificacao }} &mdash; {{ especialidade.get_especialidade_display }} ({{ especialidade.data_inspecao|date:"d/m/Y" }})
     </small>

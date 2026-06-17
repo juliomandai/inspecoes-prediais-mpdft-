@@ -218,13 +218,16 @@
           <span class="badge bg-success">GUT {{ achado.gut_total }} — Mínimo</span>
           {% endif %}
           {% if esp.status == 'em_andamento' %}
-          <a href="{% url 'inspecoes:achado_update' achado.pk %}" class="btn btn-sm btn-outline-secondary no-print">
+          <a href="{% url 'inspecoes:achado_update' achado.pk %}" class="btn btn-sm btn-outline-secondary no-print" title="Editar achado">
             <i class="bi bi-pencil"></i>
+          </a>
+          <a href="{% url 'inspecoes:achado_duplicate' achado.pk %}" class="btn btn-sm btn-outline-primary no-print" title="Duplicar achado com nova localização">
+            <i class="bi bi-copy"></i>
           </a>
           <form method="post" action="{% url 'inspecoes:achado_delete' achado.pk %}" class="no-print"
                 onsubmit="return confirm('Excluir este achado? As fotos vinculadas também serão removidas.');">
             {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-outline-danger">
+            <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir achado">
               <i class="bi bi-trash"></i>
             </button>
           </form>
