@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Achado — {{ achado.verificacao }} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+{% with esp=achado.especialidade %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h4 class="mb-0">Achado</h4>
+    <small class="text-muted">
+      {{ esp.inspecao.edificacao }} &mdash; {{ esp.get_especialidade_display }} ({{ esp.data_inspecao|date:"d/m/Y" }})
+    </small>
+  </div>
+  <div class="d-flex gap-2">
+    {% if esp.pode_editar %}
+    <a href="{% url 'inspecoes:achado_duplicate' achado.pk %}" class="btn btn-outline-primary btn-sm" title="Duplicar com nova localização">
+      <i class="bi bi-copy"></i> Duplicar
+    </a>
+    <a href="{% url 'inspecoes:achado_update' achado.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pencil"></i> Editar
+    </a>
+    {% endif %}
+    <a href="{% url 'inspecoes:detail' esp.inspecao.pk %}?aba={{ esp.pk }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </div>
+</div>
+
+{% if esp.status == 'finalizada' %}
+<div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2">
+  <i class="bi bi-lock"></i>
+  <span>Esta especialidade está <strong>finalizada</strong>. Visualização somente leitura.</span>
+</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-header fw-bold"><i class="bi bi-geo-alt"></i> 1. Localização</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="text-muted small mb-1">Localização</div>
+        <div>{{ achado.localizacao|default:"—" }}</div>
+      </div>
+      <div class="col-md-6">
+        <div class="text-muted small mb-1">Sub-localização</div>
+        <div>{{ achado.sub_localizacao|default:"—" }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold"><i class="bi bi-search"></i> 2. Identificação</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-8">
+        <div class="text-muted small mb-1">Item de verificação</div>
+        <div>{{ achado.verificacao }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Grupo técnico</div>
+        <div>{{ achado.grupo_tecnico|default:"—" }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold"><i class="bi bi-clipboard2-x"></i> 3. Diagnóstico</div>
+  <div class="card-body">
+    {% if achado.em_conformidade %}
+    <div class="d-flex align-items-center gap-2 text-success fw-semibold">
+      <i class="bi bi-check-circle-fill"></i> Item em conformidade
+    </div>
+    {% else %}
+    <div class="row g-3">
+      <div class="col-md-8">
+        <div class="text-muted small mb-1">Descrição da não conformidade</div>
+        <div>{{ achado.descricao_nao_conformidade|default:"—" }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Requisito afetado</div>
+        <div>{{ achado.requisito_afetado|default:"—" }}</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if not achado.em_conformidade %}
+<div class="card mb-3">
+  <div class="card-header fw-bold"><i class="bi bi-bar-chart"></i> 4. Matriz GUT</div>
+  <div class="card-body">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-2">
+        <div class="text-muted small mb-1">Gravidade (G)</div>
+        <div class="fs-5 fw-bold">{{ achado.gravidade }}</div>
+      </div>
+      <div class="col-md-2">
+        <div class="text-muted small mb-1">Urgência (U)</div>
+        <div class="fs-5 fw-bold">{{ achado.urgencia }}</div>
+      </div>
+      <div class="col-md-2">
+        <div class="text-muted small mb-1">Tendência (T)</div>
+        <div class="fs-5 fw-bold">{{ achado.tendencia }}</div>
+      </div>
+      <div class="col-md-3 text-center">
+        <div class="text-muted small mb-1">Índice GUT (G × U × T)</div>
+        <span class="badge badge-p{{ achado.prioridade_risco }} fs-4">{{ achado.gut_total }}</span>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small mb-1">Análise de risco</div>
+        <div>{{ achado.get_prioridade_risco_display }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold"><i class="bi bi-tools"></i> 5. Recomendação</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-12">
+        <div class="text-muted small mb-1">Recomendação técnica</div>
+        <div>{{ achado.recomendacao|default:"—" }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Direcionamento</div>
+        <div>{{ achado.get_direcionamento_display }}</div>
+      </div>
+      {% if achado.ordem_servico %}
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Ordem de serviço (Resolve)</div>
+        <div><strong>{{ achado.ordem_servico }}</strong></div>
+      </div>
+      {% endif %}
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Prazo para resolução</div>
+        <div>{{ achado.get_prazo_meses_display }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-header fw-bold"><i class="bi bi-camera"></i> 6. Fotos</div>
+  <div class="card-body">
+    {% if achado.fotos.all %}
+    <div class="d-flex flex-wrap gap-2">
+      {% for foto in achado.fotos.all %}
+      <button type="button" class="btn p-0 border-0 bg-transparent js-foto-zoom"
+              data-foto-url="{{ foto.arquivo.url }}" data-foto-nome="{{ foto.nome_original }}"
+              title="Ampliar {{ foto.nome_original }}" style="cursor:zoom-in;">
+        <img src="{{ foto.arquivo.url }}" alt="{{ foto.nome_original }}"
+             style="height:110px;width:110px;object-fit:cover;border:1px solid #dee2e6;border-radius:4px;"
+             loading="lazy">
+        <div class="small text-muted text-truncate mt-1" style="max-width:110px;" title="{{ foto.nome_original }}">
+          {{ foto.nome_original }}
+        </div>
+      </button>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">Nenhuma foto registrada.</p>
+    {% endif %}
+  </div>
+</div>
+{% endwith %}
+{% endblock %}

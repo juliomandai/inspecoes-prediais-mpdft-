@@ -35,6 +35,7 @@ urlpatterns = [
 
     # ── Achados ────────────────────────────────────────────────────────────────
     path('especialidades/<int:esp_pk>/achados/novo/', views.achado_create, name='achado_create'),
+    path('achados/<int:pk>/', views.achado_detail, name='achado_detail'),
     path('achados/<int:pk>/editar/', views.achado_update, name='achado_update'),
     path('achados/<int:pk>/excluir/', views.achado_delete, name='achado_delete'),
     path('achados/<int:pk>/duplicar/', views.achado_duplicate, name='achado_duplicate'),

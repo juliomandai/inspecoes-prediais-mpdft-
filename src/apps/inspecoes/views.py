@@ -389,6 +389,15 @@ def achado_create(request, esp_pk):
 
 
 @login_required
+def achado_detail(request, pk):
+    achado = get_object_or_404(
+        Achado.objects.select_related('especialidade__inspecao__edificacao').prefetch_related('fotos'),
+        pk=pk,
+    )
+    return render(request, 'inspecoes/achado_detail.html', {'achado': achado})
+
+
+@login_required
 def achado_update(request, pk):
     achado = get_object_or_404(Achado.objects.select_related('especialidade__inspecao'), pk=pk)
     if not achado.especialidade.pode_editar:

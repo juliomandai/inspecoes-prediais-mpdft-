@@ -200,12 +200,14 @@
     <div class="border-bottom px-3 py-2">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <strong>{{ forloop.counter }}. {{ achado.localizacao }}</strong>
-          {% if achado.sub_localizacao %}
-          <span class="text-muted"> / {{ achado.sub_localizacao }}</span>
-          {% endif %}
-          <br>
-          <small class="text-muted">{{ achado.verificacao }}</small>
+          <a href="{% url 'inspecoes:achado_detail' achado.pk %}" class="text-decoration-none text-body">
+            <strong>{{ forloop.counter }}. {{ achado.localizacao }}</strong>
+            {% if achado.sub_localizacao %}
+            <span class="text-muted"> / {{ achado.sub_localizacao }}</span>
+            {% endif %}
+            <br>
+            <small class="text-muted">{{ achado.verificacao }}</small>
+          </a>
         </div>
         <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-2">
           {% if achado.em_conformidade %}
