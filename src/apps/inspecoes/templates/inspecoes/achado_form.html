@@ -144,6 +144,14 @@
           {{ form.direcionamento }}
           {% if form.direcionamento.errors %}<div class="text-danger small mt-1">{{ form.direcionamento.errors }}</div>{% endif %}
         </div>
+        <div class="col-md-4" id="campo-ordem-servico" style="display:none;">
+          <label for="{{ form.ordem_servico.id_for_label }}" class="form-label">
+            {{ form.ordem_servico.label }} <span class="text-muted fw-normal">(opcional)</span>
+          </label>
+          {{ form.ordem_servico }}
+          {% if form.ordem_servico.errors %}<div class="text-danger small mt-1">{{ form.ordem_servico.errors }}</div>{% endif %}
+          <div class="form-text">Número da OS aberta no sistema Resolve.</div>
+        </div>
         <div class="col-md-4">
           <label for="{{ form.prazo_meses.id_for_label }}" class="form-label">{{ form.prazo_meses.label }}</label>
           {{ form.prazo_meses }}
@@ -313,6 +321,21 @@
 })();
 </script>
 <script>
+// ── Ordem de serviço — visível apenas quando direcionamento = manutenção ──
+(function () {
+  var sel = document.getElementById('id_direcionamento');
+  var campo = document.getElementById('campo-ordem-servico');
+  if (!sel || !campo) return;
+  function atualizar() {
+    campo.style.display = sel.value === 'manutencao' ? '' : 'none';
+    if (sel.value !== 'manutencao') {
+      var inp = document.getElementById('{{ form.ordem_servico.id_for_label }}');
+      if (inp) inp.value = '';
+    }
+  }
+  atualizar();
+  sel.addEventListener('change', atualizar);
+})();
 // ── Controle de conformidade ───────────────────────────────────────────────
 (function () {
   var chk = document.getElementById('id_em_conformidade');

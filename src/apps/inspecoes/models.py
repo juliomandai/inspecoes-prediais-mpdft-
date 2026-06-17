@@ -156,6 +156,10 @@ class Achado(models.Model):
     prioridade_risco = models.IntegerField('Análise de risco', choices=PRIORIDADE_CHOICES, default=3)
     recomendacao = models.TextField('Recomendação técnica', blank=True)
     direcionamento = models.CharField('Direcionamento', max_length=30, choices=DIRECIONAMENTO_CHOICES, default='manutencao')
+    ordem_servico = models.CharField(
+        'Ordem de serviço (Resolve)', max_length=50, blank=True,
+        help_text='Número da OS aberta no sistema Resolve. Preencher quando direcionamento for Manutenção.',
+    )
     prazo_meses = models.IntegerField('Prazo para resolução', choices=PRAZO_CHOICES, default=12)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

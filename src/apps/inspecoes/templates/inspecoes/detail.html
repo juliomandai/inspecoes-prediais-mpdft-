@@ -260,6 +260,11 @@
         <span class="text-muted">Recomendação:</span> {{ achado.recomendacao }}
       </div>
       {% endif %}
+      {% if achado.ordem_servico %}
+      <div class="mt-1 small">
+        <span class="text-muted">OS Resolve:</span> <strong>{{ achado.ordem_servico }}</strong>
+      </div>
+      {% endif %}
       {% endif %}
 
       {% if achado.fotos.all %}
