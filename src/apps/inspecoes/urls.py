@@ -60,6 +60,12 @@ urlpatterns = [
     path('visitas/<int:visita_pk>/fotos/', views.visita_foto_upload, name='visita_foto_upload'),
     path('visitas/fotos/<int:pk>/', views.visita_foto_delete, name='visita_foto_delete'),
 
+    # ── Acompanhamento (gestão do ciclo de vida dos achados) ───────────────────
+    path('acompanhamento/', views.acompanhamento_painel, name='acompanhamento_painel'),
+    path('acompanhamento/lista/', views.acompanhamento_lista, name='acompanhamento_lista'),
+    path('acompanhamento/achado/<int:pk>/', views.acompanhamento_achado, name='acompanhamento_achado'),
+    path('acompanhamento/achado/<int:pk>/reclassificar/', views.achado_reclassificar, name='achado_reclassificar'),
+
     # ── PWA ────────────────────────────────────────────────────────────────────
     path('offline/', views.offline_page, name='offline'),
     path('api/achados/sincronizar/', views.achado_sincronizar, name='achado_sincronizar'),

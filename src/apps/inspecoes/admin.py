@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, LogAcesso, VisitaTecnica, VisitaFoto
+from .models import (
+    Inspecao, InspecaoEspecialidade, Achado, Foto, LogAcesso,
+    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico,
+)
 
 
 class FotoInline(admin.TabularInline):
@@ -43,10 +46,25 @@ class InspecaoEspecialidadeAdmin(admin.ModelAdmin):
 
 @admin.register(Achado)
 class AchadoAdmin(admin.ModelAdmin):
-    list_display = ['especialidade', 'localizacao', 'verificacao', 'gut_total', 'prioridade_risco']
-    list_filter = ['prioridade_risco', 'grupo_tecnico', 'direcionamento']
+    list_display = ['especialidade', 'localizacao', 'verificacao', 'gut_total', 'prioridade_risco', 'direcionamento', 'status']
+    list_filter = ['prioridade_risco', 'grupo_tecnico', 'direcionamento', 'status']
     readonly_fields = ['gut_total']
     inlines = [FotoInline]
+
+
+@admin.register(EncaminhamentoHistorico)
+class EncaminhamentoHistoricoAdmin(admin.ModelAdmin):
+    list_display = ['achado', 'de_direcionamento', 'para_direcionamento', 'usuario', 'criado_em']
+    list_filter = ['de_direcionamento', 'para_direcionamento']
+    search_fields = ['achado__verificacao', 'justificativa', 'usuario__username']
+    date_hierarchy = 'criado_em'
+    readonly_fields = ['achado', 'usuario', 'de_direcionamento', 'para_direcionamento', 'justificativa', 'criado_em']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 class VisitaFotoInline(admin.TabularInline):

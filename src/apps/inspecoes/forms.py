@@ -269,6 +269,74 @@ class VisitaFilterForm(forms.Form):
     )
 
 
+class AcompanhamentoFilterForm(forms.Form):
+    """Filtros do módulo Acompanhamento (combináveis): localidade, especialidade e status."""
+    localidade = forms.ModelChoiceField(
+        queryset=Edificacao.objects.filter(ativo=True),
+        required=False, label='Localidade',
+        empty_label='Todas as localidades',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    especialidade = forms.ChoiceField(
+        choices=[('', 'Todas')] + InspecaoEspecialidade.ESPECIALIDADE_CHOICES,
+        required=False, label='Especialidade',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    status = forms.ChoiceField(
+        choices=[('', 'Todos')] + Achado.STATUS_ACOMPANHAMENTO_CHOICES,
+        required=False, label='Status',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+
+class ReclassificarForm(forms.Form):
+    """Altera o encaminhamento de um achado, exigindo justificativa (rastreabilidade)."""
+    para_direcionamento = forms.ChoiceField(
+        label='Novo encaminhamento',
+        choices=Achado.DIRECIONAMENTO_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    justificativa = forms.CharField(
+        label='Justificativa da alteração',
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3,
+                                     'placeholder': 'Explique o motivo da reclassificação.'}),
+    )
+
+    def __init__(self, *args, atual=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._atual = atual
+
+    def clean_para_direcionamento(self):
+        novo = self.cleaned_data['para_direcionamento']
+        if self._atual is not None and novo == self._atual:
+            raise forms.ValidationError('Selecione um encaminhamento diferente do atual.')
+        return novo
+
+
+class AcompanhamentoAchadoForm(forms.ModelForm):
+    """Status e dados de tratativa (campos de manutenção) editados no Acompanhamento."""
+    status = forms.ChoiceField(
+        label='Status', choices=Achado.STATUS_ACOMPANHAMENTO_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    os_data_abertura = forms.DateField(
+        label='Data de abertura da OS', required=False, input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'),
+    )
+
+    class Meta:
+        model = Achado
+        fields = ['status', 'ordem_servico', 'os_data_abertura', 'os_observacoes']
+        widgets = {
+            'ordem_servico': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 12345'}),
+            'os_observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+        labels = {
+            'ordem_servico': 'Número da OS (Resolve)',
+            'os_observacoes': 'Observações complementares',
+        }
+
+
 class SignUpForm(forms.Form):
     """Cadastro de novo usuário (sem permissão de administrador)."""
     nome_completo = forms.CharField(

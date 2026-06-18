@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}Acompanhamento — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="mb-0"><i class="bi bi-kanban"></i> Acompanhamento</h4>
+    <small class="text-muted">Gestão consolidada dos achados de todas as inspeções</small>
+  </div>
+</div>
+
+{% if total == 0 %}
+<div class="alert alert-info">
+  Nenhum achado não conforme registrado ainda. Os achados aparecerão aqui assim que forem cadastrados nas inspeções.
+</div>
+{% else %}
+
+{# ── KPIs principais ─────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card h-100 text-center">
+      <div class="card-body py-3">
+        <div class="text-muted small">Total de achados</div>
+        <div class="display-6 fw-bold">{{ total }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 text-center">
+      <div class="card-body py-3">
+        <div class="text-muted small">Pendentes</div>
+        <div class="display-6 fw-bold text-secondary">{{ pendentes }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 text-center">
+      <div class="card-body py-3">
+        <div class="text-muted small">Em andamento</div>
+        <div class="display-6 fw-bold text-warning">{{ em_andamento }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 text-center">
+      <div class="card-body py-3">
+        <div class="text-muted small">Finalizados</div>
+        <div class="display-6 fw-bold text-success">{{ finalizados }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── % de conclusão ──────────────────────────────────────────────────────── #}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <span class="fw-semibold">Percentual de conclusão</span>
+      <span class="fw-bold">{{ pct_conclusao }}%</span>
+    </div>
+    <div class="progress" style="height:1.25rem;">
+      <div class="progress-bar bg-success" role="progressbar" style="width: {{ pct_conclusao }}%;"
+           aria-valuenow="{{ pct_conclusao }}" aria-valuemin="0" aria-valuemax="100">{{ pct_conclusao }}%</div>
+    </div>
+    <small class="text-muted">{{ finalizados }} de {{ total }} achados finalizados.</small>
+  </div>
+</div>
+
+{# ── Categorias (encaminhamento) — navegação ─────────────────────────────── #}
+<h6 class="text-muted text-uppercase small mb-2">Categorias de encaminhamento</h6>
+<div class="row g-3 mb-4">
+  {% for c in por_categoria %}
+  <div class="col-12 col-md-4">
+    <a href="{% url 'inspecoes:acompanhamento_lista' %}?categoria={{ c.chave }}"
+       class="card h-100 text-decoration-none text-body shadow-sm">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">
+            {% if c.chave == 'manutencao' %}<i class="bi bi-tools text-primary"></i>
+            {% elif c.chave == 'nova_contratacao' %}<i class="bi bi-file-earmark-text text-info"></i>
+            {% else %}<i class="bi bi-shield-check text-success"></i>{% endif %}
+            {{ c.nome }}
+          </div>
+          <small class="text-muted">Ver achados e tratativas</small>
+        </div>
+        <span class="badge bg-primary rounded-pill fs-6">{{ c.total }}</span>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+{# ── Quadros consolidados ────────────────────────────────────────────────── #}
+<div class="row g-3">
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header fw-bold"><i class="bi bi-flag"></i> Por status</div>
+      <ul class="list-group list-group-flush">
+        {% for s in por_status %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          {{ s.nome }}
+          <span class="badge bg-secondary rounded-pill">{{ s.total }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header fw-bold"><i class="bi bi-diagram-3"></i> Por especialidade</div>
+      <ul class="list-group list-group-flush">
+        {% for e in por_especialidade %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          {{ e.nome }}
+          <span class="badge bg-secondary rounded-pill">{{ e.total }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header fw-bold"><i class="bi bi-geo-alt"></i> Por localidade</div>
+      <ul class="list-group list-group-flush" style="max-height:18rem;overflow-y:auto;">
+        {% for l in por_localidade %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          {{ l.nome }}
+          <span class="badge bg-secondary rounded-pill">{{ l.total }}</span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted">—</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

@@ -17,8 +17,15 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso, VisitaTecnica, VisitaFoto
-from .forms import InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm, VisitaTecnicaForm, VisitaFilterForm, SignUpForm
+from .models import (
+    Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso,
+    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico,
+)
+from .forms import (
+    InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm,
+    VisitaTecnicaForm, VisitaFilterForm, SignUpForm,
+    AcompanhamentoFilterForm, ReclassificarForm, AcompanhamentoAchadoForm,
+)
 from .imagens import comprimir_imagem
 
 
@@ -516,6 +523,167 @@ def foto_delete(request, pk):
     foto = get_object_or_404(Foto.objects.select_related('achado__especialidade'), pk=pk)
     foto.delete()
     return HttpResponse(status=204)
+
+
+# ── Acompanhamento — gestão do ciclo de vida dos achados ─────────────────────
+
+def _acompanhamento_qs():
+    """Achados de todas as inspeções que demandam ação (não conformes)."""
+    return (
+        Achado.objects.filter(gut_total__gt=0)
+        .select_related('especialidade__inspecao__edificacao')
+    )
+
+
+def _aplicar_filtros_acompanhamento(qs, form):
+    """Aplica os filtros combináveis (localidade, especialidade, status)."""
+    if form.is_valid():
+        if form.cleaned_data.get('localidade'):
+            qs = qs.filter(especialidade__inspecao__edificacao=form.cleaned_data['localidade'])
+        if form.cleaned_data.get('especialidade'):
+            qs = qs.filter(especialidade__especialidade=form.cleaned_data['especialidade'])
+        if form.cleaned_data.get('status'):
+            qs = qs.filter(status=form.cleaned_data['status'])
+    return qs
+
+
+@login_required
+def acompanhamento_painel(request):
+    achados = list(_acompanhamento_qs())
+    total = len(achados)
+
+    por_categoria = [
+        {'chave': k, 'nome': nome, 'total': sum(1 for a in achados if a.direcionamento == k)}
+        for k, nome in Achado.DIRECIONAMENTO_CHOICES
+    ]
+    por_status = [
+        {'chave': k, 'nome': nome, 'total': sum(1 for a in achados if a.status == k)}
+        for k, nome in Achado.STATUS_ACOMPANHAMENTO_CHOICES
+    ]
+    por_especialidade = [
+        {'chave': k, 'nome': nome, 'total': sum(1 for a in achados if a.especialidade.especialidade == k)}
+        for k, nome in InspecaoEspecialidade.ESPECIALIDADE_CHOICES
+    ]
+
+    loc_map = {}
+    for a in achados:
+        edif = a.especialidade.inspecao.edificacao
+        item = loc_map.setdefault(edif.pk, {'nome': str(edif), 'total': 0})
+        item['total'] += 1
+    por_localidade = sorted(loc_map.values(), key=lambda x: -x['total'])
+
+    finalizados = sum(1 for a in achados if a.status == 'finalizado')
+    em_andamento = sum(1 for a in achados if a.status == 'em_andamento')
+    pendentes = sum(1 for a in achados if a.status == 'pendente')
+    pct_conclusao = round(finalizados / total * 100) if total else 0
+
+    return render(request, 'inspecoes/acompanhamento_painel.html', {
+        'total': total,
+        'por_categoria': por_categoria,
+        'por_status': por_status,
+        'por_especialidade': por_especialidade,
+        'por_localidade': por_localidade,
+        'finalizados': finalizados,
+        'em_andamento': em_andamento,
+        'pendentes': pendentes,
+        'pct_conclusao': pct_conclusao,
+    })
+
+
+@login_required
+def acompanhamento_lista(request):
+    categorias_validas = dict(Achado.DIRECIONAMENTO_CHOICES)
+    categoria = request.GET.get('categoria', 'manutencao')
+    if categoria not in categorias_validas:
+        categoria = 'manutencao'
+
+    form = AcompanhamentoFilterForm(request.GET or None)
+    base = _aplicar_filtros_acompanhamento(_acompanhamento_qs(), form)
+
+    # Contagem por categoria (respeita os demais filtros) para os badges das abas.
+    contagens = {k: 0 for k, _ in Achado.DIRECIONAMENTO_CHOICES}
+    for k in contagens:
+        contagens[k] = base.filter(direcionamento=k).count()
+
+    achados = list(
+        base.filter(direcionamento=categoria)
+        .prefetch_related('fotos')
+        .order_by('prioridade_risco', '-gut_total')
+    )
+
+    # Querystring dos filtros (sem 'categoria') para preservar nas abas.
+    from urllib.parse import urlencode
+    filtros = {key: request.GET.get(key) for key in ('localidade', 'especialidade', 'status') if request.GET.get(key)}
+    filtros_qs = urlencode(filtros)
+
+    abas = [
+        {'chave': k, 'nome': nome, 'total': contagens[k]}
+        for k, nome in Achado.DIRECIONAMENTO_CHOICES
+    ]
+
+    return render(request, 'inspecoes/acompanhamento_lista.html', {
+        'categoria': categoria,
+        'categoria_nome': categorias_validas[categoria],
+        'abas': abas,
+        'form': form,
+        'achados': achados,
+        'filtros_qs': filtros_qs,
+        'is_manutencao': categoria == 'manutencao',
+    })
+
+
+@login_required
+def acompanhamento_achado(request, pk):
+    achado = get_object_or_404(
+        _acompanhamento_qs().prefetch_related('fotos', 'historico_encaminhamento__usuario'),
+        pk=pk,
+    )
+    if request.method == 'POST':
+        form = AcompanhamentoAchadoForm(request.POST, instance=achado)
+        if form.is_valid():
+            form.save()
+            _log(request, 'achado_acompanhamento',
+                 f'Acompanhamento atualizado: "{achado.verificacao}" — status {achado.get_status_display()}.')
+            messages.success(request, 'Acompanhamento atualizado com sucesso.')
+            return redirect('inspecoes:acompanhamento_achado', pk=achado.pk)
+    else:
+        form = AcompanhamentoAchadoForm(instance=achado)
+
+    reclass_form = ReclassificarForm(atual=achado.direcionamento,
+                                     initial={'para_direcionamento': achado.direcionamento})
+    return render(request, 'inspecoes/acompanhamento_achado.html', {
+        'achado': achado,
+        'form': form,
+        'reclass_form': reclass_form,
+        'historico': achado.historico_encaminhamento.all(),
+        'is_manutencao': achado.direcionamento == 'manutencao',
+    })
+
+
+@login_required
+@require_POST
+def achado_reclassificar(request, pk):
+    achado = get_object_or_404(_acompanhamento_qs(), pk=pk)
+    form = ReclassificarForm(request.POST, atual=achado.direcionamento)
+    if form.is_valid():
+        de = achado.direcionamento
+        para = form.cleaned_data['para_direcionamento']
+        labels = dict(Achado.DIRECIONAMENTO_CHOICES)
+        EncaminhamentoHistorico.objects.create(
+            achado=achado, usuario=request.user,
+            de_direcionamento=de, para_direcionamento=para,
+            justificativa=form.cleaned_data['justificativa'],
+        )
+        achado.direcionamento = para
+        achado.save()
+        _log(request, 'achado_reclassificado',
+             f'Achado "{achado.verificacao}" reclassificado de {labels[de]} para {labels[para]}.')
+        messages.success(request, 'Encaminhamento alterado com sucesso.')
+    else:
+        for erros in form.errors.values():
+            for e in erros:
+                messages.error(request, e)
+    return redirect('inspecoes:acompanhamento_achado', pk=achado.pk)
 
 
 # ── PWA — Service Worker, Manifest e página offline ──────────────────────────

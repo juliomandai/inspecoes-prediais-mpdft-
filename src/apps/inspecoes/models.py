@@ -132,6 +132,11 @@ class Achado(models.Model):
         (2, 'Prioridade 2 — Regular'),
         (3, 'Prioridade 3 — Mínimo'),
     ]
+    STATUS_ACOMPANHAMENTO_CHOICES = [
+        ('pendente', 'Pendente'),
+        ('em_andamento', 'Em andamento'),
+        ('finalizado', 'Finalizado'),
+    ]
 
     especialidade = models.ForeignKey(
         InspecaoEspecialidade,
@@ -157,6 +162,18 @@ class Achado(models.Model):
     recomendacao = models.TextField('Recomendação técnica', blank=True)
     direcionamento = models.CharField('Direcionamento', max_length=30, choices=DIRECIONAMENTO_CHOICES, default='manutencao')
     prazo_meses = models.IntegerField('Prazo para resolução', choices=PRAZO_CHOICES, default=12)
+
+    # ── Acompanhamento (gestão do ciclo de vida — módulo "Acompanhamento") ──────
+    # Estes campos são preenchidos no módulo Acompanhamento, não no registro do
+    # achado durante a inspeção.
+    status = models.CharField(
+        'Status do acompanhamento', max_length=20,
+        choices=STATUS_ACOMPANHAMENTO_CHOICES, default='pendente',
+    )
+    ordem_servico = models.CharField('Número da OS (Resolve)', max_length=50, blank=True)
+    os_data_abertura = models.DateField('Data de abertura da OS', null=True, blank=True)
+    os_observacoes = models.TextField('Observações complementares', blank=True)
+
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -185,6 +202,35 @@ class Achado(models.Model):
         else:
             self.gut_total = self.gravidade * self.urgencia * self.tendencia
         super().save(*args, **kwargs)
+
+
+class EncaminhamentoHistorico(models.Model):
+    """Registro de cada alteração de encaminhamento (direcionamento) de um achado.
+
+    Garante rastreabilidade: quem alterou, quando, de qual categoria para qual e
+    a justificativa da mudança.
+    """
+    achado = models.ForeignKey(
+        Achado, on_delete=models.CASCADE,
+        related_name='historico_encaminhamento', verbose_name='Achado',
+    )
+    usuario = models.ForeignKey(
+        get_user_model(), on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='reclassificacoes',
+        verbose_name='Responsável',
+    )
+    de_direcionamento = models.CharField('Categoria anterior', max_length=30, choices=Achado.DIRECIONAMENTO_CHOICES)
+    para_direcionamento = models.CharField('Nova categoria', max_length=30, choices=Achado.DIRECIONAMENTO_CHOICES)
+    justificativa = models.TextField('Justificativa')
+    criado_em = models.DateTimeField('Data/hora', auto_now_add=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Histórico de encaminhamento'
+        verbose_name_plural = 'Históricos de encaminhamento'
+
+    def __str__(self):
+        return f'{self.achado} — {self.get_de_direcionamento_display()} → {self.get_para_direcionamento_display()}'
 
 
 class OpcaoCampo(models.Model):
@@ -335,6 +381,8 @@ class LogAcesso(models.Model):
         ('especialidade_excluida', 'Especialidade excluída'),
         ('achado_criado', 'Achado criado'),
         ('achado_excluido', 'Achado excluído'),
+        ('achado_reclassificado', 'Achado reclassificado'),
+        ('achado_acompanhamento', 'Acompanhamento de achado atualizado'),
         ('visita_criada', 'Visita técnica criada'),
         ('visita_excluida', 'Visita técnica excluída'),
         ('visita_concluida', 'Visita técnica concluída'),

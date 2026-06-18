@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Acompanhamento — {{ categoria_nome }} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="mb-0"><i class="bi bi-kanban"></i> Acompanhamento</h4>
+    <small class="text-muted">Categoria: <strong>{{ categoria_nome }}</strong></small>
+  </div>
+  <a href="{% url 'inspecoes:acompanhamento_painel' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-speedometer2"></i> Painel
+  </a>
+</div>
+
+{# ── Abas de categoria (preservam os filtros aplicados) ──────────────────── #}
+<ul class="nav nav-tabs mb-3">
+  {% for aba in abas %}
+  <li class="nav-item">
+    <a class="nav-link {% if aba.chave == categoria %}active{% endif %}"
+       href="?categoria={{ aba.chave }}{% if filtros_qs %}&{{ filtros_qs }}{% endif %}">
+      {{ aba.nome }}
+      <span class="badge {% if aba.chave == categoria %}bg-primary{% else %}bg-secondary{% endif %} rounded-pill ms-1">{{ aba.total }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+
+{# ── Filtros combináveis ─────────────────────────────────────────────────── #}
+<form method="get" class="card card-body mb-3">
+  <input type="hidden" name="categoria" value="{{ categoria }}">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small mb-1">{{ form.localidade.label }}</label>
+      {{ form.localidade }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-1">{{ form.especialidade.label }}</label>
+      {{ form.especialidade }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-1">{{ form.status.label }}</label>
+      {{ form.status }}
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-funnel"></i> Filtrar</button>
+      <a href="?categoria={{ categoria }}" class="btn btn-outline-secondary" title="Limpar filtros"><i class="bi bi-x-lg"></i></a>
+    </div>
+  </div>
+</form>
+
+{# ── Tabela de achados ───────────────────────────────────────────────────── #}
+{% if achados %}
+<p class="text-muted small mb-2">{{ achados|length }} achado(s) nesta categoria.</p>
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>Localidade</th>
+        <th>Especialidade</th>
+        <th>Localização / Verificação</th>
+        <th class="text-center">GUT</th>
+        <th>Status</th>
+        {% if is_manutencao %}<th>OS Resolve</th>{% endif %}
+        <th class="text-end"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in achados %}
+      <tr>
+        <td>{{ a.especialidade.inspecao.edificacao }}</td>
+        <td>{{ a.especialidade.get_especialidade_display }}</td>
+        <td>
+          <strong>{{ a.localizacao }}</strong>
+          {% if a.sub_localizacao %}<span class="text-muted"> / {{ a.sub_localizacao }}</span>{% endif %}
+          <br><small class="text-muted">{{ a.verificacao }}</small>
+        </td>
+        <td class="text-center"><span class="badge badge-p{{ a.prioridade_risco }}">{{ a.gut_total }}</span></td>
+        <td>
+          {% if a.status == 'finalizado' %}<span class="badge bg-success">Finalizado</span>
+          {% elif a.status == 'em_andamento' %}<span class="badge bg-warning text-dark">Em andamento</span>
+          {% else %}<span class="badge bg-secondary">Pendente</span>{% endif %}
+        </td>
+        {% if is_manutencao %}
+        <td>{% if a.ordem_servico %}{{ a.ordem_servico }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        {% endif %}
+        <td class="text-end">
+          <a href="{% url 'inspecoes:acompanhamento_achado' a.pk %}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-pencil-square"></i> Gerir
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-light border text-muted">Nenhum achado encontrado para esta categoria com os filtros aplicados.</div>
+{% endif %}
+{% endblock %}
