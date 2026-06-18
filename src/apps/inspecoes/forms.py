@@ -111,11 +111,6 @@ class AchadoForm(forms.ModelForm):
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'}),
     )
-    ordem_servico = forms.CharField(
-        label='Ordem de serviço (Resolve)',
-        required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 12345'}),
-    )
     prazo_meses = forms.TypedChoiceField(
         label='Prazo para resolução',
         choices=Achado.PRAZO_CHOICES,
@@ -129,7 +124,7 @@ class AchadoForm(forms.ModelForm):
             'localizacao', 'sub_localizacao', 'verificacao', 'grupo_tecnico',
             'em_conformidade', 'descricao_nao_conformidade', 'requisito_afetado',
             'gravidade', 'urgencia', 'tendencia',
-            'prioridade_risco', 'recomendacao', 'direcionamento', 'ordem_servico', 'prazo_meses',
+            'prioridade_risco', 'recomendacao', 'direcionamento', 'prazo_meses',
         ]
         widgets = {
             'sub_localizacao': forms.TextInput(attrs={'class': 'form-control'}),

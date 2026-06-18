@@ -128,12 +128,6 @@
         <div class="text-muted small mb-1">Direcionamento</div>
         <div>{{ achado.get_direcionamento_display }}</div>
       </div>
-      {% if achado.ordem_servico %}
-      <div class="col-md-4">
-        <div class="text-muted small mb-1">Ordem de serviço (Resolve)</div>
-        <div><strong>{{ achado.ordem_servico }}</strong></div>
-      </div>
-      {% endif %}
       <div class="col-md-4">
         <div class="text-muted small mb-1">Prazo para resolução</div>
         <div>{{ achado.get_prazo_meses_display }}</div>
