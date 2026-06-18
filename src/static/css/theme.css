@@ -119,6 +119,13 @@ a.text-decoration-none:hover .card { transform: translateY(-3px); box-shadow: 0 
 }
 .skip-link:focus { left: 0; }
 
+/* ── Badges de prioridade GUT (P1/P2/P3) ─────────────────────────────────── */
+/* Globais para que o índice GUT apareça em todas as telas (análise,
+   acompanhamento, detalhe e gestão do achado). */
+.badge-p1 { background-color: #dc3545; color: #fff; }
+.badge-p2 { background-color: #fd7e14; color: #fff; }
+.badge-p3 { background-color: #198754; color: #fff; }
+
 /* ── Rodapé ──────────────────────────────────────────────────────────────── */
 footer { background: #fff !important; border-top: 1px solid var(--bs-border-color); }
 
