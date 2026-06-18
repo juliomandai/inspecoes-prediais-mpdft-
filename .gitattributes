@@ -1,0 +1,8 @@
+# Garante que arquivos binários não sofram conversão de fim de linha (LF/CRLF)
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.woff2 binary
+*.zip binary
+*.sqlite3 binary
