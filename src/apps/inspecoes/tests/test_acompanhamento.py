@@ -66,6 +66,25 @@ def test_lista_filtra_por_categoria(client, cenario):
 
 
 @pytest.mark.django_db
+def test_lista_todas_categorias_mostra_tudo(client, cenario):
+    resp = client.get(reverse('inspecoes:acompanhamento_lista') + '?categoria=todas')
+    achados = list(resp.context['achados'])
+    assert cenario['a_manut'] in achados
+    assert cenario['a_nova'] in achados
+    assert cenario['a_garantia'] in achados
+    assert cenario['conforme'] not in achados
+    assert resp.context['mostra_categoria_coluna'] is True
+
+
+@pytest.mark.django_db
+def test_lista_todas_filtro_status_cross_categoria(client, cenario):
+    # status=finalizado deve trazer o achado de garantia, independentemente da categoria
+    resp = client.get(reverse('inspecoes:acompanhamento_lista') + '?categoria=todas&status=finalizado')
+    achados = list(resp.context['achados'])
+    assert achados == [cenario['a_garantia']]
+
+
+@pytest.mark.django_db
 def test_lista_filtros_combinados(client, cenario):
     # garantia + localidade Anexo + especialidade elétrica + status finalizado
     url = (reverse('inspecoes:acompanhamento_lista') +

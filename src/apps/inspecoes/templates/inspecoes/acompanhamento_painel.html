@@ -97,10 +97,11 @@
       <div class="card-header fw-bold"><i class="bi bi-flag"></i> Por status</div>
       <ul class="list-group list-group-flush">
         {% for s in por_status %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
+        <a href="{% url 'inspecoes:acompanhamento_lista' %}?categoria=todas&status={{ s.chave }}"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
           {{ s.nome }}
           <span class="badge bg-secondary rounded-pill">{{ s.total }}</span>
-        </li>
+        </a>
         {% endfor %}
       </ul>
     </div>
@@ -110,10 +111,11 @@
       <div class="card-header fw-bold"><i class="bi bi-diagram-3"></i> Por especialidade</div>
       <ul class="list-group list-group-flush">
         {% for e in por_especialidade %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
+        <a href="{% url 'inspecoes:acompanhamento_lista' %}?categoria=todas&especialidade={{ e.chave }}"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
           {{ e.nome }}
           <span class="badge bg-secondary rounded-pill">{{ e.total }}</span>
-        </li>
+        </a>
         {% endfor %}
       </ul>
     </div>
@@ -123,10 +125,11 @@
       <div class="card-header fw-bold"><i class="bi bi-geo-alt"></i> Por localidade</div>
       <ul class="list-group list-group-flush" style="max-height:18rem;overflow-y:auto;">
         {% for l in por_localidade %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
+        <a href="{% url 'inspecoes:acompanhamento_lista' %}?categoria=todas&localidade={{ l.pk }}"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
           {{ l.nome }}
           <span class="badge bg-secondary rounded-pill">{{ l.total }}</span>
-        </li>
+        </a>
         {% empty %}
         <li class="list-group-item text-muted">—</li>
         {% endfor %}

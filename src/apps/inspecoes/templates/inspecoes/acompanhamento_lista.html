@@ -57,6 +57,7 @@
       <tr>
         <th>Localidade</th>
         <th>Especialidade</th>
+        {% if mostra_categoria_coluna %}<th>Categoria</th>{% endif %}
         <th>Localização / Verificação</th>
         <th class="text-center">GUT</th>
         <th>Status</th>
@@ -69,6 +70,7 @@
       <tr>
         <td>{{ a.especialidade.inspecao.edificacao }}</td>
         <td>{{ a.especialidade.get_especialidade_display }}</td>
+        {% if mostra_categoria_coluna %}<td><span class="text-nowrap">{{ a.get_direcionamento_display }}</span></td>{% endif %}
         <td>
           <strong>{{ a.localizacao }}</strong>
           {% if a.sub_localizacao %}<span class="text-muted"> / {{ a.sub_localizacao }}</span>{% endif %}

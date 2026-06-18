@@ -568,7 +568,7 @@ def acompanhamento_painel(request):
     loc_map = {}
     for a in achados:
         edif = a.especialidade.inspecao.edificacao
-        item = loc_map.setdefault(edif.pk, {'nome': str(edif), 'total': 0})
+        item = loc_map.setdefault(edif.pk, {'pk': edif.pk, 'nome': str(edif), 'total': 0})
         item['total'] += 1
     por_localidade = sorted(loc_map.values(), key=lambda x: -x['total'])
 
@@ -594,21 +594,19 @@ def acompanhamento_painel(request):
 def acompanhamento_lista(request):
     categorias_validas = dict(Achado.DIRECIONAMENTO_CHOICES)
     categoria = request.GET.get('categoria', 'manutencao')
-    if categoria not in categorias_validas:
+    if categoria != 'todas' and categoria not in categorias_validas:
         categoria = 'manutencao'
 
     form = AcompanhamentoFilterForm(request.GET or None)
     base = _aplicar_filtros_acompanhamento(_acompanhamento_qs(), form)
 
     # Contagem por categoria (respeita os demais filtros) para os badges das abas.
-    contagens = {k: 0 for k, _ in Achado.DIRECIONAMENTO_CHOICES}
-    for k in contagens:
-        contagens[k] = base.filter(direcionamento=k).count()
+    contagens = {k: base.filter(direcionamento=k).count() for k, _ in Achado.DIRECIONAMENTO_CHOICES}
+    total_todas = base.count()
 
+    achados_qs = base if categoria == 'todas' else base.filter(direcionamento=categoria)
     achados = list(
-        base.filter(direcionamento=categoria)
-        .prefetch_related('fotos')
-        .order_by('prioridade_risco', '-gut_total')
+        achados_qs.prefetch_related('fotos').order_by('prioridade_risco', '-gut_total')
     )
 
     # Querystring dos filtros (sem 'categoria') para preservar nas abas.
@@ -616,19 +614,21 @@ def acompanhamento_lista(request):
     filtros = {key: request.GET.get(key) for key in ('localidade', 'especialidade', 'status') if request.GET.get(key)}
     filtros_qs = urlencode(filtros)
 
-    abas = [
+    abas = [{'chave': 'todas', 'nome': 'Todas', 'total': total_todas}] + [
         {'chave': k, 'nome': nome, 'total': contagens[k]}
         for k, nome in Achado.DIRECIONAMENTO_CHOICES
     ]
+    categoria_nome = 'Todas as categorias' if categoria == 'todas' else categorias_validas[categoria]
 
     return render(request, 'inspecoes/acompanhamento_lista.html', {
         'categoria': categoria,
-        'categoria_nome': categorias_validas[categoria],
+        'categoria_nome': categoria_nome,
         'abas': abas,
         'form': form,
         'achados': achados,
         'filtros_qs': filtros_qs,
         'is_manutencao': categoria == 'manutencao',
+        'mostra_categoria_coluna': categoria == 'todas',
     })
 
 
