@@ -21,6 +21,8 @@
     var gut = gv * uv * tv;
     display.textContent = gut;
     var cls, label;
+    // Limiares espelham Achado.LIMITE_GUT_P1/P2 em apps/inspecoes/models.py —
+    // mudar um lado sem o outro reintroduz a divergência que já existiu aqui.
     if (gut >= 75) {
       cls = 'bg-danger';
       label = 'Sugestão: Crítico (P1)';

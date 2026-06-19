@@ -376,7 +376,7 @@ def achado_create(request, esp_pk):
         achado.especialidade = esp
         achado.save()
         for arquivo in request.FILES.getlist('fotos'):
-            if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+            if foto_valida(arquivo.content_type, arquivo.size):
                 cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
                 Foto.objects.create(
                     achado=achado,
@@ -455,7 +455,7 @@ def achado_duplicate(request, pk):
             novo.especialidade = esp
             novo.save()
             for arquivo in request.FILES.getlist('fotos'):
-                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                if foto_valida(arquivo.content_type, arquivo.size):
                     cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
                     Foto.objects.create(achado=novo, arquivo=cf, nome_original=nome, tamanho_bytes=tamanho)
             _log(request, 'achado_criado',
@@ -495,6 +495,19 @@ ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/png'}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 
 
+def erro_validacao_foto(content_type, tamanho):
+    """None se a foto é válida; senão, a mensagem explicando o motivo da rejeição."""
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        return 'Formato inválido. Use JPEG ou PNG.'
+    if tamanho > MAX_UPLOAD_SIZE:
+        return 'Arquivo muito grande. Máximo: 10 MB.'
+    return None
+
+
+def foto_valida(content_type, tamanho):
+    return erro_validacao_foto(content_type, tamanho) is None
+
+
 @login_required
 @require_POST
 def foto_upload(request, achado_pk):
@@ -502,10 +515,9 @@ def foto_upload(request, achado_pk):
     arquivo = request.FILES.get('arquivo')
     if not arquivo:
         return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
-    if arquivo.content_type not in ALLOWED_CONTENT_TYPES:
-        return JsonResponse({'erro': 'Formato inválido. Use JPEG ou PNG.'}, status=400)
-    if arquivo.size > MAX_UPLOAD_SIZE:
-        return JsonResponse({'erro': 'Arquivo muito grande. Máximo: 10 MB.'}, status=400)
+    erro = erro_validacao_foto(arquivo.content_type, arquivo.size)
+    if erro:
+        return JsonResponse({'erro': erro}, status=400)
 
     cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
     foto = Foto.objects.create(
@@ -527,54 +539,20 @@ def foto_delete(request, pk):
 
 # ── Acompanhamento — gestão do ciclo de vida dos achados ─────────────────────
 
-def _acompanhamento_qs():
-    """Achados de todas as inspeções que demandam ação (não conformes)."""
-    return (
-        Achado.objects.filter(gut_total__gt=0)
-        .select_related('especialidade__inspecao__edificacao')
-    )
-
-
-def _aplicar_filtros_acompanhamento(qs, form):
-    """Aplica os filtros combináveis (localidade, especialidade, status)."""
-    if form.is_valid():
-        if form.cleaned_data.get('localidade'):
-            qs = qs.filter(especialidade__inspecao__edificacao=form.cleaned_data['localidade'])
-        if form.cleaned_data.get('especialidade'):
-            qs = qs.filter(especialidade__especialidade=form.cleaned_data['especialidade'])
-        if form.cleaned_data.get('status'):
-            qs = qs.filter(status=form.cleaned_data['status'])
-    return qs
-
-
 @login_required
 def acompanhamento_painel(request):
-    achados = list(_acompanhamento_qs())
-    total = len(achados)
+    achados_qs = Achado.objects.acompanhamento()
+    total = achados_qs.count()
 
-    por_categoria = [
-        {'chave': k, 'nome': nome, 'total': sum(1 for a in achados if a.direcionamento == k)}
-        for k, nome in Achado.DIRECIONAMENTO_CHOICES
-    ]
-    por_status = [
-        {'chave': k, 'nome': nome, 'total': sum(1 for a in achados if a.status == k)}
-        for k, nome in Achado.STATUS_ACOMPANHAMENTO_CHOICES
-    ]
-    por_especialidade = [
-        {'chave': k, 'nome': nome, 'total': sum(1 for a in achados if a.especialidade.especialidade == k)}
-        for k, nome in InspecaoEspecialidade.ESPECIALIDADE_CHOICES
-    ]
+    por_categoria = achados_qs.contagem_por('direcionamento', Achado.DIRECIONAMENTO_CHOICES)
+    por_status = achados_qs.contagem_por('status', Achado.STATUS_ACOMPANHAMENTO_CHOICES)
+    por_especialidade = achados_qs.contagem_por('especialidade__especialidade', InspecaoEspecialidade.ESPECIALIDADE_CHOICES)
+    por_localidade = achados_qs.contagem_por_localidade()
 
-    loc_map = {}
-    for a in achados:
-        edif = a.especialidade.inspecao.edificacao
-        item = loc_map.setdefault(edif.pk, {'pk': edif.pk, 'nome': str(edif), 'total': 0})
-        item['total'] += 1
-    por_localidade = sorted(loc_map.values(), key=lambda x: -x['total'])
-
-    finalizados = sum(1 for a in achados if a.status == 'finalizado')
-    em_andamento = sum(1 for a in achados if a.status == 'em_andamento')
-    pendentes = sum(1 for a in achados if a.status == 'pendente')
+    status_totais = {row['chave']: row['total'] for row in por_status}
+    finalizados = status_totais.get('finalizado', 0)
+    em_andamento = status_totais.get('em_andamento', 0)
+    pendentes = status_totais.get('pendente', 0)
     pct_conclusao = round(finalizados / total * 100) if total else 0
 
     return render(request, 'inspecoes/acompanhamento_painel.html', {
@@ -598,11 +576,11 @@ def acompanhamento_lista(request):
         categoria = 'manutencao'
 
     form = AcompanhamentoFilterForm(request.GET or None)
-    base = _aplicar_filtros_acompanhamento(_acompanhamento_qs(), form)
+    base = Achado.objects.acompanhamento().com_filtros_acompanhamento(form)
 
-    # Contagem por categoria (respeita os demais filtros) para os badges das abas.
-    contagens = {k: base.filter(direcionamento=k).count() for k, _ in Achado.DIRECIONAMENTO_CHOICES}
-    total_todas = base.count()
+    # Contagem por categoria (respeita os demais filtros) para os badges das abas — uma única query.
+    contagens_lista = base.contagem_por('direcionamento', Achado.DIRECIONAMENTO_CHOICES)
+    total_todas = sum(row['total'] for row in contagens_lista)
 
     achados_qs = base if categoria == 'todas' else base.filter(direcionamento=categoria)
     achados = list(
@@ -614,10 +592,7 @@ def acompanhamento_lista(request):
     filtros = {key: request.GET.get(key) for key in ('localidade', 'especialidade', 'status') if request.GET.get(key)}
     filtros_qs = urlencode(filtros)
 
-    abas = [{'chave': 'todas', 'nome': 'Todas', 'total': total_todas}] + [
-        {'chave': k, 'nome': nome, 'total': contagens[k]}
-        for k, nome in Achado.DIRECIONAMENTO_CHOICES
-    ]
+    abas = [{'chave': 'todas', 'nome': 'Todas', 'total': total_todas}] + contagens_lista
     categoria_nome = 'Todas as categorias' if categoria == 'todas' else categorias_validas[categoria]
 
     return render(request, 'inspecoes/acompanhamento_lista.html', {
@@ -635,7 +610,7 @@ def acompanhamento_lista(request):
 @login_required
 def acompanhamento_achado(request, pk):
     achado = get_object_or_404(
-        _acompanhamento_qs().prefetch_related('fotos', 'historico_encaminhamento__usuario'),
+        Achado.objects.acompanhamento().prefetch_related('fotos', 'historico_encaminhamento__usuario'),
         pk=pk,
     )
     if request.method == 'POST':
@@ -663,7 +638,7 @@ def acompanhamento_achado(request, pk):
 @login_required
 @require_POST
 def achado_reclassificar(request, pk):
-    achado = get_object_or_404(_acompanhamento_qs(), pk=pk)
+    achado = get_object_or_404(Achado.objects.acompanhamento(), pk=pk)
     form = ReclassificarForm(request.POST, atual=achado.direcionamento)
     if form.is_valid():
         de = achado.direcionamento
@@ -776,13 +751,11 @@ def achado_sincronizar(request):
         try:
             nome = foto_data.get('nome', 'foto.jpg')
             tipo = foto_data.get('tipo', 'image/jpeg')
-            if tipo not in ALLOWED_CONTENT_TYPES:
-                continue
             b64 = foto_data.get('dados_b64', '')
             if not b64:
                 continue
             conteudo = base64.b64decode(b64)
-            if len(conteudo) > MAX_UPLOAD_SIZE:
+            if not foto_valida(tipo, len(conteudo)):
                 continue
             cf, nome_c, tamanho = comprimir_imagem(conteudo, nome)
             Foto.objects.create(
@@ -804,18 +777,20 @@ def achado_sincronizar(request):
 
 # ── Análise — helper compartilhado ────────────────────────────────────────────
 
-def _analise_data(achados_list):
-    """Calcula todos os dados de análise a partir de uma lista de achados."""
-    nao_conformes = [a for a in achados_list if a.gut_total > 0]
-    total = len(achados_list)
-    total_nc = len(nao_conformes)
-    total_conformes = total - total_nc
+# ── Sub-cálculos de _analise_data — cada um testável isoladamente ────────────
 
-    p1 = [a for a in nao_conformes if a.prioridade_risco == 1]
-    p2 = [a for a in nao_conformes if a.prioridade_risco == 2]
-    p3 = [a for a in nao_conformes if a.prioridade_risco == 3]
+def _achados_por_direcionamento(nao_conformes):
+    def por_dir(dir_key):
+        result = {'p1': [], 'p2': [], 'p3': []}
+        for a in nao_conformes:
+            if a.direcionamento == dir_key:
+                result[f'p{a.prioridade_risco}'].append(a)
+        return result
+    return por_dir('manutencao'), por_dir('nova_contratacao'), por_dir('garantia')
 
-    # Grupos
+
+def _por_grupo_tecnico(nao_conformes, total_nc):
+    """Contagem por grupo técnico + visão Pareto (80/20) do mesmo mapa."""
     grupo_labels = dict(Achado.GRUPO_TECNICO_CHOICES)
     grupo_map = {}
     for a in nao_conformes:
@@ -826,41 +801,50 @@ def _analise_data(achados_list):
         grupo_map[g]['total'] += 1
     grupos = sorted(grupo_map.values(), key=lambda x: (-x['p1'], -x['total']))
 
-    # Direcionamento
-    def achados_por_dir(dir_key):
-        result = {'p1': [], 'p2': [], 'p3': []}
-        for a in nao_conformes:
-            if a.direcionamento == dir_key:
-                result[f'p{a.prioridade_risco}'].append(a)
-        return result
+    pareto = sorted(grupo_map.values(), key=lambda x: -x['total'])
+    acumulado = 0
+    for g in pareto:
+        acumulado += g['total']
+        g['acumulado'] = acumulado
+        g['acumulado_pct'] = round(acumulado / total_nc * 100) if total_nc else 0
+    return grupos, pareto
 
-    manutencao = achados_por_dir('manutencao')
-    nova_contratacao = achados_por_dir('nova_contratacao')
-    garantia = achados_por_dir('garantia')
 
-    # GUT
+def _estatisticas_gut(nao_conformes):
     gut_vals = [a.gut_total for a in nao_conformes]
-    gut_media = round(sum(gut_vals) / len(gut_vals), 1) if gut_vals else 0
-    gut_max = max(gut_vals) if gut_vals else 0
-    gut_min = min(gut_vals) if gut_vals else 0
+    media = round(sum(gut_vals) / len(gut_vals), 1) if gut_vals else 0
+    maximo = max(gut_vals) if gut_vals else 0
+    minimo = min(gut_vals) if gut_vals else 0
     n = len(gut_vals)
-    gut_desvio = round((sum((v - gut_media) ** 2 for v in gut_vals) / n) ** 0.5, 1) if n > 1 else 0
-    top_gut_raw = sorted(nao_conformes, key=lambda a: -a.gut_total)[:10]
-    top_gut_max = top_gut_raw[0].gut_total if top_gut_raw else 1
-    for a in top_gut_raw:
-        a.gut_pct = round(a.gut_total / top_gut_max * 100)
+    desvio = round((sum((v - media) ** 2 for v in gut_vals) / n) ** 0.5, 1) if n > 1 else 0
+    top = sorted(nao_conformes, key=lambda a: -a.gut_total)[:10]
+    top_max = top[0].gut_total if top else 1
+    for a in top:
+        a.gut_pct = round(a.gut_total / top_max * 100)
+    return {'media': media, 'max': maximo, 'min': minimo, 'desvio': desvio, 'top': top}
 
-    # Por localização
+
+def _por_localizacao(nao_conformes):
+    """Contagem por localização + visão por concentração de risco (soma GUT) do mesmo mapa."""
     loc_map = {}
     for a in nao_conformes:
         loc = a.localizacao
         if loc not in loc_map:
-            loc_map[loc] = {'localizacao': loc, 'total': 0, 'p1': 0, 'p2': 0, 'p3': 0}
+            loc_map[loc] = {'localizacao': loc, 'total': 0, 'p1': 0, 'p2': 0, 'p3': 0, 'soma_gut': 0}
         loc_map[loc]['total'] += 1
         loc_map[loc][f'p{a.prioridade_risco}'] += 1
+        loc_map[loc]['soma_gut'] += a.gut_total
+
     por_localizacao = sorted(loc_map.values(), key=lambda x: -x['total'])
 
-    # Por prazo
+    por_localizacao_gut = sorted(loc_map.values(), key=lambda x: -x['soma_gut'])
+    max_soma = por_localizacao_gut[0]['soma_gut'] if por_localizacao_gut else 1
+    for l in por_localizacao_gut:
+        l['gut_pct'] = round(l['soma_gut'] / max_soma * 100) if max_soma else 0
+    return por_localizacao, por_localizacao_gut
+
+
+def _por_prazo(nao_conformes):
     prazo_map = {}
     prazo_labels = dict(Achado.PRAZO_CHOICES)
     for a in nao_conformes:
@@ -869,52 +853,62 @@ def _analise_data(achados_list):
             prazo_map[k] = {'prazo': k, 'label': prazo_labels.get(k, f'{k} meses'), 'total': 0, 'p1': 0, 'p2': 0, 'p3': 0}
         prazo_map[k]['total'] += 1
         prazo_map[k][f'p{a.prioridade_risco}'] += 1
-    por_prazo = sorted(prazo_map.values(), key=lambda x: x['prazo'])
+    return sorted(prazo_map.values(), key=lambda x: x['prazo'])
 
-    # Por requisito afetado
-    _req_labels = dict(Achado.REQUISITO_CHOICES)
-    _req_colors = {
+
+def _por_requisito(nao_conformes):
+    req_labels = dict(Achado.REQUISITO_CHOICES)
+    req_colors = {
         'seguranca_estrutural': '#dc3545', 'acessibilidade': '#ffc107',
         'saude_qualidade_ar': '#0d6efd',   'funcionalidade': '#198754',
         'estetica': '#6f42c1',             'eficiencia_energetica': '#fd7e14',
         'sustentabilidade': '#20c997',     'durabilidade': '#7B2D00',
     }
-    req_count = {k: 0 for k in _req_labels}
+    req_count = {k: 0 for k in req_labels}
     for a in nao_conformes:
         req_count[a.requisito_afetado] = req_count.get(a.requisito_afetado, 0) + 1
-    por_requisito = [
-        {'requisito': k, 'label': _req_labels.get(k, k), 'total': req_count.get(k, 0),
-         'color': _req_colors.get(k, '#adb5bd')}
-        for k in _req_labels
+    return [
+        {'requisito': k, 'label': req_labels.get(k, k), 'total': req_count.get(k, 0),
+         'color': req_colors.get(k, '#adb5bd')}
+        for k in req_labels
     ]
 
-    # ── Índice de Qualidade da Edificação (IQE 0–100) + % conformidade ──────────
+
+def _iqe_score(total, total_conformes, p1, p2, p3):
+    """Índice de Qualidade da Edificação (0-100) + % conformidade.
+
+    Penaliza por severidade (P1=5, P2=2, P3=1), normalizado pelo pior caso (tudo P1).
+    """
     pct_conformidade = round(total_conformes / total * 100) if total else 0
-    # Penaliza por severidade (P1=5, P2=2, P3=1), normalizado pelo pior caso (tudo P1).
     if total:
         penalidade = 5 * len(p1) + 2 * len(p2) + 1 * len(p3)
         iqe = round(100 * (1 - penalidade / (5 * total)))
     else:
         iqe = 100
     if iqe >= 80:
-        iqe_faixa, iqe_cor = 'Bom', 'success'
+        faixa, cor = 'Bom', 'success'
     elif iqe >= 50:
-        iqe_faixa, iqe_cor = 'Atenção', 'warning'
+        faixa, cor = 'Atenção', 'warning'
     else:
-        iqe_faixa, iqe_cor = 'Crítico', 'danger'
+        faixa, cor = 'Crítico', 'danger'
+    return {'iqe': iqe, 'faixa': faixa, 'cor': cor, 'pct_conformidade': pct_conformidade}
 
-    # ── Componentes GUT médios (G, U, T isolados) ─────────────────────────────
+
+def _componentes_gut_medios(nao_conformes, total_nc):
+    """Médias isoladas de Gravidade, Urgência e Tendência."""
     if total_nc:
-        g_media = round(sum(a.gravidade for a in nao_conformes) / total_nc, 1)
-        u_media = round(sum(a.urgencia for a in nao_conformes) / total_nc, 1)
-        t_media = round(sum(a.tendencia for a in nao_conformes) / total_nc, 1)
+        g = round(sum(a.gravidade for a in nao_conformes) / total_nc, 1)
+        u = round(sum(a.urgencia for a in nao_conformes) / total_nc, 1)
+        t = round(sum(a.tendencia for a in nao_conformes) / total_nc, 1)
     else:
-        g_media = u_media = t_media = 0
+        g = u = t = 0
+    return g, u, t
 
-    # ── Matriz Risco × Prazo ──────────────────────────────────────────────────
+
+def _matriz_risco_prazo(nao_conformes):
     prazos_ordem = [p[0] for p in Achado.PRAZO_CHOICES]
     prazo_lbls = dict(Achado.PRAZO_CHOICES)
-    matriz_risco_prazo = []
+    matriz = []
     for prio in (1, 2, 3):
         celulas = []
         for pr in prazos_ordem:
@@ -927,43 +921,30 @@ def _analise_data(achados_list):
                 elif prio in (1, 2) and pr <= 3:
                     tipo = 'ganho_rapido'   # alto risco, prazo curto
             celulas.append({'prazo': pr, 'qtd': qtd, 'tipo': tipo})
-        matriz_risco_prazo.append({'prioridade': prio, 'celulas': celulas})
-    matriz_prazos = [prazo_lbls[p] for p in prazos_ordem]
+        matriz.append({'prioridade': prio, 'celulas': celulas})
+    prazos_labels = [prazo_lbls[p] for p in prazos_ordem]
     n_incoerencias = sum(1 for a in nao_conformes
                          if a.prioridade_risco == 1 and a.prazo_meses >= 12)
     n_ganhos_rapidos = sum(1 for a in nao_conformes
                            if a.prioridade_risco in (1, 2) and a.prazo_meses <= 3)
+    return matriz, prazos_labels, n_incoerencias, n_ganhos_rapidos
 
-    # ── Encaminhamento (direcionamento) ───────────────────────────────────────
+
+def _por_direcionamento(nao_conformes, total_nc):
     dir_labels = dict(Achado.DIRECIONAMENTO_CHOICES)
     dir_count = {k: 0 for k in dir_labels}
     for a in nao_conformes:
         dir_count[a.direcionamento] = dir_count.get(a.direcionamento, 0) + 1
-    por_direcionamento = [
+    return [
         {'key': k, 'label': dir_labels[k], 'total': dir_count.get(k, 0),
          'pct': round(dir_count.get(k, 0) / total_nc * 100) if total_nc else 0}
         for k in dir_labels
     ]
 
-    # ── Concentração de risco por localização (soma GUT) ──────────────────────
-    for l in loc_map.values():
-        l['soma_gut'] = 0
-    for a in nao_conformes:
-        loc_map[a.localizacao]['soma_gut'] += a.gut_total
-    por_localizacao_gut = sorted(loc_map.values(), key=lambda x: -x['soma_gut'])
-    _max_soma = por_localizacao_gut[0]['soma_gut'] if por_localizacao_gut else 1
-    for l in por_localizacao_gut:
-        l['gut_pct'] = round(l['soma_gut'] / _max_soma * 100) if _max_soma else 0
 
-    # ── Pareto por grupo técnico (80/20) ──────────────────────────────────────
-    pareto = sorted(grupo_map.values(), key=lambda x: -x['total'])
-    _acum = 0
-    for g in pareto:
-        _acum += g['total']
-        g['acumulado'] = _acum
-        g['acumulado_pct'] = round(_acum / total_nc * 100) if total_nc else 0
-
-    # ── Cobertura fotográfica das evidências (sobre as não conformidades) ─────
+def _cobertura_fotos(nao_conformes, total_nc):
+    """Conta achados com ao menos 1 foto. Usa .all() (não .exists()) para
+    reaproveitar o prefetch_related feito pelo chamador, em vez de nova query."""
     com_foto = 0
     for a in nao_conformes:
         try:
@@ -971,53 +952,90 @@ def _analise_data(achados_list):
                 com_foto += 1
         except Exception:
             pass
-    cobertura_foto_pct = round(com_foto / total_nc * 100) if total_nc else 0
+    pct = round(com_foto / total_nc * 100) if total_nc else 0
+    return com_foto, pct
 
-    # ── Plano de ação priorizado (P1 primeiro, depois maior GUT) ──────────────
-    plano_acao = sorted(nao_conformes, key=lambda a: (a.prioridade_risco, -a.gut_total))[:15]
 
-    # Charts JSON
-    chart_risco = json.dumps({
-        'labels': ['P1 — Crítico', 'P2 — Regular', 'P3 — Mínimo'],
-        'data': [len(p1), len(p2), len(p3)],
-        'colors': ['#dc3545', '#fd7e14', '#198754'],
-    })
-    chart_direcionamento = json.dumps({
-        'labels': [d['label'] for d in por_direcionamento],
-        'data': [d['total'] for d in por_direcionamento],
-        'colors': ['#6f42c1', '#0dcaf0', '#ffc107'],
-    })
-    chart_pareto = json.dumps({
-        'labels': [g['nome'] for g in pareto],
-        'data': [g['total'] for g in pareto],
-        'acumulado': [g['acumulado_pct'] for g in pareto],
-    })
-    chart_prazo = json.dumps({
-        'labels': [p['label'] for p in por_prazo],
-        'data': [p['total'] for p in por_prazo],
-    })
-    chart_requisitos = json.dumps({
-        'labels': [r['label'] for r in por_requisito],
-        'data':   [r['total'] for r in por_requisito],
-        'colors': [r['color'] for r in por_requisito],
-    })
+def _plano_acao(nao_conformes):
+    """P1 primeiro, depois maior GUT — top 15."""
+    return sorted(nao_conformes, key=lambda a: (a.prioridade_risco, -a.gut_total))[:15]
+
+
+def _montar_charts(p1, p2, p3, por_direcionamento, pareto, por_prazo, por_requisito):
+    """JSON dos gráficos, a partir de métricas já calculadas pelas funções acima."""
+    return {
+        'risco': json.dumps({
+            'labels': ['P1 — Crítico', 'P2 — Regular', 'P3 — Mínimo'],
+            'data': [len(p1), len(p2), len(p3)],
+            'colors': ['#dc3545', '#fd7e14', '#198754'],
+        }),
+        'direcionamento': json.dumps({
+            'labels': [d['label'] for d in por_direcionamento],
+            'data': [d['total'] for d in por_direcionamento],
+            'colors': ['#6f42c1', '#0dcaf0', '#ffc107'],
+        }),
+        'pareto': json.dumps({
+            'labels': [g['nome'] for g in pareto],
+            'data': [g['total'] for g in pareto],
+            'acumulado': [g['acumulado_pct'] for g in pareto],
+        }),
+        'prazo': json.dumps({
+            'labels': [p['label'] for p in por_prazo],
+            'data': [p['total'] for p in por_prazo],
+        }),
+        'requisitos': json.dumps({
+            'labels': [r['label'] for r in por_requisito],
+            'data':   [r['total'] for r in por_requisito],
+            'colors': [r['color'] for r in por_requisito],
+        }),
+    }
+
+
+def _analise_data(achados_list):
+    """Calcula todos os dados de análise a partir de uma lista de achados.
+
+    Composição das sub-funções acima — a interface (lista de achados -> dict)
+    não muda; ver test_analise_data.py para os cálculos testados isoladamente.
+    """
+    nao_conformes = [a for a in achados_list if a.gut_total > 0]
+    total = len(achados_list)
+    total_nc = len(nao_conformes)
+    total_conformes = total - total_nc
+
+    p1 = [a for a in nao_conformes if a.prioridade_risco == 1]
+    p2 = [a for a in nao_conformes if a.prioridade_risco == 2]
+    p3 = [a for a in nao_conformes if a.prioridade_risco == 3]
+
+    grupos, pareto = _por_grupo_tecnico(nao_conformes, total_nc)
+    manutencao, nova_contratacao, garantia = _achados_por_direcionamento(nao_conformes)
+    gut = _estatisticas_gut(nao_conformes)
+    por_localizacao, por_localizacao_gut = _por_localizacao(nao_conformes)
+    por_prazo = _por_prazo(nao_conformes)
+    por_requisito = _por_requisito(nao_conformes)
+    iqe_info = _iqe_score(total, total_conformes, p1, p2, p3)
+    g_media, u_media, t_media = _componentes_gut_medios(nao_conformes, total_nc)
+    matriz_risco_prazo, matriz_prazos, n_incoerencias, n_ganhos_rapidos = _matriz_risco_prazo(nao_conformes)
+    por_direcionamento = _por_direcionamento(nao_conformes, total_nc)
+    com_foto, cobertura_foto_pct = _cobertura_fotos(nao_conformes, total_nc)
+    plano_acao = _plano_acao(nao_conformes)
+    charts = _montar_charts(p1, p2, p3, por_direcionamento, pareto, por_prazo, por_requisito)
 
     return {
         'total': total, 'total_nc': total_nc, 'total_conformes': total_conformes,
         'p1': p1, 'p2': p2, 'p3': p3,
         'grupos': grupos,
         'manutencao': manutencao, 'nova_contratacao': nova_contratacao, 'garantia': garantia,
-        'gut_media': gut_media, 'gut_max': gut_max, 'gut_min': gut_min, 'gut_desvio': gut_desvio,
-        'top_gut': top_gut_raw,
+        'gut_media': gut['media'], 'gut_max': gut['max'], 'gut_min': gut['min'], 'gut_desvio': gut['desvio'],
+        'top_gut': gut['top'],
         'por_localizacao': por_localizacao,
         'por_prazo': por_prazo,
         'por_requisito': por_requisito,
-        'chart_risco': chart_risco,
-        'chart_prazo': chart_prazo,
-        'chart_requisitos': chart_requisitos,
+        'chart_risco': charts['risco'],
+        'chart_prazo': charts['prazo'],
+        'chart_requisitos': charts['requisitos'],
         # Novos insights (Dashboard de Encerramento)
-        'iqe': iqe, 'iqe_faixa': iqe_faixa, 'iqe_cor': iqe_cor,
-        'pct_conformidade': pct_conformidade,
+        'iqe': iqe_info['iqe'], 'iqe_faixa': iqe_info['faixa'], 'iqe_cor': iqe_info['cor'],
+        'pct_conformidade': iqe_info['pct_conformidade'],
         'g_media': g_media, 'u_media': u_media, 't_media': t_media,
         'matriz_risco_prazo': matriz_risco_prazo, 'matriz_prazos': matriz_prazos,
         'n_incoerencias': n_incoerencias, 'n_ganhos_rapidos': n_ganhos_rapidos,
@@ -1026,8 +1044,8 @@ def _analise_data(achados_list):
         'pareto': pareto,
         'cobertura_foto_pct': cobertura_foto_pct, 'fotos_com': com_foto,
         'plano_acao': plano_acao,
-        'chart_direcionamento': chart_direcionamento,
-        'chart_pareto': chart_pareto,
+        'chart_direcionamento': charts['direcionamento'],
+        'chart_pareto': charts['pareto'],
     }
 
 
@@ -1271,6 +1289,7 @@ def _gerar_zip_backup(inspecao):
                 'urgencia': achado.urgencia,
                 'tendencia': achado.tendencia,
                 'gut_total': achado.gut_total,
+                'prioridade_risco': achado.prioridade_risco,
                 'prazo_meses': achado.get_prazo_meses_display() if not achado.em_conformidade else '',
                 'direcionamento': achado.get_direcionamento_display() if not achado.em_conformidade else '',
                 'fotos': [],
@@ -1417,14 +1436,13 @@ def _restaurar_backup(arquivo_zip, request):
                 t = int(achado_data.get('tendencia', 1) or 1)
                 gut = g * u * t
 
-                if em_conf:
-                    prioridade = 3
-                elif gut >= 27:
-                    prioridade = 1
-                elif gut >= 8:
-                    prioridade = 2
+                # Backups novos guardam a prioridade que o profissional escolheu.
+                # Backups antigos (anteriores a este campo) não têm — nesse caso,
+                # cai para a mesma sugestão mostrada na tela (Achado.calcular_prioridade).
+                if achado_data.get('prioridade_risco') is not None:
+                    prioridade = int(achado_data['prioridade_risco'])
                 else:
-                    prioridade = 3
+                    prioridade = Achado.calcular_prioridade(gut, em_conf)
 
                 prazo = PRAZO_MAP.get(str(achado_data.get('prazo_meses', '')), 12)
                 direcao = DIRECAO_MAP.get(str(achado_data.get('direcionamento', '')), 'manutencao')
@@ -1649,7 +1667,7 @@ def visita_create(request, edif_pk):
             visita.participantes = '\n'.join(participantes)
             visita.save()
             for arquivo in request.FILES.getlist('fotos'):
-                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                if foto_valida(arquivo.content_type, arquivo.size):
                     cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
                     VisitaFoto.objects.create(
                         visita=visita,
@@ -1793,7 +1811,7 @@ def visita_subvisita_create(request, pk):
             sub.participantes = '\n'.join(participantes)
             sub.save()
             for arquivo in request.FILES.getlist('fotos'):
-                if arquivo.content_type in ALLOWED_CONTENT_TYPES and arquivo.size <= MAX_UPLOAD_SIZE:
+                if foto_valida(arquivo.content_type, arquivo.size):
                     cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
                     VisitaFoto.objects.create(
                         visita=sub, arquivo=cf, nome_original=nome, tamanho_bytes=tamanho,
@@ -1834,10 +1852,9 @@ def visita_foto_upload(request, visita_pk):
     arquivo = request.FILES.get('arquivo')
     if not arquivo:
         return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
-    if arquivo.content_type not in ALLOWED_CONTENT_TYPES:
-        return JsonResponse({'erro': 'Formato inválido. Use JPEG ou PNG.'}, status=400)
-    if arquivo.size > MAX_UPLOAD_SIZE:
-        return JsonResponse({'erro': 'Arquivo muito grande. Máximo: 10 MB.'}, status=400)
+    erro = erro_validacao_foto(arquivo.content_type, arquivo.size)
+    if erro:
+        return JsonResponse({'erro': erro}, status=400)
     cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
     foto = VisitaFoto.objects.create(
         visita=visita, arquivo=cf,

@@ -90,6 +90,42 @@ class InspecaoEspecialidade(models.Model):
         return self.status == 'em_andamento'
 
 
+class AchadoQuerySet(models.QuerySet):
+    """Consultas do módulo Acompanhamento — ficam com o model, não espalhadas pelas views."""
+
+    def acompanhamento(self):
+        """Achados de todas as inspeções que demandam ação (não conformes)."""
+        return self.filter(gut_total__gt=0).select_related('especialidade__inspecao__edificacao')
+
+    def com_filtros_acompanhamento(self, form):
+        """Aplica os filtros combináveis do AcompanhamentoFilterForm (localidade, especialidade, status)."""
+        qs = self
+        if form.is_valid():
+            if form.cleaned_data.get('localidade'):
+                qs = qs.filter(especialidade__inspecao__edificacao=form.cleaned_data['localidade'])
+            if form.cleaned_data.get('especialidade'):
+                qs = qs.filter(especialidade__especialidade=form.cleaned_data['especialidade'])
+            if form.cleaned_data.get('status'):
+                qs = qs.filter(status=form.cleaned_data['status'])
+        return qs
+
+    def contagem_por(self, campo, choices):
+        """[{'chave', 'nome', 'total'}, ...] a partir de uma única query agregada."""
+        totais = dict(self.values_list(campo).annotate(total=models.Count('id')))
+        return [{'chave': chave, 'nome': nome, 'total': totais.get(chave, 0)} for chave, nome in choices]
+
+    def contagem_por_localidade(self):
+        """[{'pk', 'nome', 'total'}, ...] por edificação, da maior para a menor."""
+        return list(
+            self.values(
+                pk=models.F('especialidade__inspecao__edificacao'),
+                nome=models.F('especialidade__inspecao__edificacao__nome'),
+            )
+            .annotate(total=models.Count('id'))
+            .order_by('-total')
+        )
+
+
 class Achado(models.Model):
     GRUPO_TECNICO_CHOICES = [
         ('esquadrias', 'Esquadrias'),
@@ -132,6 +168,10 @@ class Achado(models.Model):
         (2, 'Prioridade 2 — Regular'),
         (3, 'Prioridade 3 — Mínimo'),
     ]
+    # Limiares da sugestão de prioridade a partir do índice GUT. Mesmos valores
+    # usados em static/js/gut_calculator.js — se mudar um lado, mude o outro.
+    LIMITE_GUT_P1 = 75
+    LIMITE_GUT_P2 = 20
     STATUS_ACOMPANHAMENTO_CHOICES = [
         ('pendente', 'Pendente'),
         ('em_andamento', 'Em andamento'),
@@ -177,6 +217,8 @@ class Achado(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
+    objects = AchadoQuerySet.as_manager()
+
     class Meta:
         ordering = ['-criado_em']
         verbose_name = 'Achado'
@@ -190,6 +232,23 @@ class Achado(models.Model):
             for campo, valor in [('gravidade', self.gravidade), ('urgencia', self.urgencia), ('tendencia', self.tendencia)]:
                 if valor is not None and not (1 <= valor <= 5):
                     raise ValidationError({campo: 'A nota deve ser entre 1 e 5.'})
+
+    @classmethod
+    def calcular_prioridade(cls, gut_total, em_conformidade=False):
+        """Sugere a prioridade (1/2/3) a partir do índice GUT.
+
+        Única fonte da regra de limiares — usada como fallback ao restaurar
+        backups antigos que não guardaram a prioridade escolhida pelo
+        profissional. Não é chamada em save(): a prioridade no fluxo normal é
+        uma escolha humana, o GUT só sugere.
+        """
+        if em_conformidade:
+            return 3
+        if gut_total >= cls.LIMITE_GUT_P1:
+            return 1
+        if gut_total >= cls.LIMITE_GUT_P2:
+            return 2
+        return 3
 
     def save(self, *args, **kwargs):
         # Defesa: as colunas GUT são NOT NULL. Nunca persiste None
