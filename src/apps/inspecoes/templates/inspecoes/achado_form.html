@@ -120,7 +120,12 @@
           {% if form.urgencia.errors %}<div class="text-danger small mt-1">{{ form.urgencia.errors }}</div>{% endif %}
         </div>
         <div class="col-md-2">
-          <label for="{{ form.tendencia.id_for_label }}" class="form-label">{{ form.tendencia.label }}</label>
+          <label for="{{ form.tendencia.id_for_label }}" class="form-label">
+            {{ form.tendencia.label }}
+            <span id="gut-tendencia-info" tabindex="0" style="cursor:pointer;">
+              <i class="bi bi-info-circle text-muted small ms-1"></i>
+            </span>
+          </label>
           {{ form.tendencia }}
           {% if form.tendencia.errors %}<div class="text-danger small mt-1">{{ form.tendencia.errors }}</div>{% endif %}
         </div>
@@ -495,6 +500,27 @@
             '<tr><td>Médio</td><td class="text-center fw-bold">3</td><td>Ação no médio prazo</td></tr>' +
             '<tr><td>Baixo</td><td class="text-center fw-bold">2</td><td>Ação no longo prazo</td></tr>' +
             '<tr><td>Mínimo</td><td class="text-center fw-bold">1</td><td>Pode ser programada</td></tr>' +
+          '</tbody>' +
+        '</table>',
+    });
+  }
+  var elT = document.getElementById('gut-tendencia-info');
+  if (elT) {
+    new bootstrap.Popover(elT, {
+      trigger: 'hover focus',
+      placement: 'right',
+      container: 'body',
+      html: true,
+      sanitize: false,
+      content:
+        '<table class="table table-sm table-bordered mb-0 small">' +
+          '<thead><tr><th>Grau</th><th>Nota</th><th>Tendência</th></tr></thead>' +
+          '<tbody>' +
+            '<tr><td>Máximo</td><td class="text-center fw-bold">5</td><td>Agravamento rápido e contínuo</td></tr>' +
+            '<tr><td>Alto</td><td class="text-center fw-bold">4</td><td>Tende a piorar em médio prazo</td></tr>' +
+            '<tr><td>Médio</td><td class="text-center fw-bold">3</td><td>Pode piorar com tempo</td></tr>' +
+            '<tr><td>Baixo</td><td class="text-center fw-bold">2</td><td>Lentos agravamentos</td></tr>' +
+            '<tr><td>Mínimo</td><td class="text-center fw-bold">1</td><td>Estável, sem tendência clara</td></tr>' +
           '</tbody>' +
         '</table>',
     });
