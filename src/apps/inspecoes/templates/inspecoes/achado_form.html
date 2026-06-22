@@ -110,7 +110,12 @@
           {% if form.gravidade.errors %}<div class="text-danger small mt-1">{{ form.gravidade.errors }}</div>{% endif %}
         </div>
         <div class="col-md-2">
-          <label for="{{ form.urgencia.id_for_label }}" class="form-label">{{ form.urgencia.label }}</label>
+          <label for="{{ form.urgencia.id_for_label }}" class="form-label">
+            {{ form.urgencia.label }}
+            <span id="gut-urgencia-info" tabindex="0" style="cursor:pointer;">
+              <i class="bi bi-info-circle text-muted small ms-1"></i>
+            </span>
+          </label>
           {{ form.urgencia }}
           {% if form.urgencia.errors %}<div class="text-danger small mt-1">{{ form.urgencia.errors }}</div>{% endif %}
         </div>
@@ -473,6 +478,27 @@
         '</tbody>' +
       '</table>',
   });
+  var elU = document.getElementById('gut-urgencia-info');
+  if (elU) {
+    new bootstrap.Popover(elU, {
+      trigger: 'hover focus',
+      placement: 'right',
+      container: 'body',
+      html: true,
+      sanitize: false,
+      content:
+        '<table class="table table-sm table-bordered mb-0 small">' +
+          '<thead><tr><th>Grau</th><th>Nota</th><th>Urgência</th></tr></thead>' +
+          '<tbody>' +
+            '<tr><td>Máximo</td><td class="text-center fw-bold">5</td><td>Ação imediata necessária</td></tr>' +
+            '<tr><td>Alto</td><td class="text-center fw-bold">4</td><td>Ação no curto prazo</td></tr>' +
+            '<tr><td>Médio</td><td class="text-center fw-bold">3</td><td>Ação no médio prazo</td></tr>' +
+            '<tr><td>Baixo</td><td class="text-center fw-bold">2</td><td>Ação no longo prazo</td></tr>' +
+            '<tr><td>Mínimo</td><td class="text-center fw-bold">1</td><td>Pode ser programada</td></tr>' +
+          '</tbody>' +
+        '</table>',
+    });
+  }
 })();
 </script>
 {% endblock %}
