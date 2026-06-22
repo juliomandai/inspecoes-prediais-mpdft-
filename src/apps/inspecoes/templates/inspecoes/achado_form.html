@@ -25,7 +25,8 @@
       data-esp-pk="{{ especialidade.pk }}"
       data-inspecao-pk="{{ especialidade.inspecao.pk }}"
       data-detalhe-url="{% url 'inspecoes:detail' especialidade.inspecao.pk %}#pane-{{ especialidade.pk }}"
-      data-modo="{% if achado %}editar{% else %}criar{% endif %}">
+      data-modo="{% if achado %}editar{% else %}criar{% endif %}"
+      data-achado-pk="{{ achado.pk|default:'' }}">
   {% csrf_token %}
 
   <div class="card mb-3">
@@ -324,6 +325,110 @@
     try {
       await window.salvarAchadoOffline(dados);
       // Redirecionar para a página de detalhe (do cache do SW)
+      window.location.href = detalheUrl;
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Salvar Achado'; }
+      alert('Erro ao salvar offline: ' + err.message);
+    }
+  });
+})();
+</script>
+<script>
+// ── Interceptação offline (modo edição) ────────────────────────────────────
+(function () {
+  var form = document.getElementById('achado-form');
+  if (!form || form.dataset.modo !== 'editar') return;
+
+  var achadoPk = parseInt(form.dataset.achadoPk);
+  var detalheUrl = form.dataset.detalheUrl;
+
+  function mostrarBloqueio() {
+    if (document.getElementById('offline-bloqueio')) return;
+    var div = document.createElement('div');
+    div.id = 'offline-bloqueio';
+    div.className = 'alert alert-warning mt-2';
+    div.innerHTML =
+      '<i class="bi bi-wifi-off"></i> <strong>Achado não disponível offline.</strong> ' +
+      'Este achado não foi preparado para campo. Volte ao escritório com conexão e use o botão ' +
+      '"Preparar para campo" na tela da especialidade antes de ir a campo.';
+    form.insertAdjacentElement('afterbegin', div);
+    var btn = form.querySelector('button[type=submit]');
+    if (btn) btn.disabled = true;
+  }
+
+  function removerBloqueio() {
+    var b = document.getElementById('offline-bloqueio');
+    if (b) b.remove();
+    var btn = form.querySelector('button[type=submit]');
+    if (btn) btn.disabled = false;
+  }
+
+  async function verificarEstadoOffline() {
+    if (!navigator.onLine) {
+      var preparado = window.obterAchadoPreparado ? await window.obterAchadoPreparado(achadoPk) : null;
+      if (!preparado) mostrarBloqueio(); else removerBloqueio();
+    } else {
+      removerBloqueio();
+    }
+  }
+
+  window.addEventListener('offline', verificarEstadoOffline);
+  window.addEventListener('online', verificarEstadoOffline);
+  verificarEstadoOffline();
+
+  // Coletar fotos para upload offline
+  var fotosColetadas = [];
+  document.getElementById('foto-camera').addEventListener('change', function () {
+    Array.from(this.files).forEach(f => fotosColetadas.push(f));
+  });
+  document.getElementById('foto-arquivo').addEventListener('change', function () {
+    Array.from(this.files).forEach(f => fotosColetadas.push(f));
+  });
+
+  form.addEventListener('submit', async function (e) {
+    if (navigator.onLine) return; // online → envio normal
+    e.preventDefault();
+
+    var preparado = window.obterAchadoPreparado ? await window.obterAchadoPreparado(achadoPk) : null;
+    if (!preparado) { mostrarBloqueio(); return; }
+
+    var btn = form.querySelector('button[type=submit]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass"></i> Salvando...'; }
+
+    function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    function checked(id) { var el = document.getElementById(id); return el ? el.checked : false; }
+
+    var dados = {
+      achado_pk: achadoPk,
+      esp_pk: parseInt(form.dataset.espPk),
+      em_conformidade: checked('id_em_conformidade'),
+      gravidade: parseInt(val('id_gravidade')) || 1,
+      urgencia: parseInt(val('id_urgencia')) || 1,
+      tendencia: parseInt(val('id_tendencia')) || 1,
+      prioridade_risco: parseInt(val('id_prioridade_risco')) || 3,
+      fotos: [],
+    };
+
+    async function fotoParaB64(file) {
+      return new Promise((resolve, reject) => {
+        var reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    for (var foto of fotosColetadas) {
+      if (!foto.type.match(/image\/(jpeg|png)/)) continue;
+      if (foto.size > 10 * 1024 * 1024) continue;
+      try {
+        var b64 = await fotoParaB64(foto);
+        dados.fotos.push({ nome: foto.name, tipo: foto.type, dados_b64: b64 });
+      } catch {}
+    }
+
+    try {
+      await window.salvarEdicaoOffline(dados);
       window.location.href = detalheUrl;
     } catch (err) {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Salvar Achado'; }

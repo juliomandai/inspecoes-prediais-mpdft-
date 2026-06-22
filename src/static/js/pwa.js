@@ -5,9 +5,8 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then(reg => {
-        // Ouvir mensagens do SW (achado sincronizado via background sync)
         navigator.serviceWorker.addEventListener('message', event => {
-          if (event.data && event.data.tipo === 'achado_sincronizado') {
+          if (event.data && (event.data.tipo === 'achado_sincronizado' || event.data.tipo === 'edicao_sincronizada')) {
             atualizarBannerOffline();
           }
         });
@@ -19,12 +18,21 @@ if ('serviceWorker' in navigator) {
 // ── IndexedDB ──────────────────────────────────────────────────────────────────
 function abrirDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('inspecoes-offline', 1);
+    const req = indexedDB.open('inspecoes-offline', 2);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('achados_pendentes')) {
-        const store = db.createObjectStore('achados_pendentes', { keyPath: 'id', autoIncrement: true });
-        store.createIndex('sincronizado', 'sincronizado');
+        const s = db.createObjectStore('achados_pendentes', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('sincronizado', 'sincronizado');
+      }
+      if (!db.objectStoreNames.contains('achados_edicao_pendentes')) {
+        const s = db.createObjectStore('achados_edicao_pendentes', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('sincronizado', 'sincronizado');
+        s.createIndex('achado_pk', 'achado_pk');
+      }
+      if (!db.objectStoreNames.contains('achados_preparados')) {
+        const s = db.createObjectStore('achados_preparados', { keyPath: 'achado_pk' });
+        s.createIndex('esp_pk', 'esp_pk');
       }
     };
     req.onsuccess = e => resolve(e.target.result);
@@ -32,6 +40,7 @@ function abrirDB() {
   });
 }
 
+// ── Criação offline ────────────────────────────────────────────────────────────
 async function salvarAchadoOffline(dados) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
@@ -46,15 +55,108 @@ async function salvarAchadoOffline(dados) {
   });
 }
 
+// ── Edição offline ─────────────────────────────────────────────────────────────
+async function salvarEdicaoOffline(dados) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
+    const req = tx.objectStore('achados_edicao_pendentes').add({
+      achado_pk: dados.achado_pk,
+      dados: dados,
+      sincronizado: 0,
+      criado_em: new Date().toISOString(),
+    });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function obterAchadoPreparado(achadoPk) {
+  try {
+    const db = await abrirDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction('achados_preparados', 'readonly');
+      const req = tx.objectStore('achados_preparados').get(achadoPk);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+// ── Preparar especialidade para campo ─────────────────────────────────────────
+window.prepararEspecialidadeParaCampo = async function (espPk, btnEl) {
+  if (!navigator.onLine) {
+    alert('É necessário estar online para preparar para campo.');
+    return;
+  }
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<i class="bi bi-arrow-repeat pwa-spin"></i> Preparando...';
+  }
+  try {
+    const resp = await fetch('/api/especialidades/' + espPk + '/achados-para-campo/', {
+      credentials: 'include',
+    });
+    if (!resp.ok) throw new Error('Servidor retornou ' + resp.status);
+    const achados = await resp.json();
+
+    const db = await abrirDB();
+
+    // Remover preparações antigas desta especialidade
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('achados_preparados', 'readwrite');
+      const store = tx.objectStore('achados_preparados');
+      const req = store.index('esp_pk').getAllKeys(espPk);
+      req.onsuccess = () => { req.result.forEach(k => store.delete(k)); };
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+
+    // Salvar snapshot de cada achado
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('achados_preparados', 'readwrite');
+      const store = tx.objectStore('achados_preparados');
+      achados.forEach(a => store.put({ achado_pk: a.pk, esp_pk: espPk, dados: a }));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+
+    if (btnEl) {
+      btnEl.classList.remove('btn-outline-info');
+      btnEl.classList.add('btn-success');
+      btnEl.innerHTML = '<i class="bi bi-cloud-check"></i> Preparado ✓ (' + achados.length + ')';
+      btnEl.disabled = false;
+    }
+  } catch (err) {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = '<i class="bi bi-download"></i> Preparar para campo';
+    }
+    alert('Erro ao preparar para campo: ' + (err.message || err));
+  }
+};
+
+// ── Contagem de pendentes (criação + edição) ───────────────────────────────────
 async function contarPendentes() {
   try {
     const db = await abrirDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('achados_pendentes', 'readonly');
-      const req = tx.objectStore('achados_pendentes').index('sincronizado').count(0);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
+    const [criacao, edicao] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('achados_pendentes', 'readonly');
+        const req = tx.objectStore('achados_pendentes').index('sincronizado').count(0);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }),
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('achados_edicao_pendentes', 'readonly');
+        const req = tx.objectStore('achados_edicao_pendentes').index('sincronizado').count(0);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }),
+    ]);
+    return criacao + edicao;
   } catch {
     return 0;
   }
@@ -70,11 +172,36 @@ async function obterPendentes() {
   });
 }
 
+async function obterEdicoesPendentes() {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('achados_edicao_pendentes', 'readonly');
+    const req = tx.objectStore('achados_edicao_pendentes').index('sincronizado').getAll(0);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 async function marcarSincronizado(id) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('achados_pendentes', 'readwrite');
     const store = tx.objectStore('achados_pendentes');
+    const r = store.get(id);
+    r.onsuccess = () => {
+      const obj = r.result;
+      if (obj) { obj.sincronizado = 1; store.put(obj); }
+      resolve();
+    };
+    r.onerror = () => reject(r.error);
+  });
+}
+
+async function marcarEdicaoSincronizada(id) {
+  const db = await abrirDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
+    const store = tx.objectStore('achados_edicao_pendentes');
     const r = store.get(id);
     r.onsuccess = () => {
       const obj = r.result;
@@ -106,7 +233,6 @@ async function atualizarBannerOffline() {
       : '<i class="bi bi-wifi-off"></i> <strong>Modo offline</strong> — formulários serão salvos localmente e enviados ao reconectar';
     banner.innerHTML = txt;
   } else {
-    // Online mas com pendentes
     banner.className = 'alert alert-info mb-0 rounded-0 text-center py-2 small no-print';
     banner.innerHTML =
       `<i class="bi bi-arrow-repeat"></i> ${pendentes} achado(s) offline aguardando sincronização — ` +
@@ -119,8 +245,8 @@ window.pwaSync = async function (event) {
   if (event) event.preventDefault();
   if (!navigator.onLine) { alert('Sem conexão WiFi. Aguarde a rede retornar.'); return; }
 
-  const pendentes = await obterPendentes();
-  if (pendentes.length === 0) { atualizarBannerOffline(); return; }
+  const [pendentes, edicoes] = await Promise.all([obterPendentes(), obterEdicoesPendentes()]);
+  if (pendentes.length === 0 && edicoes.length === 0) { atualizarBannerOffline(); return; }
 
   const banner = document.getElementById('banner-offline');
   if (banner) {
@@ -130,6 +256,7 @@ window.pwaSync = async function (event) {
 
   let ok = 0, erro = 0;
 
+  // Sincronizar criações
   for (const item of pendentes) {
     try {
       const resp = await fetch('/api/achados/sincronizar/', {
@@ -139,6 +266,20 @@ window.pwaSync = async function (event) {
         body: JSON.stringify(item.dados),
       });
       if (resp.ok) { await marcarSincronizado(item.id); ok++; }
+      else { erro++; }
+    } catch { erro++; }
+  }
+
+  // Sincronizar edições
+  for (const item of edicoes) {
+    try {
+      const resp = await fetch('/api/achados/' + item.achado_pk + '/sincronizar-edicao/', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'include',
+        body: JSON.stringify(item.dados),
+      });
+      if (resp.ok) { await marcarEdicaoSincronizada(item.id); ok++; }
       else { erro++; }
     } catch { erro++; }
   }
@@ -162,7 +303,6 @@ window.pwaSync = async function (event) {
 // ── Eventos de conexão ─────────────────────────────────────────────────────────
 window.addEventListener('online', () => {
   atualizarBannerOffline();
-  // Disparar background sync se suportado
   if ('serviceWorker' in navigator && 'SyncManager' in window) {
     navigator.serviceWorker.ready.then(reg => reg.sync.register('sync-achados')).catch(() => {});
   } else {
@@ -172,8 +312,9 @@ window.addEventListener('online', () => {
 
 window.addEventListener('offline', () => atualizarBannerOffline());
 
-// Inicializar ao carregar página
 document.addEventListener('DOMContentLoaded', () => atualizarBannerOffline());
 
-// ── Exportar para uso no formulário ───────────────────────────────────────────
+// ── Exportar para uso nos formulários ─────────────────────────────────────────
 window.salvarAchadoOffline = salvarAchadoOffline;
+window.salvarEdicaoOffline = salvarEdicaoOffline;
+window.obterAchadoPreparado = obterAchadoPreparado;

@@ -1,8 +1,8 @@
 'use strict';
 
 // ── Versão dos caches — incrementar ao publicar novas versões ─────────────────
-const CACHE_PAGINAS  = 'inspecoes-paginas-v2';
-const CACHE_ESTATICO = 'inspecoes-estatico-v2';
+const CACHE_PAGINAS  = 'inspecoes-paginas-v3';
+const CACHE_ESTATICO = 'inspecoes-estatico-v3';
 const CACHES_VALIDOS = [CACHE_PAGINAS, CACHE_ESTATICO];
 
 // ── Install ────────────────────────────────────────────────────────────────────
@@ -92,12 +92,21 @@ self.addEventListener('sync', event => {
 // ── IndexedDB helpers (contexto do SW) ────────────────────────────────────────
 function abrirDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('inspecoes-offline', 1);
+    const req = indexedDB.open('inspecoes-offline', 2);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('achados_pendentes')) {
-        const store = db.createObjectStore('achados_pendentes', { keyPath: 'id', autoIncrement: true });
-        store.createIndex('sincronizado', 'sincronizado');
+        const s = db.createObjectStore('achados_pendentes', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('sincronizado', 'sincronizado');
+      }
+      if (!db.objectStoreNames.contains('achados_edicao_pendentes')) {
+        const s = db.createObjectStore('achados_edicao_pendentes', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('sincronizado', 'sincronizado');
+        s.createIndex('achado_pk', 'achado_pk');
+      }
+      if (!db.objectStoreNames.contains('achados_preparados')) {
+        const s = db.createObjectStore('achados_preparados', { keyPath: 'achado_pk' });
+        s.createIndex('esp_pk', 'esp_pk');
       }
     };
     req.onsuccess = e => resolve(e.target.result);
@@ -109,6 +118,7 @@ async function sincronizarAchadosPendentes() {
   let db;
   try { db = await abrirDB(); } catch { return; }
 
+  // Sincronizar criações
   const pendentes = await new Promise((resolve, reject) => {
     const tx = db.transaction('achados_pendentes', 'readonly');
     const req = tx.objectStore('achados_pendentes').index('sincronizado').getAll(0);
@@ -138,6 +148,40 @@ async function sincronizarAchadosPendentes() {
         });
         const clients = await self.clients.matchAll({ includeUncontrolled: true });
         clients.forEach(c => c.postMessage({ tipo: 'achado_sincronizado', itemId: item.id }));
+      }
+    } catch { /* tenta no próximo sync */ }
+  }
+
+  // Sincronizar edições
+  const edicoes = await new Promise((resolve, reject) => {
+    const tx = db.transaction('achados_edicao_pendentes', 'readonly');
+    const req = tx.objectStore('achados_edicao_pendentes').index('sincronizado').getAll(0);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  for (const item of edicoes) {
+    try {
+      const resp = await fetch('/api/achados/' + item.achado_pk + '/sincronizar-edicao/', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(item.dados),
+      });
+      if (resp.ok) {
+        await new Promise(resolve => {
+          const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
+          const store = tx.objectStore('achados_edicao_pendentes');
+          const r = store.get(item.id);
+          r.onsuccess = () => {
+            const obj = r.result;
+            if (obj) { obj.sincronizado = 1; store.put(obj); }
+            resolve();
+          };
+          r.onerror = resolve;
+        });
+        const clients = await self.clients.matchAll({ includeUncontrolled: true });
+        clients.forEach(c => c.postMessage({ tipo: 'edicao_sincronizada', itemId: item.id }));
       }
     } catch { /* tenta no próximo sync */ }
   }

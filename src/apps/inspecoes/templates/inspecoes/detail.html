@@ -149,6 +149,12 @@
         </a>
         {% endif %}
         {% if esp.achados.exists %}
+        <button class="btn btn-outline-info btn-sm no-print"
+                id="btn-preparar-esp-{{ esp.pk }}"
+                onclick="window.prepararEspecialidadeParaCampo({{ esp.pk }}, this)"
+                title="Salva os achados desta especialidade para edição offline em campo">
+          <i class="bi bi-download"></i> Preparar para campo
+        </button>
         <a href="{% url 'inspecoes:analise' esp.pk %}" class="btn btn-primary btn-sm">
           <i class="bi bi-clipboard2-data"></i> Análise
         </a>

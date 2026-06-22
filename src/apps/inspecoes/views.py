@@ -775,6 +775,100 @@ def achado_sincronizar(request):
     return JsonResponse({'ok': True, 'achado_pk': achado.pk, 'fotos_salvas': fotos_salvas}, status=201)
 
 
+@login_required
+def especialidade_achados_para_campo(request, pk):
+    """
+    Retorna JSON com todos os achados de uma especialidade para cache offline.
+    """
+    esp = get_object_or_404(InspecaoEspecialidade, pk=pk)
+    achados = [
+        {
+            'pk': a.pk,
+            'localizacao': a.localizacao,
+            'sub_localizacao': a.sub_localizacao,
+            'verificacao': a.verificacao,
+            'grupo_tecnico': a.grupo_tecnico,
+            'em_conformidade': a.em_conformidade,
+            'descricao_nao_conformidade': a.descricao_nao_conformidade,
+            'requisito_afetado': a.requisito_afetado,
+            'gravidade': a.gravidade,
+            'urgencia': a.urgencia,
+            'tendencia': a.tendencia,
+            'prioridade_risco': a.prioridade_risco,
+            'recomendacao': a.recomendacao,
+            'direcionamento': a.direcionamento,
+            'prazo_meses': a.prazo_meses,
+            'esp_pk': esp.pk,
+        }
+        for a in esp.achados.all()
+    ]
+    return JsonResponse(achados, safe=False)
+
+
+@require_http_methods(['PATCH'])
+@login_required
+def achado_sincronizar_edicao(request, pk):
+    """
+    Atualiza um achado editado offline: conformidade, GUT e fotos novas.
+    Campos não enviados (descrição, recomendação, etc.) são preservados.
+    """
+    try:
+        dados = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+
+    achado = get_object_or_404(
+        Achado.objects.select_related('especialidade__inspecao'), pk=pk
+    )
+
+    if not achado.especialidade.pode_editar:
+        return JsonResponse({'erro': 'Especialidade finalizada. Reabra antes de sincronizar.'}, status=400)
+
+    em_conformidade = bool(dados.get('em_conformidade', achado.em_conformidade))
+    achado.em_conformidade = em_conformidade
+
+    if em_conformidade:
+        achado.gravidade = 1
+        achado.urgencia = 1
+        achado.tendencia = 1
+        achado.prioridade_risco = 3
+    else:
+        achado.gravidade = int(dados.get('gravidade', achado.gravidade))
+        achado.urgencia = int(dados.get('urgencia', achado.urgencia))
+        achado.tendencia = int(dados.get('tendencia', achado.tendencia))
+        achado.prioridade_risco = int(dados.get('prioridade_risco', achado.prioridade_risco))
+
+    achado.save()
+
+    fotos_salvas = 0
+    for foto_data in dados.get('fotos', []):
+        try:
+            nome = foto_data.get('nome', 'foto.jpg')
+            tipo = foto_data.get('tipo', 'image/jpeg')
+            b64 = foto_data.get('dados_b64', '')
+            if not b64:
+                continue
+            conteudo = base64.b64decode(b64)
+            if not foto_valida(tipo, len(conteudo)):
+                continue
+            cf, nome_c, tamanho = comprimir_imagem(conteudo, nome)
+            Foto.objects.create(
+                achado=achado,
+                arquivo=cf,
+                nome_original=nome_c,
+                tamanho_bytes=tamanho,
+            )
+            fotos_salvas += 1
+        except Exception:
+            pass
+
+    _log(request, 'achado_atualizado',
+         f'[OFFLINE SYNC] Achado editado: "{achado.verificacao}" em '
+         f'{achado.especialidade.get_especialidade_display()} — "{achado.especialidade.inspecao.edificacao}".')
+
+    return JsonResponse({'ok': True, 'achado_pk': achado.pk, 'fotos_salvas': fotos_salvas})
+
+
 # ── Análise — helper compartilhado ────────────────────────────────────────────
 
 # ── Sub-cálculos de _analise_data — cada um testável isoladamente ────────────
