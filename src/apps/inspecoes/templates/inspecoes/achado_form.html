@@ -137,7 +137,12 @@
       </div>
       <div class="row g-3">
         <div class="col-md-5">
-          <label for="{{ form.prioridade_risco.id_for_label }}" class="form-label">{{ form.prioridade_risco.label }}</label>
+          <label for="{{ form.prioridade_risco.id_for_label }}" class="form-label">
+            {{ form.prioridade_risco.label }}
+            <span id="gut-prioridade-info" tabindex="0" style="cursor:pointer;">
+              <i class="bi bi-info-circle text-muted small ms-1"></i>
+            </span>
+          </label>
           {{ form.prioridade_risco }}
           {% if form.prioridade_risco.errors %}<div class="text-danger small mt-1">{{ form.prioridade_risco.errors }}</div>{% endif %}
         </div>
@@ -523,6 +528,22 @@
             '<tr><td>Mínimo</td><td class="text-center fw-bold">1</td><td>Estável, sem tendência clara</td></tr>' +
           '</tbody>' +
         '</table>',
+    });
+  }
+  var elP = document.getElementById('gut-prioridade-info');
+  if (elP) {
+    new bootstrap.Popover(elP, {
+      trigger: 'hover focus',
+      placement: 'right',
+      container: 'body',
+      html: true,
+      sanitize: false,
+      content:
+        '<div class="small" style="min-width:260px">' +
+          '<p class="mb-2"><span class="badge bg-danger me-1">P1</span><strong>Crítico</strong> — Risco à saúde/segurança, perda excessiva de desempenho. <em style="color:#d97706">Intervenção imediata.</em></p>' +
+          '<p class="mb-2"><span class="badge bg-warning text-dark me-1">P2</span><strong>Regular</strong> — Perda de funcionalidade; deterioração precoce. <em style="color:#d97706">Programação a curto prazo.</em></p>' +
+          '<p class="mb-0"><span class="badge bg-success me-1">P3</span><strong>Mínimo</strong> — Prejuízos à estética ou atividade programável. <em style="color:#d97706">Intervenção a médio prazo.</em></p>' +
+        '</div>',
     });
   }
 })();
