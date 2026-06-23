@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block title %}Diagnóstico Offline — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 760px;">
+  <h4 class="mb-3"><i class="bi bi-wifi"></i> Diagnóstico do modo offline</h4>
+  <p class="text-muted small">
+    Esta página lê o estado do app neste dispositivo (não depende do
+    <code>pwa.js</code>). Use os botões abaixo e, se precisar, me envie o conteúdo
+    do quadro de leitura.
+  </p>
+
+  <div class="d-flex gap-2 flex-wrap mb-3">
+    <button class="btn btn-outline-primary btn-sm" onclick="diagLer()">
+      <i class="bi bi-arrow-clockwise"></i> Recarregar leitura
+    </button>
+    <button class="btn btn-success btn-sm" onclick="diagSync()">
+      <i class="bi bi-cloud-arrow-up"></i> Sincronizar agora
+    </button>
+    <button class="btn btn-outline-danger btn-sm" onclick="diagReset()">
+      <i class="bi bi-trash"></i> Resetar Service Worker + caches
+    </button>
+  </div>
+
+  <pre id="diag-saida" class="border rounded p-3 bg-light small"
+       style="white-space: pre-wrap; word-break: break-word;">Carregando…</pre>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const DB_NOME = 'inspecoes-offline';
+const DB_VER = 2;
+
+function abrirDBDiag() {
+  return new Promise((resolve, reject) => {
+    // openCursor sem onupgradeneeded: não cria stores, só lê o que existir.
+    const req = indexedDB.open(DB_NOME, DB_VER);
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+    req.onupgradeneeded = e => { /* deixa o pwa.js criar; aqui só observamos */ };
+  });
+}
+
+async function lerStore(db, nome) {
+  if (!db.objectStoreNames.contains(nome)) return { existe: false, itens: [] };
+  return new Promise(resolve => {
+    const tx = db.transaction(nome, 'readonly');
+    const rq = tx.objectStore(nome).getAll();
+    rq.onsuccess = () => resolve({ existe: true, itens: rq.result || [] });
+    rq.onerror = () => resolve({ existe: true, itens: [] });
+  });
+}
+
+async function diagLer() {
+  const out = [];
+  out.push('=== CONEXÃO ===');
+  out.push('navigator.onLine: ' + navigator.onLine);
+  out.push('URL: ' + location.href);
+
+  out.push('\n=== SERVICE WORKER ===');
+  try {
+    const ctrl = navigator.serviceWorker && navigator.serviceWorker.controller;
+    out.push('controller: ' + (ctrl ? ctrl.scriptURL : '(nenhum — página não controlada por SW)'));
+    const regs = await navigator.serviceWorker.getRegistrations();
+    out.push('registrations: ' + regs.length);
+    regs.forEach((r, i) => {
+      const a = r.active, w = r.waiting, ins = r.installing;
+      out.push(`  [${i}] active=${a ? a.scriptURL : '-'} waiting=${w ? 'sim' : 'não'} installing=${ins ? 'sim' : 'não'}`);
+    });
+  } catch (e) { out.push('erro SW: ' + e); }
+
+  out.push('\n=== CACHES ===');
+  try {
+    const nomes = await caches.keys();
+    out.push(nomes.length ? nomes.join('\n') : '(nenhum cache)');
+  } catch (e) { out.push('erro caches: ' + e); }
+
+  out.push('\n=== FILAS OFFLINE (IndexedDB) ===');
+  try {
+    const db = await abrirDBDiag();
+    out.push('stores: ' + Array.from(db.objectStoreNames).join(', '));
+
+    const cri = await lerStore(db, 'achados_pendentes');
+    out.push(`\n-- achados_pendentes (criações): ${cri.itens.length}`);
+    cri.itens.forEach(it => out.push(
+      `   id=${it.id} sincronizado=${it.sincronizado} loc="${(it.dados||{}).localizacao||''}" esp=${(it.dados||{}).esp_pk}`));
+
+    const edi = await lerStore(db, 'achados_edicao_pendentes');
+    out.push(`\n-- achados_edicao_pendentes (edições): ${edi.itens.length}`);
+    edi.itens.forEach(it => out.push(
+      `   id=${it.id} achado_pk=${it.achado_pk} sincronizado=${it.sincronizado} campos=[${Object.keys(it.dados||{}).join(',')}]`));
+
+    const prep = await lerStore(db, 'achados_preparados');
+    out.push(`\n-- achados_preparados: ${prep.itens.length}`);
+  } catch (e) { out.push('erro IndexedDB: ' + e); }
+
+  out.push('\n=== pwa.js ===');
+  out.push('window.pwaSync: ' + (typeof window.pwaSync));
+  out.push('window.salvarEdicaoOffline: ' + (typeof window.salvarEdicaoOffline));
+
+  document.getElementById('diag-saida').textContent = out.join('\n');
+}
+
+async function diagSync() {
+  if (typeof window.pwaSync === 'function') {
+    await window.pwaSync();
+    setTimeout(diagLer, 1500);
+  } else {
+    alert('window.pwaSync não está disponível — o pwa.js atual pode estar desatualizado neste dispositivo.');
+  }
+}
+
+async function diagReset() {
+  if (!confirm('Remover o Service Worker e todos os caches deste dispositivo?\n\n' +
+               'As filas offline (achados ainda não sincronizados) NÃO são apagadas.\n' +
+               'Depois recarregue a página 2x com WiFi para reinstalar.')) return;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r => r.unregister()));
+    const nomes = await caches.keys();
+    await Promise.all(nomes.map(n => caches.delete(n)));
+    alert('Service Worker e caches removidos. Recarregue a página 2x com WiFi.');
+    diagLer();
+  } catch (e) { alert('Erro ao resetar: ' + e); }
+}
+
+document.addEventListener('DOMContentLoaded', diagLer);
+</script>
+{% endblock %}

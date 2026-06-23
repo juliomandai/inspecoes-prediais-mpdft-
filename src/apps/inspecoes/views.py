@@ -695,6 +695,13 @@ def offline_page(request):
     return render(request, 'inspecoes/offline.html')
 
 
+@login_required
+def diagnostico_offline(request):
+    """Página de diagnóstico do PWA (sem DevTools): conexão, Service Worker,
+    caches e conteúdo das filas offline; permite sincronizar e resetar o SW."""
+    return render(request, 'inspecoes/diagnostico_offline.html')
+
+
 # ── API — Sincronização de achados offline ────────────────────────────────────
 
 @login_required
