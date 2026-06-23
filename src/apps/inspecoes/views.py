@@ -799,18 +799,29 @@ def especialidade_achados_para_campo(request, pk):
             'direcionamento': a.direcionamento,
             'prazo_meses': a.prazo_meses,
             'esp_pk': esp.pk,
+            'editar_url': reverse('inspecoes:achado_update', args=[a.pk]),
+            # URLs das fotos existentes — o SW as pré-cacheia para exibição offline.
+            'fotos': [
+                {'pk': f.pk, 'url': f.arquivo.url, 'nome': f.nome_original}
+                for f in a.fotos.all()
+            ],
         }
-        for a in esp.achados.all()
+        for a in esp.achados.prefetch_related('fotos')
     ]
     return JsonResponse(achados, safe=False)
 
 
-@require_http_methods(['PATCH'])
 @login_required
+@csrf_exempt
+@require_http_methods(['PATCH'])
 def achado_sincronizar_edicao(request, pk):
     """
-    Atualiza um achado editado offline: conformidade, GUT e fotos novas.
-    Campos não enviados (descrição, recomendação, etc.) são preservados.
+    Atualiza um achado editado offline aplicando merge campo a campo.
+
+    Só os campos de diagnóstico **presentes** no payload (os "campos tocados"
+    em campo) são aplicados; os ausentes preservam o valor do servidor. Aceita
+    também `fotos` (novas, base64) e `fotos_excluir` (pks marcados para remoção).
+    Campos de identidade (localização, verificação) não são editáveis offline.
     """
     try:
         dados = json.loads(request.body)
@@ -824,22 +835,41 @@ def achado_sincronizar_edicao(request, pk):
     if not achado.especialidade.pode_editar:
         return JsonResponse({'erro': 'Especialidade finalizada. Reabra antes de sincronizar.'}, status=400)
 
-    em_conformidade = bool(dados.get('em_conformidade', achado.em_conformidade))
-    achado.em_conformidade = em_conformidade
+    # em_conformidade define se os campos de não conformidade são limpos (cascata).
+    if 'em_conformidade' in dados:
+        achado.em_conformidade = bool(dados['em_conformidade'])
 
-    if em_conformidade:
+    if achado.em_conformidade:
         achado.gravidade = 1
         achado.urgencia = 1
         achado.tendencia = 1
         achado.prioridade_risco = 3
+        achado.descricao_nao_conformidade = ''
+        achado.requisito_afetado = ''
+        achado.grupo_tecnico = ''
+        achado.recomendacao = ''
     else:
-        achado.gravidade = int(dados.get('gravidade', achado.gravidade))
-        achado.urgencia = int(dados.get('urgencia', achado.urgencia))
-        achado.tendencia = int(dados.get('tendencia', achado.tendencia))
-        achado.prioridade_risco = int(dados.get('prioridade_risco', achado.prioridade_risco))
+        for campo in ('gravidade', 'urgencia', 'tendencia', 'prioridade_risco', 'prazo_meses'):
+            if campo in dados:
+                try:
+                    setattr(achado, campo, int(dados[campo]))
+                except (TypeError, ValueError):
+                    pass
+        for campo in ('descricao_nao_conformidade', 'requisito_afetado',
+                      'grupo_tecnico', 'recomendacao', 'direcionamento'):
+            if campo in dados:
+                setattr(achado, campo, dados[campo] or '')
 
     achado.save()
 
+    # Exclusão de fotos marcadas offline (idempotente: ignora pks já removidos).
+    fotos_excluidas = 0
+    fotos_excluir = dados.get('fotos_excluir') or []
+    for foto in achado.fotos.filter(pk__in=fotos_excluir):
+        foto.delete()
+        fotos_excluidas += 1
+
+    # Fotos novas anexadas em campo (base64).
     fotos_salvas = 0
     for foto_data in dados.get('fotos', []):
         try:
@@ -866,7 +896,10 @@ def achado_sincronizar_edicao(request, pk):
          f'[OFFLINE SYNC] Achado editado: "{achado.verificacao}" em '
          f'{achado.especialidade.get_especialidade_display()} — "{achado.especialidade.inspecao.edificacao}".')
 
-    return JsonResponse({'ok': True, 'achado_pk': achado.pk, 'fotos_salvas': fotos_salvas})
+    return JsonResponse({
+        'ok': True, 'achado_pk': achado.pk,
+        'fotos_salvas': fotos_salvas, 'fotos_excluidas': fotos_excluidas,
+    })
 
 
 # ── Análise — helper compartilhado ────────────────────────────────────────────

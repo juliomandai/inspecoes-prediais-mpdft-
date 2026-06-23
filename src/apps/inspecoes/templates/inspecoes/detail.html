@@ -49,10 +49,6 @@
         <i class="bi bi-archive-fill"></i> Baixar Backup
       </a>
       {% endif %}
-      <button class="btn btn-outline-info btn-sm no-print" id="btn-preparar-campo"
-              onclick="prepararParaCampo()" title="Salva todas as páginas desta inspeção para uso offline no campo">
-        <i class="bi bi-download"></i> Preparar para campo
-      </button>
       <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
         <i class="bi bi-printer"></i> Imprimir
       </button>
@@ -106,6 +102,8 @@
             id="tab-{{ esp.pk }}"
             data-bs-toggle="tab"
             data-bs-target="#pane-{{ esp.pk }}"
+            data-esp-pk="{{ esp.pk }}"
+            data-create-url="{% url 'inspecoes:achado_create' esp.pk %}"
             type="button" role="tab"
             aria-controls="pane-{{ esp.pk }}"
             aria-selected="{% if esp.pk == aba_ativa_pk %}true{% else %}false{% endif %}">
@@ -141,6 +139,8 @@
       <div>
         <span class="fw-semibold">{{ esp.profissionais_display }}</span>
         <span class="text-muted ms-2">{{ esp.data_inspecao|date:"d/m/Y" }}</span>
+        <span class="badge ms-1 d-none" data-esp-badge="{{ esp.pk }}"
+              title="Disponibilidade desta especialidade para edição offline em campo"></span>
       </div>
       <div class="d-flex gap-2 flex-wrap">
         {% if esp.status == 'em_andamento' %}
@@ -149,12 +149,6 @@
         </a>
         {% endif %}
         {% if esp.achados.exists %}
-        <button class="btn btn-outline-info btn-sm no-print"
-                id="btn-preparar-esp-{{ esp.pk }}"
-                onclick="window.prepararEspecialidadeParaCampo({{ esp.pk }}, this)"
-                title="Salva os achados desta especialidade para edição offline em campo">
-          <i class="bi bi-download"></i> Preparar para campo
-        </button>
         <a href="{% url 'inspecoes:analise' esp.pk %}" class="btn btn-primary btn-sm">
           <i class="bi bi-clipboard2-data"></i> Análise
         </a>
@@ -306,54 +300,32 @@
 
 {% block extra_js %}
 <script>
-// ── Preparar para campo: pré-cacheia páginas da inspeção ──────────────────────
-async function prepararParaCampo() {
-  var btn = document.getElementById('btn-preparar-campo');
-
-  if (!('caches' in window) || !navigator.serviceWorker.controller) {
-    alert(
-      'O cache offline não está disponível neste navegador/conexão.\n\n' +
-      'Possível causa: o app está sendo acessado via HTTP em IP de rede.\n\n' +
-      'Solução (Chrome Android):\n' +
-      '1. Abra chrome://flags/#unsafely-treat-insecure-origin-as-secure\n' +
-      '2. Adicione o endereço do servidor (ex: http://10.34.52.12:8000)\n' +
-      '3. Clique em Enable → Relaunch\n' +
-      '4. Volte ao app e tente novamente.'
-    );
-    return;
+// ── Preparação automática para campo (por aba de especialidade) ───────────────
+// Ao visualizar uma aba (na carga ou ao trocar), cacheia online as páginas de
+// edição e fotos daquela especialidade e mostra o selo "pronto offline".
+(function () {
+  function prepararAba(tabBtn) {
+    if (!tabBtn || !tabBtn.dataset || !window.prepararEspecialidadeParaCampo) return;
+    var espPk = parseInt(tabBtn.dataset.espPk);
+    if (!espPk) return;
+    var badge = document.querySelector('[data-esp-badge="' + espPk + '"]');
+    window.prepararEspecialidadeParaCampo(espPk, badge, tabBtn.dataset.createUrl);
   }
 
-  btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-arrow-repeat pwa-spin"></i> Preparando...';
-
-  // URLs a pré-cachear para esta inspeção
-  var urls = [window.location.pathname];
-
-  {% for esp in inspecao.especialidades.all %}
-  urls.push('{% url "inspecoes:achado_create" esp.pk %}');
-  {% endfor %}
-
-  try {
-    var cache = await caches.open('inspecoes-paginas-v1');
-    var resultados = await Promise.allSettled(
-      urls.map(url => fetch(url, { credentials: 'include' })
-        .then(resp => { if (resp.ok) cache.put(url, resp); })
-      )
-    );
-    var ok = resultados.filter(r => r.status === 'fulfilled').length;
-    btn.innerHTML = '<i class="bi bi-check-circle text-success"></i> Pronto para campo!';
-    btn.classList.replace('btn-outline-info', 'btn-outline-success');
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-download"></i> Preparar para campo';
-      btn.classList.replace('btn-outline-success', 'btn-outline-info');
-    }, 4000);
-  } catch (e) {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-download"></i> Preparar para campo';
-    alert('Erro ao preparar páginas: ' + e.message);
+  function iniciar() {
+    var ativa = document.querySelector('#tabEspecialidades .nav-link.active');
+    prepararAba(ativa);
+    document.querySelectorAll('#tabEspecialidades [data-bs-toggle="tab"]').forEach(function (btn) {
+      btn.addEventListener('shown.bs.tab', function (e) { prepararAba(e.target); });
+    });
   }
-}
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar);
+  } else {
+    iniciar();
+  }
+})();
 </script>
 <script>
 // A aba ativa já é definida no servidor (?aba=). Se viemos de um redirect

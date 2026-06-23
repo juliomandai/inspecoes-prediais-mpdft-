@@ -342,6 +342,39 @@
   var achadoPk = parseInt(form.dataset.achadoPk);
   var detalheUrl = form.dataset.detalheUrl;
 
+  // Estado de fotos compartilhado com o bloco de upload (novas + a excluir).
+  window.fotoState = window.fotoState || { novas: [], excluir: [] };
+
+  // Campos de diagnóstico (sincronizáveis offline) e leitura genérica.
+  var CAMPOS_INT = ['gravidade', 'urgencia', 'tendencia', 'prioridade_risco', 'prazo_meses'];
+  var CAMPOS_TXT = ['descricao_nao_conformidade', 'requisito_afetado', 'grupo_tecnico',
+                    'recomendacao', 'direcionamento'];
+  function lerCampo(campo) {
+    var el = document.getElementById('id_' + campo);
+    if (!el) return undefined;
+    return campo === 'em_conformidade' ? el.checked : el.value;
+  }
+  // Snapshot dos valores renderizados (estado do servidor na preparação).
+  // O diff de "campos tocados" compara contra ESTE snapshot — mesma codificação
+  // dos inputs, evitando falsos positivos por valor vs. label de <select>.
+  var inicial = {};
+  ['em_conformidade'].concat(CAMPOS_INT, CAMPOS_TXT).forEach(function (c) {
+    inicial[c] = lerCampo(c);
+  });
+
+  // Campos de identidade: definidos no pré-cadastro, não editáveis offline.
+  var IDENTIDADE = ['id_localizacao', 'id_sub_localizacao', 'id_verificacao'];
+  function travarIdentidade(travar) {
+    IDENTIDADE.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.disabled = travar;
+      el.title = travar
+        ? 'Localização e verificação não são editáveis offline (definidas no pré-cadastro).'
+        : '';
+    });
+  }
+
   function mostrarBloqueio() {
     if (document.getElementById('offline-bloqueio')) return;
     var div = document.createElement('div');
@@ -349,8 +382,8 @@
     div.className = 'alert alert-warning mt-2';
     div.innerHTML =
       '<i class="bi bi-wifi-off"></i> <strong>Achado não disponível offline.</strong> ' +
-      'Este achado não foi preparado para campo. Volte ao escritório com conexão e use o botão ' +
-      '"Preparar para campo" na tela da especialidade antes de ir a campo.';
+      'Este achado não foi preparado para campo. Abra esta especialidade no escritório ' +
+      '(com conexão) antes de ir a campo — a preparação é automática.';
     form.insertAdjacentElement('afterbegin', div);
     var btn = form.querySelector('button[type=submit]');
     if (btn) btn.disabled = true;
@@ -365,9 +398,11 @@
 
   async function verificarEstadoOffline() {
     if (!navigator.onLine) {
+      travarIdentidade(true);
       var preparado = window.obterAchadoPreparado ? await window.obterAchadoPreparado(achadoPk) : null;
       if (!preparado) mostrarBloqueio(); else removerBloqueio();
     } else {
+      travarIdentidade(false);
       removerBloqueio();
     }
   }
@@ -375,15 +410,6 @@
   window.addEventListener('offline', verificarEstadoOffline);
   window.addEventListener('online', verificarEstadoOffline);
   verificarEstadoOffline();
-
-  // Coletar fotos para upload offline
-  var fotosColetadas = [];
-  document.getElementById('foto-camera').addEventListener('change', function () {
-    Array.from(this.files).forEach(f => fotosColetadas.push(f));
-  });
-  document.getElementById('foto-arquivo').addEventListener('change', function () {
-    Array.from(this.files).forEach(f => fotosColetadas.push(f));
-  });
 
   form.addEventListener('submit', async function (e) {
     if (navigator.onLine) return; // online → envio normal
@@ -395,19 +421,28 @@
     var btn = form.querySelector('button[type=submit]');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass"></i> Salvando...'; }
 
-    function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
-    function checked(id) { var el = document.getElementById(id); return el ? el.checked : false; }
+    // Merge campo a campo: só enviamos os campos de diagnóstico que mudaram
+    // em relação ao valor renderizado inicialmente (campos tocados).
+    var dados = { achado_pk: achadoPk, esp_pk: parseInt(form.dataset.espPk) };
 
-    var dados = {
-      achado_pk: achadoPk,
-      esp_pk: parseInt(form.dataset.espPk),
-      em_conformidade: checked('id_em_conformidade'),
-      gravidade: parseInt(val('id_gravidade')) || 1,
-      urgencia: parseInt(val('id_urgencia')) || 1,
-      tendencia: parseInt(val('id_tendencia')) || 1,
-      prioridade_risco: parseInt(val('id_prioridade_risco')) || 3,
-      fotos: [],
-    };
+    var conf = !!lerCampo('em_conformidade');
+    if (conf !== inicial.em_conformidade) dados.em_conformidade = conf;
+
+    if (!conf) {
+      CAMPOS_INT.forEach(function (c) {
+        if (lerCampo(c) !== inicial[c]) {
+          var v = parseInt(lerCampo(c));
+          if (!isNaN(v)) dados[c] = v;
+        }
+      });
+      CAMPOS_TXT.forEach(function (c) {
+        if (lerCampo(c) !== inicial[c]) dados[c] = lerCampo(c);
+      });
+    }
+
+    // Fotos: novas (base64) + pks marcados para exclusão.
+    dados.fotos = [];
+    dados.fotos_excluir = window.fotoState.excluir.slice();
 
     async function fotoParaB64(file) {
       return new Promise((resolve, reject) => {
@@ -418,7 +453,7 @@
       });
     }
 
-    for (var foto of fotosColetadas) {
+    for (var foto of window.fotoState.novas) {
       if (!foto.type.match(/image\/(jpeg|png)/)) continue;
       if (foto.size > 10 * 1024 * 1024) continue;
       try {
@@ -482,6 +517,8 @@
 <script>
 (function () {
   var CSRF = "{{ csrf_token }}";
+  // Estado de fotos compartilhado com a interceptação offline (edição).
+  window.fotoState = window.fotoState || { novas: [], excluir: [] };
   {% if achado %}
   var UPLOAD_URL = "{% url 'inspecoes:foto_upload' achado.pk %}";
   {% endif %}
@@ -508,8 +545,9 @@
   }
 
   {% if achado %}
-  // Na edição: upload AJAX imediato (comportamento anterior)
+  // Na edição online: upload AJAX imediato. Offline: tratado pela coleta offline.
   function uploadAjax(files) {
+    if (!navigator.onLine) return;
     var statusDiv = document.getElementById('upload-status');
     Array.from(files).forEach(function (file) {
       var fd = new FormData();
@@ -542,14 +580,40 @@
     });
   }
 
+  // Online: sobe imediato (miniatura real). Offline: preview + coleta para sync.
+  function tratarSelecao(files) {
+    var arr = Array.from(files);
+    if (navigator.onLine) {
+      uploadAjax(arr);
+    } else {
+      mostrarPreview(arr);
+      arr.forEach(function (f) { window.fotoState.novas.push(f); });
+    }
+  }
   document.getElementById('foto-camera').addEventListener('change', function () {
-    uploadAjax(this.files); this.value = '';
+    tratarSelecao(this.files); this.value = '';
   });
   document.getElementById('foto-arquivo').addEventListener('change', function () {
-    uploadAjax(this.files); this.value = '';
+    tratarSelecao(this.files); this.value = '';
   });
 
   window.deletarFoto = function (pk) {
+    if (!navigator.onLine) {
+      if (!confirm('Marcar esta foto para exclusão? Ela será removida ao sincronizar.')) return;
+      if (window.fotoState.excluir.indexOf(pk) === -1) window.fotoState.excluir.push(pk);
+      var el = document.getElementById('foto-' + pk);
+      if (el) {
+        el.style.opacity = '0.4';
+        var b = el.querySelector('button');
+        if (b) b.disabled = true;
+        var tag = document.createElement('span');
+        tag.className = 'badge bg-danger position-absolute bottom-0 start-0';
+        tag.style.fontSize = '.6rem';
+        tag.textContent = 'excluir ao sincronizar';
+        el.appendChild(tag);
+      }
+      return;
+    }
     if (!confirm('Excluir esta foto? A operação não pode ser desfeita.')) return;
     fetch('/fotos/' + pk + '/', {method: 'DELETE', headers: {'X-CSRFToken': CSRF}})
       .then(function (r) {

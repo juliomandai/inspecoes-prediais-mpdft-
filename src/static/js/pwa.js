@@ -85,56 +85,80 @@ async function obterAchadoPreparado(achadoPk) {
   }
 }
 
-// ── Preparar especialidade para campo ─────────────────────────────────────────
-window.prepararEspecialidadeParaCampo = async function (espPk, btnEl) {
-  if (!navigator.onLine) {
-    alert('É necessário estar online para preparar para campo.');
-    return;
-  }
-  if (btnEl) {
-    btnEl.disabled = true;
-    btnEl.innerHTML = '<i class="bi bi-arrow-repeat pwa-spin"></i> Preparando...';
-  }
+// ── Preparar especialidade para campo (automático ao visualizar a aba) ─────────
+// Nomes de cache espelham os do Service Worker (sw.js) — manter em sincronia.
+const CACHE_PAGINAS = 'inspecoes-paginas-v4';
+const CACHE_FOTOS   = 'inspecoes-fotos-v4';
+
+// Evita repreparar a mesma especialidade a cada troca de aba na mesma sessão.
+const espPreparadas = new Set();
+
+async function cachearURL(cacheName, url) {
+  try {
+    const resp = await fetch(url, { credentials: 'include' });
+    if (resp.ok) {
+      const cache = await caches.open(cacheName);
+      await cache.put(url, resp.clone());
+    }
+  } catch { /* offline ou erro de rede — ignora */ }
+}
+
+function badgeEstado(badgeEl, classe, html) {
+  if (!badgeEl) return;
+  badgeEl.className = 'badge ms-1 ' + classe;
+  badgeEl.innerHTML = html;
+  badgeEl.classList.remove('d-none');
+}
+
+// Prepara uma especialidade para uso offline: cacheia a página atual (detalhe),
+// o formulário de novo achado, e — para cada achado — a página de edição e as
+// fotos existentes; salva o baseline de cada achado para o diff de campos tocados.
+window.prepararEspecialidadeParaCampo = async function (espPk, badgeEl, achadoCreateUrl, forcar) {
+  if (!navigator.onLine) return;                 // silencioso: não há como preparar offline
+  if (!forcar && espPreparadas.has(espPk)) return;
+  if (!('caches' in window)) return;
+
+  badgeEstado(badgeEl, 'bg-secondary', '<i class="bi bi-arrow-repeat pwa-spin"></i> Preparando…');
   try {
     const resp = await fetch('/api/especialidades/' + espPk + '/achados-para-campo/', {
       credentials: 'include',
     });
-    if (!resp.ok) throw new Error('Servidor retornou ' + resp.status);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const achados = await resp.json();
 
     const db = await abrirDB();
 
-    // Remover preparações antigas desta especialidade
+    // Substitui as preparações antigas desta especialidade pelos baselines atuais.
     await new Promise((resolve, reject) => {
       const tx = db.transaction('achados_preparados', 'readwrite');
       const store = tx.objectStore('achados_preparados');
       const req = store.index('esp_pk').getAllKeys(espPk);
-      req.onsuccess = () => { req.result.forEach(k => store.delete(k)); };
+      req.onsuccess = () => {
+        req.result.forEach(k => store.delete(k));
+        achados.forEach(a => store.put({ achado_pk: a.pk, esp_pk: espPk, dados: a }));
+      };
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
 
-    // Salvar snapshot de cada achado
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction('achados_preparados', 'readwrite');
-      const store = tx.objectStore('achados_preparados');
-      achados.forEach(a => store.put({ achado_pk: a.pk, esp_pk: espPk, dados: a }));
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
+    // Páginas: detalhe atual da inspeção + formulário de novo achado.
+    await cachearURL(CACHE_PAGINAS, location.pathname);
+    if (achadoCreateUrl) await cachearURL(CACHE_PAGINAS, achadoCreateUrl);
 
-    if (btnEl) {
-      btnEl.classList.remove('btn-outline-info');
-      btnEl.classList.add('btn-success');
-      btnEl.innerHTML = '<i class="bi bi-cloud-check"></i> Preparado ✓ (' + achados.length + ')';
-      btnEl.disabled = false;
+    // Por achado: página de edição + fotos existentes.
+    for (const a of achados) {
+      if (a.editar_url) await cachearURL(CACHE_PAGINAS, a.editar_url);
+      for (const f of (a.fotos || [])) {
+        if (f.url) await cachearURL(CACHE_FOTOS, f.url);
+      }
     }
+
+    espPreparadas.add(espPk);
+    badgeEstado(badgeEl, 'bg-success',
+      '<i class="bi bi-cloud-check"></i> Pronto offline ✓ (' + achados.length + ')');
   } catch (err) {
-    if (btnEl) {
-      btnEl.disabled = false;
-      btnEl.innerHTML = '<i class="bi bi-download"></i> Preparar para campo';
-    }
-    alert('Erro ao preparar para campo: ' + (err.message || err));
+    badgeEstado(badgeEl, 'bg-warning text-dark',
+      '<i class="bi bi-exclamation-triangle"></i> Falha ao preparar');
   }
 };
 
@@ -182,33 +206,25 @@ async function obterEdicoesPendentes() {
   });
 }
 
-async function marcarSincronizado(id) {
+// Após sincronizar com sucesso, removemos o item da fila (em vez de marcar
+// sincronizado=1) para o IndexedDB não crescer indefinidamente.
+async function descartarPendente(id) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('achados_pendentes', 'readwrite');
-    const store = tx.objectStore('achados_pendentes');
-    const r = store.get(id);
-    r.onsuccess = () => {
-      const obj = r.result;
-      if (obj) { obj.sincronizado = 1; store.put(obj); }
-      resolve();
-    };
-    r.onerror = () => reject(r.error);
+    tx.objectStore('achados_pendentes').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
   });
 }
 
-async function marcarEdicaoSincronizada(id) {
+async function descartarEdicaoPendente(id) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
-    const store = tx.objectStore('achados_edicao_pendentes');
-    const r = store.get(id);
-    r.onsuccess = () => {
-      const obj = r.result;
-      if (obj) { obj.sincronizado = 1; store.put(obj); }
-      resolve();
-    };
-    r.onerror = () => reject(r.error);
+    tx.objectStore('achados_edicao_pendentes').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -265,7 +281,7 @@ window.pwaSync = async function (event) {
         credentials: 'include',
         body: JSON.stringify(item.dados),
       });
-      if (resp.ok) { await marcarSincronizado(item.id); ok++; }
+      if (resp.ok) { await descartarPendente(item.id); ok++; }
       else { erro++; }
     } catch { erro++; }
   }
@@ -279,7 +295,7 @@ window.pwaSync = async function (event) {
         credentials: 'include',
         body: JSON.stringify(item.dados),
       });
-      if (resp.ok) { await marcarEdicaoSincronizada(item.id); ok++; }
+      if (resp.ok) { await descartarEdicaoPendente(item.id); ok++; }
       else { erro++; }
     } catch { erro++; }
   }

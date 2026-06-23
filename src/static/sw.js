@@ -1,9 +1,11 @@
 'use strict';
 
 // ── Versão dos caches — incrementar ao publicar novas versões ─────────────────
-const CACHE_PAGINAS  = 'inspecoes-paginas-v3';
-const CACHE_ESTATICO = 'inspecoes-estatico-v3';
-const CACHES_VALIDOS = [CACHE_PAGINAS, CACHE_ESTATICO];
+const CACHE_PAGINAS  = 'inspecoes-paginas-v4';
+const CACHE_ESTATICO = 'inspecoes-estatico-v4';
+// Fotos de achados pré-cacheadas pela preparação para campo (ver pwa.js).
+const CACHE_FOTOS    = 'inspecoes-fotos-v4';
+const CACHES_VALIDOS = [CACHE_PAGINAS, CACHE_ESTATICO, CACHE_FOTOS];
 
 // ── Install ────────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
@@ -31,10 +33,16 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Não interceptar: não-GET, admin, media
+  // Não interceptar: não-GET, admin
   if (req.method !== 'GET') return;
   if (url.pathname.startsWith('/admin/')) return;
-  if (url.pathname.startsWith('/media/')) return;
+
+  // Fotos (/media): servir do cache se a preparação para campo já as baixou.
+  // Não popula automaticamente — apenas a preparação coloca fotos no cache.
+  if (url.pathname.startsWith('/media/')) {
+    event.respondWith(estrategiaFotoOffline(req));
+    return;
+  }
 
   // Recursos estáticos e CDN externos → cache primeiro
   if (url.pathname.startsWith('/static/') || url.origin !== self.location.origin) {
@@ -45,6 +53,26 @@ self.addEventListener('fetch', event => {
   // Páginas da aplicação → rede primeiro com fallback para cache
   event.respondWith(estrategiaNetworkFirst(req, CACHE_PAGINAS));
 });
+
+// Placeholder SVG para fotos não disponíveis offline.
+const FOTO_PLACEHOLDER =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">' +
+  '<rect width="100" height="100" fill="#e9ecef"/>' +
+  '<text x="50" y="46" font-size="9" fill="#6c757d" text-anchor="middle">foto</text>' +
+  '<text x="50" y="58" font-size="9" fill="#6c757d" text-anchor="middle">offline</text></svg>';
+
+async function estrategiaFotoOffline(req) {
+  const cached = await caches.match(req);
+  if (cached) return cached;
+  try {
+    // Online: serve da rede sem cachear (a preparação cuida do que precisa offline).
+    return await fetch(req);
+  } catch {
+    return new Response(FOTO_PLACEHOLDER, {
+      headers: { 'Content-Type': 'image/svg+xml' },
+    });
+  }
+}
 
 async function estrategiaCacheFirst(req, cacheName) {
   const cached = await caches.match(req);
@@ -137,14 +165,9 @@ async function sincronizarAchadosPendentes() {
       if (resp.ok) {
         await new Promise(resolve => {
           const tx = db.transaction('achados_pendentes', 'readwrite');
-          const store = tx.objectStore('achados_pendentes');
-          const r = store.get(item.id);
-          r.onsuccess = () => {
-            const obj = r.result;
-            if (obj) { obj.sincronizado = 1; store.put(obj); }
-            resolve();
-          };
-          r.onerror = resolve;
+          tx.objectStore('achados_pendentes').delete(item.id);
+          tx.oncomplete = resolve;
+          tx.onerror = resolve;
         });
         const clients = await self.clients.matchAll({ includeUncontrolled: true });
         clients.forEach(c => c.postMessage({ tipo: 'achado_sincronizado', itemId: item.id }));
@@ -171,14 +194,9 @@ async function sincronizarAchadosPendentes() {
       if (resp.ok) {
         await new Promise(resolve => {
           const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
-          const store = tx.objectStore('achados_edicao_pendentes');
-          const r = store.get(item.id);
-          r.onsuccess = () => {
-            const obj = r.result;
-            if (obj) { obj.sincronizado = 1; store.put(obj); }
-            resolve();
-          };
-          r.onerror = resolve;
+          tx.objectStore('achados_edicao_pendentes').delete(item.id);
+          tx.oncomplete = resolve;
+          tx.onerror = resolve;
         });
         const clients = await self.clients.matchAll({ includeUncontrolled: true });
         clients.forEach(c => c.postMessage({ tipo: 'edicao_sincronizada', itemId: item.id }));
