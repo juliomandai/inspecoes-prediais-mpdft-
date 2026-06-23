@@ -41,17 +41,24 @@ function abrirDB() {
 }
 
 // ── Criação offline ────────────────────────────────────────────────────────────
+// IMPORTANTE: resolvemos no tx.oncomplete (commit), não no req.onsuccess. O
+// chamador navega (window.location.href) logo após o await; se resolvêssemos no
+// onsuccess, a navegação abortaria a transação ANTES do commit e o registro se
+// perderia (bug observado no tablet: fila sempre vazia após salvar offline).
 async function salvarAchadoOffline(dados) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('achados_pendentes', 'readwrite');
+    let novoId;
     const req = tx.objectStore('achados_pendentes').add({
       dados: dados,
       sincronizado: 0,
       criado_em: new Date().toISOString(),
     });
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => { novoId = req.result; };
+    tx.oncomplete = () => resolve(novoId);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('transação abortada'));
   });
 }
 
@@ -60,14 +67,17 @@ async function salvarEdicaoOffline(dados) {
   const db = await abrirDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
+    let novoId;
     const req = tx.objectStore('achados_edicao_pendentes').add({
       achado_pk: dados.achado_pk,
       dados: dados,
       sincronizado: 0,
       criado_em: new Date().toISOString(),
     });
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => { novoId = req.result; };
+    tx.oncomplete = () => resolve(novoId);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('transação abortada'));
   });
 }
 
@@ -87,8 +97,8 @@ async function obterAchadoPreparado(achadoPk) {
 
 // ── Preparar especialidade para campo (automático ao visualizar a aba) ─────────
 // Nomes de cache espelham os do Service Worker (sw.js) — manter em sincronia.
-const CACHE_PAGINAS = 'inspecoes-paginas-v6';
-const CACHE_FOTOS   = 'inspecoes-fotos-v6';
+const CACHE_PAGINAS = 'inspecoes-paginas-v7';
+const CACHE_FOTOS   = 'inspecoes-fotos-v7';
 
 // Evita repreparar a mesma especialidade a cada troca de aba na mesma sessão.
 const espPreparadas = new Set();
