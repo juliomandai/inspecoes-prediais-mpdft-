@@ -87,8 +87,8 @@ async function obterAchadoPreparado(achadoPk) {
 
 // ── Preparar especialidade para campo (automático ao visualizar a aba) ─────────
 // Nomes de cache espelham os do Service Worker (sw.js) — manter em sincronia.
-const CACHE_PAGINAS = 'inspecoes-paginas-v4';
-const CACHE_FOTOS   = 'inspecoes-fotos-v4';
+const CACHE_PAGINAS = 'inspecoes-paginas-v5';
+const CACHE_FOTOS   = 'inspecoes-fotos-v5';
 
 // Evita repreparar a mesma especialidade a cada troca de aba na mesma sessão.
 const espPreparadas = new Set();
@@ -319,16 +319,19 @@ window.pwaSync = async function (event) {
 // ── Eventos de conexão ─────────────────────────────────────────────────────────
 window.addEventListener('online', () => {
   atualizarBannerOffline();
-  if ('serviceWorker' in navigator && 'SyncManager' in window) {
-    navigator.serviceWorker.ready.then(reg => reg.sync.register('sync-achados')).catch(() => {});
-  } else {
-    window.pwaSync();
-  }
+  // Sincroniza em PRIMEIRO PLANO ao reconectar — caminho confiável enquanto o
+  // app está aberto. O background sync do SW não dispara de forma confiável
+  // (sobretudo em HTTP por IP de rede), então não dependemos dele aqui.
+  window.pwaSync();
 });
 
 window.addEventListener('offline', () => atualizarBannerOffline());
 
-document.addEventListener('DOMContentLoaded', () => atualizarBannerOffline());
+document.addEventListener('DOMContentLoaded', async () => {
+  await atualizarBannerOffline();
+  // App reaberto já online com pendências (ex.: foi fechado offline): sincroniza.
+  if (navigator.onLine && (await contarPendentes()) > 0) window.pwaSync();
+});
 
 // ── Exportar para uso nos formulários ─────────────────────────────────────────
 window.salvarAchadoOffline = salvarAchadoOffline;
