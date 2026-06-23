@@ -87,8 +87,8 @@ async function obterAchadoPreparado(achadoPk) {
 
 // ── Preparar especialidade para campo (automático ao visualizar a aba) ─────────
 // Nomes de cache espelham os do Service Worker (sw.js) — manter em sincronia.
-const CACHE_PAGINAS = 'inspecoes-paginas-v5';
-const CACHE_FOTOS   = 'inspecoes-fotos-v5';
+const CACHE_PAGINAS = 'inspecoes-paginas-v6';
+const CACHE_FOTOS   = 'inspecoes-fotos-v6';
 
 // Evita repreparar a mesma especialidade a cada troca de aba na mesma sessão.
 const espPreparadas = new Set();
@@ -270,7 +270,15 @@ window.pwaSync = async function (event) {
     banner.innerHTML = '<i class="bi bi-arrow-repeat pwa-spin"></i> Sincronizando achados offline...';
   }
 
-  let ok = 0, erro = 0;
+  let ok = 0, erro = 0, ultimoErro = '';
+
+  async function detalheErro(resp) {
+    try {
+      const j = await resp.clone().json();
+      if (j && j.erro) return 'HTTP ' + resp.status + ' — ' + j.erro;
+    } catch { /* corpo não-JSON */ }
+    return 'HTTP ' + resp.status;
+  }
 
   // Sincronizar criações
   for (const item of pendentes) {
@@ -282,8 +290,8 @@ window.pwaSync = async function (event) {
         body: JSON.stringify(item.dados),
       });
       if (resp.ok) { await descartarPendente(item.id); ok++; }
-      else { erro++; }
-    } catch { erro++; }
+      else { erro++; ultimoErro = await detalheErro(resp); }
+    } catch (e) { erro++; ultimoErro = 'sem resposta do servidor (' + (e.message || e) + ')'; }
   }
 
   // Sincronizar edições
@@ -296,8 +304,8 @@ window.pwaSync = async function (event) {
         body: JSON.stringify(item.dados),
       });
       if (resp.ok) { await descartarEdicaoPendente(item.id); ok++; }
-      else { erro++; }
-    } catch { erro++; }
+      else { erro++; ultimoErro = await detalheErro(resp); }
+    } catch (e) { erro++; ultimoErro = 'sem resposta do servidor (' + (e.message || e) + ')'; }
   }
 
   if (banner) {
@@ -310,7 +318,8 @@ window.pwaSync = async function (event) {
     } else {
       banner.className = 'alert alert-danger mb-0 rounded-0 text-center py-2 small no-print';
       banner.innerHTML =
-        `<i class="bi bi-exclamation-triangle"></i> ${ok} sincronizado(s), ${erro} com erro. ` +
+        `<i class="bi bi-exclamation-triangle"></i> ${ok} sincronizado(s), ${erro} com erro` +
+        (ultimoErro ? ` (${ultimoErro})` : '') + '. ' +
         `<a href="#" onclick="window.pwaSync(event)" class="fw-bold">Tentar novamente</a>`;
     }
   }
@@ -330,6 +339,13 @@ window.addEventListener('offline', () => atualizarBannerOffline());
 document.addEventListener('DOMContentLoaded', async () => {
   await atualizarBannerOffline();
   // App reaberto já online com pendências (ex.: foi fechado offline): sincroniza.
+  if (navigator.onLine && (await contarPendentes()) > 0) window.pwaSync();
+});
+
+// Ao voltar o foco para o app (tablet retomado do segundo plano) já online
+// com pendências, tenta sincronizar — complementa o evento 'online'.
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
   if (navigator.onLine && (await contarPendentes()) > 0) window.pwaSync();
 });
 

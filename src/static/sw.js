@@ -1,10 +1,10 @@
 'use strict';
 
 // ── Versão dos caches — incrementar ao publicar novas versões ─────────────────
-const CACHE_PAGINAS  = 'inspecoes-paginas-v5';
-const CACHE_ESTATICO = 'inspecoes-estatico-v5';
+const CACHE_PAGINAS  = 'inspecoes-paginas-v6';
+const CACHE_ESTATICO = 'inspecoes-estatico-v6';
 // Fotos de achados pré-cacheadas pela preparação para campo (ver pwa.js).
-const CACHE_FOTOS    = 'inspecoes-fotos-v5';
+const CACHE_FOTOS    = 'inspecoes-fotos-v6';
 const CACHES_VALIDOS = [CACHE_PAGINAS, CACHE_ESTATICO, CACHE_FOTOS];
 
 // ── Install ────────────────────────────────────────────────────────────────────
