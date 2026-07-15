@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
+from django.core.exceptions import RequestDataTooBig
 from django.db.models import Count, Q, Min
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
@@ -716,6 +717,12 @@ def achado_sincronizar(request):
         dados = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+    except RequestDataTooBig:
+        return JsonResponse(
+            {'erro': 'Achado muito grande (fotos em excesso ou muito pesadas). '
+                      'Tente sincronizar com menos fotos por vez.'},
+            status=400,
+        )
 
     esp_pk = dados.get('esp_pk')
     if not esp_pk:
@@ -834,6 +841,12 @@ def achado_sincronizar_edicao(request, pk):
         dados = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+    except RequestDataTooBig:
+        return JsonResponse(
+            {'erro': 'Edição muito grande (fotos em excesso ou muito pesadas). '
+                      'Tente sincronizar com menos fotos por vez.'},
+            status=400,
+        )
 
     achado = get_object_or_404(
         Achado.objects.select_related('especialidade__inspecao'), pk=pk

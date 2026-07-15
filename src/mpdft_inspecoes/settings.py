@@ -90,8 +90,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 from django.contrib.messages import constants as message_constants
 MESSAGE_TAGS = {message_constants.ERROR: 'danger'}
 
-FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 40 * 1024 * 1024  # 40 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 40 * 1024 * 1024
+# 40 MB (não 10 MB): achados sincronizados offline enviam várias fotos de
+# câmera de celular (3-8 MB cada) como base64 no corpo JSON (~+33% de
+# tamanho), então um achado com poucas fotos já passava do limite anterior
+# de 10 MB — o Django rejeitava com HTTP 400 (RequestDataTooBig, sem corpo
+# JSON), aparecendo no app só como "HTTP 400" sem detalhe nenhum.
 
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
