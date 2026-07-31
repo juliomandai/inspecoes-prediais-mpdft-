@@ -254,8 +254,8 @@
   var form = document.getElementById('achado-form');
   if (!form || form.dataset.modo !== 'criar') return;
 
-  // Coleta fotos selecionadas como ArrayBuffer para salvar no IndexedDB
-  var fotosColetadas = []; // [ { nome, tipo, arquivo (File) } ]
+  // Coleta fotos selecionadas (File) — a compressão acontece no submit.
+  var fotosColetadas = [];
 
   document.getElementById('foto-camera').addEventListener('change', function () {
     Array.from(this.files).forEach(f => fotosColetadas.push(f));
@@ -271,7 +271,6 @@
     var btn = form.querySelector('button[type=submit]');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass"></i> Salvando...'; }
 
-    // Coletar valores do formulário
     var esp_pk    = parseInt(form.dataset.espPk);
     var detalheUrl = form.dataset.detalheUrl;
 
@@ -300,30 +299,29 @@
       recomendacao: val('id_recomendacao'),
       direcionamento: val('id_direcionamento'),
       prazo_meses: parseInt(val('id_prazo_meses')) || 12,
-      fotos: [],
     };
 
-    // Converter fotos para base64
-    async function fotoParaB64(file) {
-      return new Promise((resolve, reject) => {
-        var reader = new FileReader();
-        reader.onload = e => resolve(e.target.result.split(',')[1]); // só base64
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    for (var foto of fotosColetadas) {
-      if (!foto.type.match(/image\/(jpeg|png)/)) continue;
-      if (foto.size > 10 * 1024 * 1024) continue;
-      try {
-        var b64 = await fotoParaB64(foto);
-        dados.fotos.push({ nome: foto.name, tipo: foto.type, dados_b64: b64 });
-      } catch {}
-    }
-
     try {
-      await window.salvarAchadoOffline(dados);
+      // 1. Salva o TEXTO do achado primeiro — pequeno e rápido, chega ao
+      //    servidor mesmo em rede ruim. achadoIdLocal é o `id` local
+      //    (IndexedDB), usado para vincular as fotos até o achado ganhar um
+      //    pk de servidor na sincronização (ver pwa.js: promoverFotosPendentes).
+      var achadoIdLocal = await window.salvarAchadoOffline(dados);
+
+      // 2. Cada foto é comprimida (canvas, ~200-500KB) e vai para a fila
+      //    separada de fotos — se uma foto falhar ao comprimir ou ao
+      //    sincronizar depois, não afeta o achado nem as demais fotos.
+      for (var foto of fotosColetadas) {
+        if (!foto.type.match(/image\/(jpeg|png)/)) continue;
+        if (foto.size > 10 * 1024 * 1024) continue; // teto pré-compressão (arquivo original patologicamente grande)
+        try {
+          var blob = await window.comprimirFoto(foto);
+          await window.salvarFotoOffline({ achadoIdLocal: achadoIdLocal, blob: blob, nome: foto.name });
+        } catch {}
+      }
+
+      if (window.verificarArmazenamento) window.verificarArmazenamento();
+
       // Redirecionar para a página de detalhe (do cache do SW)
       window.location.href = detalheUrl;
     } catch (err) {
