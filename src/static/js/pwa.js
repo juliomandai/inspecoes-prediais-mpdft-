@@ -371,14 +371,41 @@ async function descartarEdicaoPendente(id) {
   });
 }
 
+// ── Retry com backoff (só para falhas de rede — fetch() rejeitando) ────────────
+// Uma resposta HTTP de erro (4xx/5xx) NÃO lança exceção em fetch(), então não é
+// re-tentada aqui — só timeout/sem-resposta, típico de sinal fraco em campo.
+async function fetchComRetry(url, opts, tentativas, esperas) {
+  tentativas = tentativas || 3;
+  esperas = esperas || [2000, 5000];
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await fetch(url, opts);
+    } catch (e) {
+      if (i === tentativas - 1) throw e;
+      await new Promise(r => setTimeout(r, esperas[Math.min(i, esperas.length - 1)]));
+    }
+  }
+}
+
+// Um fetch() bem-sucedido mas REDIRECIONADO (ex.: sessão expirou e o Django
+// mandou para /login/) chega aqui com resp.ok=true — a página de login
+// também responde HTTP 200. Sem este checkzinho, o código trataria a sessão
+// expirada como sincronização bem-sucedida e DESCARTARIA o item da fila,
+// perdendo dados de campo silenciosamente. Nenhum dos nossos endpoints de
+// API deveria redirecionar; se redirecionou, não foi um sucesso real.
+function respostaValida(resp) {
+  return resp.ok && !resp.redirected;
+}
+
 // ── Banner offline ──────────────────────────────────────────────────────────────
 async function atualizarBannerOffline() {
   const banner = document.getElementById('banner-offline');
   if (!banner) return;
-  const pendentes = await contarPendentes();
+  const [pendentes, fotosPendentes] = await Promise.all([contarPendentes(), contarFotosPendentes()]);
+  const totalPendente = pendentes + fotosPendentes;
   const offline = !navigator.onLine;
 
-  if (!offline && pendentes === 0) {
+  if (!offline && totalPendente === 0) {
     banner.classList.add('d-none');
     return;
   }
@@ -387,14 +414,14 @@ async function atualizarBannerOffline() {
 
   if (offline) {
     banner.className = 'alert alert-warning mb-0 rounded-0 text-center py-2 small no-print';
-    const txt = pendentes > 0
-      ? `<i class="bi bi-wifi-off"></i> <strong>Modo offline</strong> — ${pendentes} achado(s) aguardando sincronização quando o WiFi retornar`
+    const txt = totalPendente > 0
+      ? `<i class="bi bi-wifi-off"></i> <strong>Modo offline</strong> — ${pendentes} achado(s) e ${fotosPendentes} foto(s) aguardando sincronização quando o WiFi retornar`
       : '<i class="bi bi-wifi-off"></i> <strong>Modo offline</strong> — formulários serão salvos localmente e enviados ao reconectar';
     banner.innerHTML = txt;
   } else {
     banner.className = 'alert alert-info mb-0 rounded-0 text-center py-2 small no-print';
     banner.innerHTML =
-      `<i class="bi bi-arrow-repeat"></i> ${pendentes} achado(s) offline aguardando sincronização — ` +
+      `<i class="bi bi-arrow-repeat"></i> ${pendentes} achado(s) e ${fotosPendentes} foto(s) offline aguardando sincronização — ` +
       `<a href="#" onclick="window.pwaSync(event)" class="fw-bold">sincronizar agora</a>`;
   }
 }
@@ -404,16 +431,19 @@ window.pwaSync = async function (event) {
   if (event) event.preventDefault();
   if (!navigator.onLine) { alert('Sem conexão WiFi. Aguarde a rede retornar.'); return; }
 
-  const [pendentes, edicoes] = await Promise.all([obterPendentes(), obterEdicoesPendentes()]);
-  if (pendentes.length === 0 && edicoes.length === 0) { atualizarBannerOffline(); return; }
+  const [pendentes, edicoes, fotosIniciais] = await Promise.all([
+    obterPendentes(), obterEdicoesPendentes(), obterFotosPendentes(),
+  ]);
+  if (pendentes.length === 0 && edicoes.length === 0 && fotosIniciais.length === 0) {
+    atualizarBannerOffline();
+    return;
+  }
 
   const banner = document.getElementById('banner-offline');
   if (banner) {
     banner.className = 'alert alert-info mb-0 rounded-0 text-center py-2 small no-print';
     banner.innerHTML = '<i class="bi bi-arrow-repeat pwa-spin"></i> Sincronizando achados offline...';
   }
-
-  let ok = 0, erro = 0, ultimoErro = '';
 
   async function detalheErro(resp) {
     try {
@@ -423,46 +453,90 @@ window.pwaSync = async function (event) {
     return 'HTTP ' + resp.status;
   }
 
-  // Sincronizar criações
+  let achadosOk = 0, achadosErro = 0, ultimoErroAchado = '';
+
+  // Fase 1a — sincronizar criações (texto do achado). Itens de sessões
+  // anteriores ao formato antigo, com fotos ainda embutidas em item.dados.fotos,
+  // continuam funcionando sem tratamento especial — o servidor já processa
+  // esse campo quando presente e ignora quando ausente.
   for (const item of pendentes) {
     try {
-      const resp = await fetch('/api/achados/sincronizar/', {
+      const resp = await fetchComRetry('/api/achados/sincronizar/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'include',
         body: JSON.stringify(item.dados),
       });
-      if (resp.ok) { await descartarPendente(item.id); ok++; }
-      else { erro++; ultimoErro = await detalheErro(resp); }
-    } catch (e) { erro++; ultimoErro = 'sem resposta do servidor (' + (e.message || e) + ')'; }
+      if (respostaValida(resp)) {
+        const data = await resp.json();
+        await promoverFotosPendentes(item.id, data.achado_pk);
+        await descartarPendente(item.id);
+        achadosOk++;
+      } else {
+        achadosErro++; ultimoErroAchado = await detalheErro(resp);
+      }
+    } catch (e) { achadosErro++; ultimoErroAchado = 'sem resposta do servidor (' + (e.message || e) + ')'; }
   }
 
-  // Sincronizar edições
+  // Fase 1b — sincronizar edições. O achado editado já tem pk de servidor;
+  // fotos novas da edição já foram salvas na fila com pk_servidor preenchido
+  // (ver achado_form.html), não precisam de promoção.
   for (const item of edicoes) {
     try {
-      const resp = await fetch('/api/achados/' + item.achado_pk + '/sincronizar-edicao/', {
+      const resp = await fetchComRetry('/api/achados/' + item.achado_pk + '/sincronizar-edicao/', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'include',
         body: JSON.stringify(item.dados),
       });
-      if (resp.ok) { await descartarEdicaoPendente(item.id); ok++; }
-      else { erro++; ultimoErro = await detalheErro(resp); }
-    } catch (e) { erro++; ultimoErro = 'sem resposta do servidor (' + (e.message || e) + ')'; }
+      if (respostaValida(resp)) { await descartarEdicaoPendente(item.id); achadosOk++; }
+      else { achadosErro++; ultimoErroAchado = await detalheErro(resp); }
+    } catch (e) { achadosErro++; ultimoErroAchado = 'sem resposta do servidor (' + (e.message || e) + ')'; }
   }
 
+  // Fase 2 — sincronizar fotos, uma de cada vez (serial: em sinal fraco,
+  // requisições paralelas tendem a disputar banda e falhar juntas). Só as que
+  // já têm pk_servidor (achado pai confirmado no servidor) são enviadas; as
+  // demais aguardam a próxima rodada.
+  const fotosProntas = (await obterFotosPendentes()).filter(f => f.pk_servidor);
+  let fotosOk = 0, fotosErro = 0, ultimoErroFoto = '';
+  for (const item of fotosProntas) {
+    try {
+      const fd = new FormData();
+      fd.append('arquivo', item.blob, item.nome || 'foto.jpg');
+      const resp = await fetchComRetry('/api/achados/' + item.pk_servidor + '/fotos/sincronizar/', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'include',
+        body: fd,
+      });
+      if (respostaValida(resp)) { await descartarFotoPendente(item.id); fotosOk++; }
+      else { fotosErro++; ultimoErroFoto = await detalheErro(resp); }
+    } catch (e) { fotosErro++; ultimoErroFoto = 'sem resposta do servidor (' + (e.message || e) + ')'; }
+  }
+
+  const fotosRestantes = await contarFotosPendentes();
+
   if (banner) {
-    if (ok > 0 && erro === 0) {
+    if (achadosErro === 0 && fotosErro === 0 && fotosRestantes === 0) {
       banner.className = 'alert alert-success mb-0 rounded-0 text-center py-2 small no-print';
       banner.innerHTML =
-        `<i class="bi bi-check-circle"></i> ${ok} achado(s) sincronizado(s) com sucesso! ` +
+        `<i class="bi bi-check-circle"></i> ${achadosOk} achado(s) e ${fotosOk} foto(s) sincronizados com sucesso! ` +
         `<a href="javascript:location.reload()" class="fw-bold">Recarregar página</a>`;
       setTimeout(() => banner.classList.add('d-none'), 6000);
+    } else if (achadosErro === 0 && fotosErro === 0) {
+      banner.className = 'alert alert-info mb-0 rounded-0 text-center py-2 small no-print';
+      banner.innerHTML =
+        `<i class="bi bi-arrow-repeat"></i> ${achadosOk} achado(s) sincronizados. ` +
+        `Fotos: ${fotosOk} enviada(s), ${fotosRestantes} pendente(s) (achado pai ainda sincronizando ou tentando de novo). ` +
+        `<a href="#" onclick="window.pwaSync(event)" class="fw-bold">Sincronizar agora</a>`;
     } else {
       banner.className = 'alert alert-danger mb-0 rounded-0 text-center py-2 small no-print';
       banner.innerHTML =
-        `<i class="bi bi-exclamation-triangle"></i> ${ok} sincronizado(s), ${erro} com erro` +
-        (ultimoErro ? ` (${ultimoErro})` : '') + '. ' +
+        `<i class="bi bi-exclamation-triangle"></i> ${achadosOk} achado(s) sincronizado(s), ${achadosErro} com erro` +
+        (ultimoErroAchado ? ` (${ultimoErroAchado})` : '') + `. ` +
+        `Fotos: ${fotosOk} enviada(s), ${fotosErro} com erro` +
+        (ultimoErroFoto ? ` (${ultimoErroFoto})` : '') + `, ${fotosRestantes} pendente(s). ` +
         `<a href="#" onclick="window.pwaSync(event)" class="fw-bold">Tentar novamente</a>`;
     }
   }
@@ -479,17 +553,21 @@ window.addEventListener('online', () => {
 
 window.addEventListener('offline', () => atualizarBannerOffline());
 
+async function haPendencias() {
+  return (await contarPendentes()) > 0 || (await contarFotosPendentes()) > 0;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await atualizarBannerOffline();
   // App reaberto já online com pendências (ex.: foi fechado offline): sincroniza.
-  if (navigator.onLine && (await contarPendentes()) > 0) window.pwaSync();
+  if (navigator.onLine && (await haPendencias())) window.pwaSync();
 });
 
 // Ao voltar o foco para o app (tablet retomado do segundo plano) já online
 // com pendências, tenta sincronizar — complementa o evento 'online'.
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return;
-  if (navigator.onLine && (await contarPendentes()) > 0) window.pwaSync();
+  if (navigator.onLine && (await haPendencias())) window.pwaSync();
 });
 
 // ── Exportar para uso nos formulários ─────────────────────────────────────────
