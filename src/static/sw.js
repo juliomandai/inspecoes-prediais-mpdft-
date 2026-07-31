@@ -1,10 +1,10 @@
 'use strict';
 
 // ── Versão dos caches — incrementar ao publicar novas versões ─────────────────
-const CACHE_PAGINAS  = 'inspecoes-paginas-v7';
-const CACHE_ESTATICO = 'inspecoes-estatico-v7';
+const CACHE_PAGINAS  = 'inspecoes-paginas-v8';
+const CACHE_ESTATICO = 'inspecoes-estatico-v8';
 // Fotos de achados pré-cacheadas pela preparação para campo (ver pwa.js).
-const CACHE_FOTOS    = 'inspecoes-fotos-v7';
+const CACHE_FOTOS    = 'inspecoes-fotos-v8';
 const CACHES_VALIDOS = [CACHE_PAGINAS, CACHE_ESTATICO, CACHE_FOTOS];
 
 // ── Install ────────────────────────────────────────────────────────────────────
@@ -120,7 +120,11 @@ self.addEventListener('sync', event => {
 // ── IndexedDB helpers (contexto do SW) ────────────────────────────────────────
 function abrirDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('inspecoes-offline', 2);
+    // IMPORTANTE: mesma versão e mesmo schema de static/js/pwa.js. Se este
+    // número ficar atrás do usado em pwa.js, indexedDB.open aqui lança
+    // VersionError (não é permitido abrir com versão MENOR que a atual) e
+    // quebra o Service Worker inteiro na próxima ativação.
+    const req = indexedDB.open('inspecoes-offline', 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('achados_pendentes')) {
@@ -136,9 +140,35 @@ function abrirDB() {
         const s = db.createObjectStore('achados_preparados', { keyPath: 'achado_pk' });
         s.createIndex('esp_pk', 'esp_pk');
       }
+      if (!db.objectStoreNames.contains('fotos_pendentes')) {
+        const s = db.createObjectStore('fotos_pendentes', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('achado_id_local', 'achado_id_local');
+        s.createIndex('pk_servidor', 'pk_servidor');
+      }
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = () => reject(req.error);
+  });
+}
+
+// Promove as fotos pendentes de um achado local para o pk de servidor, assim
+// que esse achado sincroniza em background — evita órfãos: sem isso, se o
+// Background Sync do navegador chegar a disparar (ver comentário em
+// sincronizarAchadosPendentes), as fotos daquele achado ficariam presas para
+// sempre, já que o item de achados_pendentes que as referenciava foi apagado.
+async function promoverFotosPendentes(db, achadoIdLocal, pkServidor) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('fotos_pendentes', 'readwrite');
+    const store = tx.objectStore('fotos_pendentes');
+    const req = store.index('achado_id_local').getAll(achadoIdLocal);
+    req.onsuccess = () => {
+      req.result.forEach(item => {
+        item.pk_servidor = pkServidor;
+        store.put(item);
+      });
+    };
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -163,6 +193,8 @@ async function sincronizarAchadosPendentes() {
         body: JSON.stringify(item.dados),
       });
       if (resp.ok) {
+        const data = await resp.json();
+        await promoverFotosPendentes(db, item.id, data.achado_pk);
         await new Promise(resolve => {
           const tx = db.transaction('achados_pendentes', 'readwrite');
           tx.objectStore('achados_pendentes').delete(item.id);

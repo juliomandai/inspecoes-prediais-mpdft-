@@ -230,8 +230,8 @@ async function obterAchadoPreparado(achadoPk) {
 
 // ── Preparar especialidade para campo (automático ao visualizar a aba) ─────────
 // Nomes de cache espelham os do Service Worker (sw.js) — manter em sincronia.
-const CACHE_PAGINAS = 'inspecoes-paginas-v7';
-const CACHE_FOTOS   = 'inspecoes-fotos-v7';
+const CACHE_PAGINAS = 'inspecoes-paginas-v8';
+const CACHE_FOTOS   = 'inspecoes-fotos-v8';
 
 // Evita repreparar a mesma especialidade a cada troca de aba na mesma sessão.
 const espPreparadas = new Set();
