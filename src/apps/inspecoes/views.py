@@ -847,7 +847,12 @@ def achado_sincronizar_edicao(request, pk):
 
     Só os campos de diagnóstico **presentes** no payload (os "campos tocados"
     em campo) são aplicados; os ausentes preservam o valor do servidor. Aceita
-    também `fotos` (novas, base64) e `fotos_excluir` (pks marcados para remoção).
+    também `fotos_excluir` (pks marcados para remoção). Fotos novas não vêm
+    mais neste payload — sobem separadamente via achado_sincronizar_foto (ver
+    docs/superpowers/specs/2026-07-31-sincronizacao-offline-volume-design.md,
+    ADR-01); o campo `fotos` (base64) ainda é aceito aqui apenas como
+    compatibilidade com itens presos na fila de sincronização no formato
+    antigo (ADR-06), não é mais o caminho usado por código novo.
     Campos de identidade (localização, verificação) não são editáveis offline.
     """
     try:
