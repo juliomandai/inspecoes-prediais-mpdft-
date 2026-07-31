@@ -108,26 +108,34 @@ function comprimirFoto(file) {
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      let largura = img.naturalWidth;
-      let altura = img.naturalHeight;
-      if (largura > FOTO_MAX_DIMENSAO || altura > FOTO_MAX_DIMENSAO) {
-        if (largura >= altura) {
-          altura = Math.round(altura * (FOTO_MAX_DIMENSAO / largura));
-          largura = FOTO_MAX_DIMENSAO;
-        } else {
-          largura = Math.round(largura * (FOTO_MAX_DIMENSAO / altura));
-          altura = FOTO_MAX_DIMENSAO;
+      // Guarda a parte síncrona: se getContext/drawImage/toBlob lançarem (ex.:
+      // canvas 2d indisponível), rejeitamos em vez de deixar a Promise pendurada
+      // para sempre — sem isso, um await comprimirFoto(...) travaria a fila
+      // inteira de sincronização sem erro nenhum aparecer para o usuário.
+      try {
+        let largura = img.naturalWidth;
+        let altura = img.naturalHeight;
+        if (largura > FOTO_MAX_DIMENSAO || altura > FOTO_MAX_DIMENSAO) {
+          if (largura >= altura) {
+            altura = Math.round(altura * (FOTO_MAX_DIMENSAO / largura));
+            largura = FOTO_MAX_DIMENSAO;
+          } else {
+            largura = Math.round(largura * (FOTO_MAX_DIMENSAO / altura));
+            altura = FOTO_MAX_DIMENSAO;
+          }
         }
+        const canvas = document.createElement('canvas');
+        canvas.width = largura;
+        canvas.height = altura;
+        canvas.getContext('2d').drawImage(img, 0, 0, largura, altura);
+        canvas.toBlob(
+          blob => blob ? resolve(blob) : reject(new Error('Falha ao comprimir imagem')),
+          'image/jpeg',
+          FOTO_QUALIDADE
+        );
+      } catch (e) {
+        reject(e);
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = largura;
-      canvas.height = altura;
-      canvas.getContext('2d').drawImage(img, 0, 0, largura, altura);
-      canvas.toBlob(
-        blob => blob ? resolve(blob) : reject(new Error('Falha ao comprimir imagem')),
-        'image/jpeg',
-        FOTO_QUALIDADE
-      );
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem')); };
     img.src = url;
