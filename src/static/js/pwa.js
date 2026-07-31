@@ -378,9 +378,22 @@ async function fetchComRetry(url, opts, tentativas, esperas) {
   tentativas = tentativas || 3;
   esperas = esperas || [2000, 5000];
   for (let i = 0; i < tentativas; i++) {
+    // Sinal fraco (não totalmente offline) pode deixar o fetch pendurado até o
+    // timeout padrão do navegador — bem mais longo que nosso backoff — sem
+    // NUNCA rejeitar, então o retry acima nunca entraria em ação. Forçamos um
+    // limite próprio (20s, generoso para uma foto grande em rede ruim) para
+    // que uma conexão travada seja tratada como falha e re-tentada normalmente.
+    // Não sobrescreve um AbortSignal que o chamador já tenha passado (nenhum
+    // dos pontos de chamada atuais passa um, mas evitamos clobbering mesmo assim).
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const sinal = (opts && opts.signal) || controller.signal;
     try {
-      return await fetch(url, opts);
+      const resp = await fetch(url, { ...opts, signal: sinal });
+      clearTimeout(timeoutId);
+      return resp;
     } catch (e) {
+      clearTimeout(timeoutId);
       if (i === tentativas - 1) throw e;
       await new Promise(r => setTimeout(r, esperas[Math.min(i, esperas.length - 1)]));
     }
@@ -427,8 +440,20 @@ async function atualizarBannerOffline() {
 }
 
 // ── Sincronização manual ────────────────────────────────────────────────────────
+// Guarda de reentrância: 'online', 'visibilitychange', DOMContentLoaded e o link
+// "sincronizar agora" do banner podem cada um disparar pwaSync() de forma
+// independente. Como os itens só são apagados do IndexedDB DEPOIS da resposta
+// do servidor, duas chamadas sobrepostas leem a MESMA fila antes de qualquer
+// uma delas apagar o que já processou — resultando em achados DUPLICADOS no
+// servidor (reproduzido na verificação manual desta tarefa). Uma segunda
+// chamada enquanto a primeira ainda está em andamento reaproveita a mesma
+// Promise em vez de reler a fila do zero.
+let syncEmAndamento = null;
 window.pwaSync = async function (event) {
   if (event) event.preventDefault();
+  if (syncEmAndamento) return syncEmAndamento;
+
+  syncEmAndamento = (async () => {
   if (!navigator.onLine) { alert('Sem conexão WiFi. Aguarde a rede retornar.'); return; }
 
   const [pendentes, edicoes, fotosIniciais] = await Promise.all([
@@ -539,6 +564,13 @@ window.pwaSync = async function (event) {
         (ultimoErroFoto ? ` (${ultimoErroFoto})` : '') + `, ${fotosRestantes} pendente(s). ` +
         `<a href="#" onclick="window.pwaSync(event)" class="fw-bold">Tentar novamente</a>`;
     }
+  }
+  })();
+
+  try {
+    return await syncEmAndamento;
+  } finally {
+    syncEmAndamento = null;
   }
 };
 
