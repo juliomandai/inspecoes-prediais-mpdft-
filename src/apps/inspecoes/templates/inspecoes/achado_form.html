@@ -317,7 +317,9 @@
         try {
           var blob = await window.comprimirFoto(foto);
           await window.salvarFotoOffline({ achadoIdLocal: achadoIdLocal, blob: blob, nome: foto.name });
-        } catch {}
+        } catch (err) {
+          console.warn('Falha ao processar foto offline: ' + foto.name, err);
+        }
       }
 
       if (window.verificarArmazenamento) window.verificarArmazenamento();
@@ -453,7 +455,9 @@
         try {
           var blob = await window.comprimirFoto(foto);
           await window.salvarFotoOffline({ achadoPkExistente: achadoPk, blob: blob, nome: foto.name });
-        } catch {}
+        } catch (err) {
+          console.warn('Falha ao processar foto offline: ' + foto.name, err);
+        }
       }
 
       if (window.verificarArmazenamento) window.verificarArmazenamento();

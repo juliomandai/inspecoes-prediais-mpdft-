@@ -172,6 +172,16 @@ async function promoverFotosPendentes(db, achadoIdLocal, pkServidor) {
   });
 }
 
+// Duplicado de static/js/pwa.js (o Service Worker roda num contexto separado
+// do script da página, sem como importar/compartilhar essa função dali). Sem
+// este checkzinho, um fetch() bem-sucedido mas REDIRECIONADO (sessão expirada,
+// Django manda para /login/, que responde HTTP 200) seria tratado como
+// sincronização válida e o item seria apagado da fila, perdendo achados de
+// campo silenciosamente — mesmo bug já corrigido em pwa.js.
+function respostaValida(resp) {
+  return resp.ok && !resp.redirected;
+}
+
 async function sincronizarAchadosPendentes() {
   let db;
   try { db = await abrirDB(); } catch { return; }
@@ -192,7 +202,7 @@ async function sincronizarAchadosPendentes() {
         credentials: 'include',
         body: JSON.stringify(item.dados),
       });
-      if (resp.ok) {
+      if (respostaValida(resp)) {
         const data = await resp.json();
         await promoverFotosPendentes(db, item.id, data.achado_pk);
         await new Promise(resolve => {
@@ -223,7 +233,7 @@ async function sincronizarAchadosPendentes() {
         credentials: 'include',
         body: JSON.stringify(item.dados),
       });
-      if (resp.ok) {
+      if (respostaValida(resp)) {
         await new Promise(resolve => {
           const tx = db.transaction('achados_edicao_pendentes', 'readwrite');
           tx.objectStore('achados_edicao_pendentes').delete(item.id);

@@ -30,15 +30,16 @@
 {% block extra_js %}
 <script>
 const DB_NOME = 'inspecoes-offline';
-const DB_VER = 2;
 
 function abrirDBDiag() {
   return new Promise((resolve, reject) => {
-    // openCursor sem onupgradeneeded: não cria stores, só lê o que existir.
-    const req = indexedDB.open(DB_NOME, DB_VER);
+    // Sem argumento de versão: abre o banco na versão atual (a que o pwa.js
+    // já criou), sem disparar onupgradeneeded. Página só lê — nunca deve
+    // forçar uma versão própria, senão quebra com VersionError toda vez que
+    // pwa.js avançar o schema (aconteceu quando o pwa.js foi para v3).
+    const req = indexedDB.open(DB_NOME);
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = () => reject(req.error);
-    req.onupgradeneeded = e => { /* deixa o pwa.js criar; aqui só observamos */ };
   });
 }
 
@@ -93,6 +94,11 @@ async function diagLer() {
 
     const prep = await lerStore(db, 'achados_preparados');
     out.push(`\n-- achados_preparados: ${prep.itens.length}`);
+
+    const fotos = await lerStore(db, 'fotos_pendentes');
+    out.push(`\n-- fotos_pendentes: ${fotos.itens.length}`);
+    fotos.itens.forEach(it => out.push(
+      `   id=${it.id} achado_id_local=${it.achado_id_local} pk_servidor=${it.pk_servidor} nome="${it.nome}"`));
   } catch (e) { out.push('erro IndexedDB: ' + e); }
 
   out.push('\n=== pwa.js ===');
