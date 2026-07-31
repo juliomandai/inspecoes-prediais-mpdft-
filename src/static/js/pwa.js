@@ -214,6 +214,33 @@ async function contarFotosPendentes() {
   }
 }
 
+// ── Alerta de armazenamento quase cheio ─────────────────────────────────────
+// Mesmo com fotos comprimidas (~200-500KB cada), uma sessão de campo muito
+// longa em um tablet com pouco espaço livre pode se aproximar da cota do
+// navegador. Aviso não bloqueia nada — só orienta a sincronizar mais cedo.
+const ARMAZENAMENTO_LIMIAR = 0.8;
+
+async function verificarArmazenamento() {
+  if (!('storage' in navigator) || !navigator.storage.estimate) return;
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    if (quota && usage / quota > ARMAZENAMENTO_LIMIAR) {
+      mostrarAvisoArmazenamento();
+    }
+  } catch { /* API indisponível neste navegador — ignora */ }
+}
+
+function mostrarAvisoArmazenamento() {
+  if (document.getElementById('aviso-armazenamento')) return; // já exibido
+  const banner = document.getElementById('banner-offline');
+  if (!banner || !banner.parentNode) return;
+  const div = document.createElement('div');
+  div.id = 'aviso-armazenamento';
+  div.className = 'alert alert-warning mb-0 rounded-0 text-center py-2 small no-print';
+  div.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Armazenamento do dispositivo quase cheio — sincronize assim que tiver sinal.';
+  banner.parentNode.insertBefore(div, banner.nextSibling);
+}
+
 async function obterAchadoPreparado(achadoPk) {
   try {
     const db = await abrirDB();
@@ -591,6 +618,7 @@ async function haPendencias() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await atualizarBannerOffline();
+  verificarArmazenamento();
   // App reaberto já online com pendências (ex.: foi fechado offline): sincroniza.
   if (navigator.onLine && (await haPendencias())) window.pwaSync();
 });
@@ -606,3 +634,6 @@ document.addEventListener('visibilitychange', async () => {
 window.salvarAchadoOffline = salvarAchadoOffline;
 window.salvarEdicaoOffline = salvarEdicaoOffline;
 window.obterAchadoPreparado = obterAchadoPreparado;
+window.comprimirFoto = comprimirFoto;
+window.salvarFotoOffline = salvarFotoOffline;
+window.verificarArmazenamento = verificarArmazenamento;
