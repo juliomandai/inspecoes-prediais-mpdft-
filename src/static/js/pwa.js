@@ -236,6 +236,8 @@ function mostrarAvisoArmazenamento() {
   if (!banner || !banner.parentNode) return;
   const div = document.createElement('div');
   div.id = 'aviso-armazenamento';
+  div.setAttribute('role', 'status');
+  div.setAttribute('aria-live', 'polite');
   div.className = 'alert alert-warning mb-0 rounded-0 text-center py-2 small no-print';
   div.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Armazenamento do dispositivo quase cheio — sincronize assim que tiver sinal.';
   banner.parentNode.insertBefore(div, banner.nextSibling);
