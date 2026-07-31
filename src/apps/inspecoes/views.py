@@ -509,17 +509,17 @@ def foto_valida(content_type, tamanho):
     return erro_validacao_foto(content_type, tamanho) is None
 
 
-@login_required
-@require_POST
-def foto_upload(request, achado_pk):
-    achado = get_object_or_404(Achado.objects.select_related('especialidade'), pk=achado_pk)
-    arquivo = request.FILES.get('arquivo')
-    if not arquivo:
-        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
+def _criar_foto_do_upload(achado, arquivo):
+    """Valida e cria uma Foto a partir de um UploadedFile.
+
+    Retorna (foto, None) em sucesso, ou (None, mensagem_erro) se inválida.
+    Compartilhado entre o upload online (foto_upload) e a fila de
+    sincronização offline (achado_sincronizar_foto) — mesma validação e
+    mesma compressão nos dois caminhos.
+    """
     erro = erro_validacao_foto(arquivo.content_type, arquivo.size)
     if erro:
-        return JsonResponse({'erro': erro}, status=400)
-
+        return None, erro
     cf, nome, tamanho = comprimir_imagem(arquivo.read(), arquivo.name)
     foto = Foto.objects.create(
         achado=achado,
@@ -527,6 +527,19 @@ def foto_upload(request, achado_pk):
         nome_original=nome,
         tamanho_bytes=tamanho,
     )
+    return foto, None
+
+
+@login_required
+@require_POST
+def foto_upload(request, achado_pk):
+    achado = get_object_or_404(Achado.objects.select_related('especialidade'), pk=achado_pk)
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
+    foto, erro = _criar_foto_do_upload(achado, arquivo)
+    if erro:
+        return JsonResponse({'erro': erro}, status=400)
     return JsonResponse({'id': foto.pk, 'url': foto.arquivo.url, 'nome': foto.nome_original})
 
 
@@ -920,6 +933,31 @@ def achado_sincronizar_edicao(request, pk):
         'ok': True, 'achado_pk': achado.pk,
         'fotos_salvas': fotos_salvas, 'fotos_excluidas': fotos_excluidas,
     })
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def achado_sincronizar_foto(request, pk):
+    """
+    Recebe UMA foto (multipart) da fila de sincronização offline e a anexa
+    ao achado. Desacoplada de achado_sincronizar/achado_sincronizar_edicao
+    (ver docs/superpowers/specs/2026-07-31-sincronizacao-offline-volume-design.md,
+    ADR-01): uma foto grande ou instável não deve impedir o texto do achado
+    de chegar ao servidor, nem vice-versa.
+
+    Não verifica `pode_editar` da especialidade — ADR-10: uma foto que já
+    estava na fila local deve poder subir mesmo que a especialidade tenha
+    sido finalizada nesse meio-tempo.
+    """
+    achado = get_object_or_404(Achado, pk=pk)
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
+    foto, erro = _criar_foto_do_upload(achado, arquivo)
+    if erro:
+        return JsonResponse({'erro': erro}, status=400)
+    return JsonResponse({'ok': True, 'foto_pk': foto.pk}, status=201)
 
 
 # ── Análise — helper compartilhado ────────────────────────────────────────────

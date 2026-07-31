@@ -72,4 +72,5 @@ urlpatterns = [
     path('api/achados/sincronizar/', views.achado_sincronizar, name='achado_sincronizar'),
     path('api/especialidades/<int:pk>/achados-para-campo/', views.especialidade_achados_para_campo, name='achados_para_campo'),
     path('api/achados/<int:pk>/sincronizar-edicao/', views.achado_sincronizar_edicao, name='achado_sincronizar_edicao'),
+    path('api/achados/<int:pk>/fotos/sincronizar/', views.achado_sincronizar_foto, name='achado_sincronizar_foto'),
 ]
