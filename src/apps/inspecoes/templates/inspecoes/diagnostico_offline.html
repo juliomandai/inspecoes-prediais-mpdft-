@@ -103,7 +103,12 @@ async function diagLer() {
 
   out.push('\n=== pwa.js ===');
   out.push('window.pwaSync: ' + (typeof window.pwaSync));
+  out.push('window.salvarAchadoOffline: ' + (typeof window.salvarAchadoOffline));
   out.push('window.salvarEdicaoOffline: ' + (typeof window.salvarEdicaoOffline));
+  out.push('window.obterAchadoPreparado: ' + (typeof window.obterAchadoPreparado));
+  out.push('window.comprimirFoto: ' + (typeof window.comprimirFoto));
+  out.push('window.salvarFotoOffline: ' + (typeof window.salvarFotoOffline));
+  out.push('window.verificarArmazenamento: ' + (typeof window.verificarArmazenamento));
 
   document.getElementById('diag-saida').textContent = out.join('\n');
 }
