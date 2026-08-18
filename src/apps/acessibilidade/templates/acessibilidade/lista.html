@@ -15,6 +15,14 @@
     </select>
   </div>
   <div class="col-auto">
+    <select name="regiao" class="form-select">
+      <option value="">Todas as regiões</option>
+      {% for valor, rotulo in regioes %}
+      <option value="{{ valor }}" {% if request.GET.regiao == valor %}selected{% endif %}>{{ rotulo }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
     <select name="status" class="form-select">
       <option value="">Todos os status</option>
       {% for valor, rotulo in status_choices %}

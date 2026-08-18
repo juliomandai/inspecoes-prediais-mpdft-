@@ -25,6 +25,12 @@ def test_dashboard_exige_login(client):
 
 
 @pytest.mark.django_db
+def test_lista_exige_login(client):
+    resp = client.get(reverse('acessibilidade:lista'))
+    assert resp.status_code == 302
+
+
+@pytest.mark.django_db
 def test_dashboard_mostra_contagem_por_edificacao(client, cenario):
     client.force_login(cenario['usuario'])
     resp = client.get(reverse('acessibilidade:dashboard'))
@@ -49,3 +55,29 @@ def test_lista_busca_por_texto(client, cenario):
     resp = client.get(reverse('acessibilidade:lista'), {'q': 'Critério OK'})
     itens = list(resp.context['pagina'].object_list)
     assert len(itens) == 1
+
+
+@pytest.mark.django_db
+def test_lista_filtra_por_edificacao(client, cenario):
+    client.force_login(cenario['usuario'])
+    outra_edificacao = Edificacao.objects.create(nome='Outro Prédio', sigla='OUTRO')
+    outro_local = LocalAcessibilidade.objects.create(
+        edificacao=outra_edificacao, regiao=Regiao.TERREO, nome='Sanitário 2',
+    )
+    outro_criterio = CriterioAcessibilidade.objects.create(nome='Critério Alheio')
+    Avaliacao.objects.create(
+        local=outro_local, criterio=outro_criterio, status=Avaliacao.Status.OK,
+        atualizado_por=cenario['usuario'],
+    )
+
+    resp = client.get(reverse('acessibilidade:lista'), {'edificacao': cenario['edificacao'].pk})
+    itens = list(resp.context['pagina'].object_list)
+    assert len(itens) == 2
+    assert all(a.local.edificacao_id == cenario['edificacao'].pk for a in itens)
+
+
+@pytest.mark.django_db
+def test_lista_query_string_nao_duplica_pagina(client, cenario):
+    client.force_login(cenario['usuario'])
+    resp = client.get(reverse('acessibilidade:lista'), {'status': 'PENDENTE', 'pagina': '1'})
+    assert 'pagina' not in resp.context['query_string']

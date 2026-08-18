@@ -4,7 +4,7 @@ from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.edificacoes.models import Edificacao
-from .models import Avaliacao
+from .models import Avaliacao, Regiao
 
 
 def _avaliacoes_filtradas(request):
@@ -51,9 +51,12 @@ def lista(request):
     edificacoes = (
         Edificacao.objects.filter(locais_acessibilidade__isnull=False).distinct().order_by('nome')
     )
+    filtros = request.GET.copy()
+    filtros.pop('pagina', None)
     return render(request, 'acessibilidade/lista.html', {
         'pagina': pagina,
         'edificacoes': edificacoes,
+        'regioes': Regiao.choices,
         'status_choices': Avaliacao.Status.choices,
-        'query_string': request.GET.urlencode(),
+        'query_string': filtros.urlencode(),
     })
