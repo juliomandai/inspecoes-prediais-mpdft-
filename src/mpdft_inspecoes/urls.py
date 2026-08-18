@@ -16,5 +16,6 @@ urlpatterns = [
     path('', include('django.contrib.auth.urls')),
     path('', include('apps.inspecoes.urls', namespace='inspecoes')),
     path('', include('apps.edificacoes.urls', namespace='edificacoes')),
+    path('', include('apps.acessibilidade.urls', namespace='acessibilidade')),
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]

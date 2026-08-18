@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'apps.edificacoes',
     'apps.inspecoes',
+    'apps.acessibilidade',
     'apps.management',
 ]
 
