@@ -1,5 +1,7 @@
 from django.db import transaction
 
+from .models import AvaliacaoHistorico
+
 CAMPOS_EDITAVEIS = [
     'status', 'resolucao_diagnostico', 'observacao',
     'status_acao', 'responsavel', 'prazo', 'resolucao_prevista',
@@ -21,8 +23,6 @@ def aplicar_edicao(avaliacao, patch, usuario):
     um AvaliacaoHistorico imutável com o estado completo antes/depois.
     Único ponto de entrada para editar uma Avaliacao — garante o invariante
     de que toda edição deixa rastro (ADR-05)."""
-    from .models import AvaliacaoHistorico
-
     snapshot_anterior = _snapshot(avaliacao)
     for campo, valor in patch.items():
         if campo in CAMPOS_EDITAVEIS:

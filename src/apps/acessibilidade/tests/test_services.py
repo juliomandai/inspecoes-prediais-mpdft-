@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 from django.contrib.auth import get_user_model
 
@@ -42,6 +44,22 @@ def test_aplicar_edicao_ignora_campos_nao_editaveis(avaliacao):
     aplicar_edicao(avaliacao, {'local_id': 999999}, avaliacao.atualizado_por)
     avaliacao.refresh_from_db()
     assert avaliacao.local_id != 999999
+
+
+@pytest.mark.django_db
+def test_aplicar_edicao_snapshot_lida_com_data_none(avaliacao):
+    aplicar_edicao(avaliacao, {'status': Avaliacao.Status.OK}, avaliacao.atualizado_por)
+    historico = avaliacao.historico.get()
+    assert historico.snapshot_anterior['prazo'] is None
+    assert historico.snapshot_novo['data_os'] is None
+
+
+@pytest.mark.django_db
+def test_aplicar_edicao_snapshot_formata_data_como_isoformat(avaliacao):
+    prazo = datetime.date(2026, 9, 1)
+    aplicar_edicao(avaliacao, {'prazo': prazo}, avaliacao.atualizado_por)
+    historico = avaliacao.historico.get()
+    assert historico.snapshot_novo['prazo'] == prazo.isoformat()
 
 
 @pytest.mark.django_db
