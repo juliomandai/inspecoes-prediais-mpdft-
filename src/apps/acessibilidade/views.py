@@ -1,10 +1,13 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.edificacoes.models import Edificacao
+from .forms import AvaliacaoEditForm
 from .models import Avaliacao, Regiao
+from .services import aplicar_edicao
 
 
 def _avaliacoes_filtradas(request):
@@ -60,3 +63,28 @@ def lista(request):
         'status_choices': Avaliacao.Status.choices,
         'query_string': filtros.urlencode(),
     })
+
+
+@login_required
+def editar(request, pk):
+    avaliacao = get_object_or_404(Avaliacao, pk=pk)
+    if request.method == 'POST':
+        form = AvaliacaoEditForm(request.POST)
+        if form.is_valid():
+            aplicar_edicao(avaliacao, form.cleaned_data, request.user)
+            messages.success(request, 'Avaliação atualizada com sucesso.')
+            return redirect('acessibilidade:lista')
+    else:
+        form = AvaliacaoEditForm(initial={
+            'status': avaliacao.status,
+            'resolucao_diagnostico': avaliacao.resolucao_diagnostico,
+            'observacao': avaliacao.observacao,
+            'status_acao': avaliacao.status_acao,
+            'responsavel': avaliacao.responsavel,
+            'prazo': avaliacao.prazo,
+            'resolucao_prevista': avaliacao.resolucao_prevista,
+            'ordem_servico': avaliacao.ordem_servico,
+            'data_os': avaliacao.data_os,
+            'notas': avaliacao.notas,
+        })
+    return render(request, 'acessibilidade/editar.html', {'form': form, 'avaliacao': avaliacao})

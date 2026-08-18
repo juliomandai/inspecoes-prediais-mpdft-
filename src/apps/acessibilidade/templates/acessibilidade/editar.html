@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar avaliação — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<h2><i class="bi bi-pencil-square"></i> Editar avaliação</h2>
+<p class="text-muted">{{ avaliacao.local.edificacao.nome }} — {{ avaliacao.local.get_regiao_display }} — {{ avaliacao.local.nome }} — <strong>{{ avaliacao.criterio.nome }}</strong></p>
+
+<form method="post" class="row g-3">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="col-md-6">
+    <label class="form-label">{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <div class="col-12">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+    <a href="{% url 'acessibilidade:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
