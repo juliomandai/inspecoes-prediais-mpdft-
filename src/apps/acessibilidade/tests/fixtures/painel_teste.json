@@ -1,0 +1,16 @@
+{
+  "localidades": ["TEST"],
+  "regioes": ["TÉRREO"],
+  "locals": ["Sanitário Acessível"],
+  "itens": ["Altura da bacia", "Barra de apoio"],
+  "status": ["Não se aplica", "OK", "Pendente"],
+  "resolucoes": ["Contratação", "Manutenção Predial"],
+  "rows": [
+    [4329, 0, 0, 0, 0, 1, -1, ""],
+    [4330, 0, 0, 0, 1, 2, 1, "falta instalar barra"]
+  ],
+  "details": {
+    "4330": {"legal": "NBR 9050/15: 4.9.4 — barras de apoio devem suportar 1,5 kN."}
+  },
+  "meta": {"buildings_detailed": ["TEST"], "generated_note": "fixture de teste"}
+}
