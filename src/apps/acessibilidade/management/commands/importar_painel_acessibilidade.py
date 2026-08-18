@@ -3,6 +3,10 @@ para o banco de dados (Edificacao.sigla, LocalAcessibilidade,
 CriterioAcessibilidade, Avaliacao).
 
 Idempotente — usa get_or_create, pode ser rodado mais de uma vez sem duplicar.
+Carga direta via ORM — não passa por `services.aplicar_edicao`, então avaliações
+importadas por este comando não geram AvaliacaoHistorico até a primeira edição
+manual feita pela interface (o histórico é uma garantia de edição, não de carga
+inicial de dados).
 
 Uso:
     python manage.py importar_painel_acessibilidade
@@ -89,7 +93,15 @@ class Command(BaseCommand):
                     criterio.save(update_fields=['base_legal'])
 
                 status_bruto = status_lista[i_status] if i_status is not None and i_status >= 0 else None
-                status_valor = MAPA_STATUS.get(status_bruto, Avaliacao.Status.NAO_SE_APLICA)
+                if status_bruto is None:
+                    status_valor = Avaliacao.Status.NAO_SE_APLICA
+                elif status_bruto in MAPA_STATUS:
+                    status_valor = MAPA_STATUS[status_bruto]
+                else:
+                    raise CommandError(
+                        f'Status desconhecido "{status_bruto}" na linha row_id={row_id}. '
+                        f'Atualize MAPA_STATUS para incluir esse valor antes de importar.'
+                    )
                 resolucao_valor = (
                     resolucoes[i_resolucao] if i_resolucao is not None and i_resolucao >= 0 else ''
                 )
