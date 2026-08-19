@@ -9,8 +9,9 @@
     <a href="{% url 'acessibilidade:lista' %}" class="btn btn-outline-primary">
       <i class="bi bi-list-check"></i> Ver avaliações
     </a>
-    {# O link de "Alertas de prazo" (rota acessibilidade:alertas) é adicionado na Task 11,
-       quando essa rota é criada — omitido por ora para não quebrar {% templatetag openblock %} url {% templatetag closeblock %}. #}
+    <a href="{% url 'acessibilidade:alertas' %}" class="btn btn-outline-danger">
+      <i class="bi bi-exclamation-triangle"></i> Alertas de prazo
+    </a>
   </div>
 </div>
 

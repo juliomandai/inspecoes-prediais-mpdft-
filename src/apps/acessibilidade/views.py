@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from apps.edificacoes.models import Edificacao
 from .forms import AvaliacaoEditForm, AvaliacaoEdicaoLoteForm
@@ -144,3 +145,15 @@ def exportar_csv(request):
             a.atualizado_em.strftime('%d/%m/%Y %H:%M'),
         ])
     return response
+
+
+@login_required
+def alertas(request):
+    hoje = timezone.localdate()
+    qs = (
+        Avaliacao.objects.select_related('local', 'local__edificacao', 'criterio')
+        .filter(prazo__lt=hoje)
+        .exclude(status_acao=Avaliacao.StatusAcao.CONCLUIDA)
+        .order_by('prazo')
+    )
+    return render(request, 'acessibilidade/alertas.html', {'avaliacoes': qs, 'hoje': hoje})
