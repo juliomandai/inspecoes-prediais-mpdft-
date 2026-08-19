@@ -43,3 +43,9 @@ def test_alertas_mostra_so_vencidas_e_nao_concluidas(client, cenario):
     resp = client.get(reverse('acessibilidade:alertas'))
     ids = [a.pk for a in resp.context['avaliacoes']]
     assert ids == [cenario['vencida_pendente'].pk]
+
+
+@pytest.mark.django_db
+def test_alertas_exige_login(client):
+    resp = client.get(reverse('acessibilidade:alertas'))
+    assert resp.status_code == 302
