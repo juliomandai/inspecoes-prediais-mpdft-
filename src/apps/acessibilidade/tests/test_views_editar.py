@@ -42,3 +42,36 @@ def test_post_editar_atualiza_e_registra_historico(client, avaliacao):
     assert avaliacao.status == 'OK'
     assert avaliacao.atualizado_por == outro_usuario
     assert avaliacao.historico.count() == 1
+
+
+@pytest.mark.django_db
+def test_editar_exige_login(client, avaliacao):
+    resp = client.get(reverse('acessibilidade:editar', args=[avaliacao.pk]))
+    assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+def test_get_editar_404_para_pk_inexistente(client, avaliacao):
+    client.force_login(avaliacao.atualizado_por)
+    resp = client.get(reverse('acessibilidade:editar', args=[999999]))
+    assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_post_editar_formulario_invalido_nao_salva_e_reexibe_erros(client, avaliacao):
+    client.force_login(avaliacao.atualizado_por)
+    resp = client.post(reverse('acessibilidade:editar', args=[avaliacao.pk]), {
+        'status': '',
+        'status_acao': '',
+        'resolucao_diagnostico': '',
+        'observacao': '',
+        'responsavel': '',
+        'resolucao_prevista': '',
+        'ordem_servico': '',
+        'notas': '',
+    })
+    assert resp.status_code == 200
+    assert resp.context['form'].errors
+    avaliacao.refresh_from_db()
+    assert avaliacao.status == 'PENDENTE'
+    assert avaliacao.historico.count() == 0
