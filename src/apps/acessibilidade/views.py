@@ -111,6 +111,16 @@ def editar_lote(request):
     return redirect('acessibilidade:lista')
 
 
+def _csv_seguro(valor):
+    """Neutraliza injeção de fórmula CSV (OWASP): prefixa com aspas simples
+    quando o valor começa com um caractere que Excel/LibreOffice interpretam
+    como início de fórmula ou comando."""
+    texto = str(valor or '')
+    if texto[:1] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + texto
+    return texto
+
+
 @login_required
 def exportar_csv(request):
     qs = _avaliacoes_filtradas(request)
@@ -126,9 +136,11 @@ def exportar_csv(request):
     for a in qs:
         writer.writerow([
             a.local.edificacao.nome, a.local.get_regiao_display(), a.local.nome, a.criterio.nome,
-            a.get_status_display(), a.resolucao_diagnostico, a.get_status_acao_display(),
-            a.responsavel, a.prazo or '', a.resolucao_prevista, a.ordem_servico, a.data_os or '',
-            a.notas, a.observacao, a.atualizado_por.get_username(),
+            a.get_status_display(), _csv_seguro(a.resolucao_diagnostico), a.get_status_acao_display(),
+            _csv_seguro(a.responsavel), a.prazo.strftime('%d/%m/%Y') if a.prazo else '',
+            _csv_seguro(a.resolucao_prevista), _csv_seguro(a.ordem_servico),
+            a.data_os.strftime('%d/%m/%Y') if a.data_os else '',
+            _csv_seguro(a.notas), _csv_seguro(a.observacao), a.atualizado_por.get_username(),
             a.atualizado_em.strftime('%d/%m/%Y %H:%M'),
         ])
     return response

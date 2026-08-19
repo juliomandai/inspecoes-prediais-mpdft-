@@ -39,3 +39,24 @@ def test_exportar_csv_respeita_filtro_de_status(client, avaliacao):
     resp = client.get(reverse('acessibilidade:exportar_csv'), {'status': 'OK'})
     linhas = list(csv.reader(io.StringIO(resp.content.decode('utf-8')), delimiter=';'))
     assert len(linhas) == 1  # só o cabeçalho, nenhuma avaliação OK
+
+
+@pytest.mark.django_db
+def test_exportar_csv_exige_login(client, avaliacao):
+    resp = client.get(reverse('acessibilidade:exportar_csv'))
+    assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+def test_exportar_csv_neutraliza_injecao_de_formula(client, avaliacao):
+    avaliacao.notas = '=cmd|\'/c calc\'!A1'
+    avaliacao.responsavel = '+SUM(A1:A2)'
+    avaliacao.save(update_fields=['notas', 'responsavel'])
+
+    client.force_login(avaliacao.atualizado_por)
+    resp = client.get(reverse('acessibilidade:exportar_csv'))
+    linhas = list(csv.reader(io.StringIO(resp.content.decode('utf-8')), delimiter=';'))
+    responsavel_col = linhas[1][7]
+    notas_col = linhas[1][12]
+    assert responsavel_col.startswith("'+")
+    assert notas_col.startswith("'=")
