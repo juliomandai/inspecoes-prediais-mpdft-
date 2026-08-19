@@ -5,9 +5,9 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.edificacoes.models import Edificacao
-from .forms import AvaliacaoEditForm
+from .forms import AvaliacaoEditForm, AvaliacaoEdicaoLoteForm
 from .models import Avaliacao, Regiao
-from .services import aplicar_edicao
+from .services import aplicar_edicao, aplicar_edicao_lote
 
 
 def _avaliacoes_filtradas(request):
@@ -88,3 +88,21 @@ def editar(request, pk):
             'notas': avaliacao.notas,
         })
     return render(request, 'acessibilidade/editar.html', {'form': form, 'avaliacao': avaliacao})
+
+
+@login_required
+def editar_lote(request):
+    if request.method != 'POST':
+        return redirect('acessibilidade:lista')
+    form = AvaliacaoEdicaoLoteForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Não foi possível aplicar a edição em lote: dados inválidos.')
+        return redirect('acessibilidade:lista')
+    avaliacoes = list(Avaliacao.objects.filter(pk__in=form.ids_list()))
+    patch = form.patch()
+    if not patch:
+        messages.warning(request, 'Nenhum campo preenchido para aplicar em lote.')
+        return redirect('acessibilidade:lista')
+    aplicar_edicao_lote(avaliacoes, patch, request.user)
+    messages.success(request, f'{len(avaliacoes)} avaliações atualizadas.')
+    return redirect('acessibilidade:lista')

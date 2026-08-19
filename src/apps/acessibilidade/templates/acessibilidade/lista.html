@@ -38,40 +38,68 @@
   </div>
 </form>
 
-{# Nota: a coluna de ações (editar/lote) e o link de exportação CSV ainda não
-   existem nesta versão do template — são adicionados nas Tasks 8, 9 e 10,
-   que reescrevem este arquivo. Evita referenciar rotas ({% templatetag openblock %} url ... {% templatetag closeblock %})
-   que ainda não foram registradas, o que quebraria a renderização agora. #}
-<div class="card shadow-sm">
-  <div class="table-responsive">
-    <table class="table table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Edificação</th>
-          <th>Local</th>
-          <th>Critério</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for a in pagina %}
-        <tr>
-          <td>{{ a.local.edificacao.nome }}</td>
-          <td>{{ a.local.get_regiao_display }} — {{ a.local.nome }}</td>
-          <td>{{ a.criterio.nome }}</td>
-          <td>
-            {% if a.status == 'OK' %}<span class="badge bg-success">OK</span>
-            {% elif a.status == 'PENDENTE' %}<span class="badge bg-danger">Pendente</span>
-            {% else %}<span class="badge bg-secondary">Não se aplica</span>{% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="4" class="text-center text-muted py-4">Nenhuma avaliação encontrada.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<form method="post" action="{% url 'acessibilidade:editar_lote' %}" id="form-lote">
+  {% csrf_token %}
+  <input type="hidden" name="ids_selecionados" id="ids_selecionados">
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th></th>
+            <th>Edificação</th>
+            <th>Local</th>
+            <th>Critério</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in pagina %}
+          <tr>
+            <td><input type="checkbox" class="check-avaliacao" value="{{ a.pk }}"></td>
+            <td>{{ a.local.edificacao.nome }}</td>
+            <td>{{ a.local.get_regiao_display }} — {{ a.local.nome }}</td>
+            <td>{{ a.criterio.nome }}</td>
+            <td>
+              {% if a.status == 'OK' %}<span class="badge bg-success">OK</span>
+              {% elif a.status == 'PENDENTE' %}<span class="badge bg-danger">Pendente</span>
+              {% else %}<span class="badge bg-secondary">Não se aplica</span>{% endif %}
+            </td>
+            <td><a href="{% url 'acessibilidade:editar' a.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma avaliação encontrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+
+  <div class="d-flex align-items-center gap-2 mt-3">
+    <select name="status_acao" class="form-select w-auto">
+      <option value="">— não alterar status da ação —</option>
+      <option value="NAO_INICIADA">Não iniciada</option>
+      <option value="EM_ANDAMENTO">Em andamento</option>
+      <option value="CONCLUIDA">Concluída</option>
+    </select>
+    <button type="submit" class="btn btn-warning" onclick="return prepararLote()">
+      <i class="bi bi-pencil-square"></i> Aplicar aos selecionados
+    </button>
+  </div>
+</form>
+
+<script>
+function prepararLote() {
+  var selecionados = Array.from(document.querySelectorAll('.check-avaliacao:checked')).map(function(el) { return el.value; });
+  if (selecionados.length === 0) {
+    alert('Selecione ao menos uma avaliação.');
+    return false;
+  }
+  document.getElementById('ids_selecionados').value = selecionados.join(',');
+  return true;
+}
+</script>
 
 <nav class="mt-3">
   <ul class="pagination">
