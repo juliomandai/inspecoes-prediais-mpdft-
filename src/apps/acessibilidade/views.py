@@ -1,7 +1,10 @@
+import csv
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.edificacoes.models import Edificacao
@@ -106,3 +109,26 @@ def editar_lote(request):
     aplicar_edicao_lote(avaliacoes, patch, request.user)
     messages.success(request, f'{len(avaliacoes)} avaliações atualizadas.')
     return redirect('acessibilidade:lista')
+
+
+@login_required
+def exportar_csv(request):
+    qs = _avaliacoes_filtradas(request)
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="acessibilidade.csv"'
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow([
+        'Edificação', 'Região', 'Local', 'Critério', 'Status', 'Resolução (diagnóstico)',
+        'Status da ação', 'Responsável', 'Prazo', 'Resolução prevista',
+        'Ordem de serviço', 'Data da OS', 'Notas', 'Observação',
+        'Atualizado por', 'Atualizado em',
+    ])
+    for a in qs:
+        writer.writerow([
+            a.local.edificacao.nome, a.local.get_regiao_display(), a.local.nome, a.criterio.nome,
+            a.get_status_display(), a.resolucao_diagnostico, a.get_status_acao_display(),
+            a.responsavel, a.prazo or '', a.resolucao_prevista, a.ordem_servico, a.data_os or '',
+            a.notas, a.observacao, a.atualizado_por.get_username(),
+            a.atualizado_em.strftime('%d/%m/%Y %H:%M'),
+        ])
+    return response
