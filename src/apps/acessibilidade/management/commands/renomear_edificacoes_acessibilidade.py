@@ -13,6 +13,10 @@ apagando a linha placeholder. Quando NÃO existe uma linha oficial
 correspondente (ex.: banco de dev, ou uma Promotoria que só existe no
 painel de acessibilidade), o placeholder é apenas renomeado no lugar.
 
+O Edifício-sede (BSBI) é um caso especial: as duas alas (Bloco A e Bloco B)
+compartilham a mesma sigla no painel de acessibilidade, então a linha oficial
+fica só como "Edifício-sede" (sem distinguir bloco) após a fusão.
+
 Idempotente — rodar de novo não tem efeito colateral (a linha placeholder
 já não existirá mais).
 
@@ -33,7 +37,7 @@ from apps.inspecoes.models import Inspecao, VisitaTecnica
 # hífen, e uma busca por trecho (`contains`) para o caso do Edifício-sede,
 # cujo nome pode ter sido digitado com hífen ou travessão.
 MAPA_MERGE = {
-    'BSBI': {'contains': 'Bloco A'},
+    'BSBI': {'contains': 'Bloco A', 'renomear_oficial_para': 'Edifício-sede'},
     'BSBII': {'nome': 'Promotoria de Justiça de Brasília II'},
     'PJBZ': {'nome': 'Promotoria de Justiça de Brazlândia'},
     'PJCE': {'nome': 'Promotoria de Justiça de Ceilândia'},
@@ -101,9 +105,30 @@ class Command(BaseCommand):
             # mesmo valor ao mesmo tempo.
             placeholder.delete()
 
+            update_fields = []
             if not oficial.sigla:
                 oficial.sigla = sigla
-                oficial.save(update_fields=['sigla'])
+                update_fields.append('sigla')
+            nome_oficial_final = criterio.get('renomear_oficial_para')
+            if nome_oficial_final and oficial.nome != nome_oficial_final:
+                oficial.nome = nome_oficial_final
+                update_fields.append('nome')
+            if update_fields:
+                oficial.save(update_fields=update_fields)
+
+        # Caso a fusão já tenha rodado numa execução anterior (placeholder já
+        # apagado), garante que a renomeação final da oficial ainda é aplicada.
+        for sigla, criterio in MAPA_MERGE.items():
+            nome_final = criterio.get('renomear_oficial_para')
+            if not nome_final:
+                continue
+            oficial = Edificacao.objects.filter(sigla=sigla).exclude(nome=nome_final).first()
+            if oficial is None:
+                continue
+            self.stdout.write(f'{sigla}: renomeando {oficial.nome!r} -> {nome_final!r}.')
+            if not dry_run:
+                oficial.nome = nome_final
+                oficial.save(update_fields=['nome'])
 
         if dry_run:
             self.stdout.write(self.style.WARNING('[dry-run] nenhuma alteração foi gravada.'))

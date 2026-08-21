@@ -57,8 +57,21 @@ def test_funde_bsbi_por_correspondencia_parcial_de_bloco_a():
     assert not Edificacao.objects.filter(pk=placeholder.pk).exists()
     oficial.refresh_from_db()
     assert oficial.sigla == 'BSBI'
+    assert oficial.nome == 'Edifício-sede'
     local.refresh_from_db()
     assert local.edificacao_id == oficial.pk
+
+
+@pytest.mark.django_db
+def test_renomeia_bsbi_mesmo_apos_fusao_ja_ter_ocorrido():
+    # simula um banco onde a fusão do BSBI já rodou numa execução anterior
+    # (placeholder já apagado), mas a oficial ainda está com o nome antigo.
+    oficial = Edificacao.objects.create(sigla='BSBI', nome='Edifício-sede – Bloco A')
+
+    call_command('renomear_edificacoes_acessibilidade')
+
+    oficial.refresh_from_db()
+    assert oficial.nome == 'Edifício-sede'
 
 
 @pytest.mark.django_db
