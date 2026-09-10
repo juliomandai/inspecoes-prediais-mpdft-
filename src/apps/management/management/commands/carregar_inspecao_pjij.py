@@ -744,7 +744,14 @@ class Command(BaseCommand):
 
         # ── 2. Limpeza opcional ───────────────────────────────────────────────
         if options['limpar']:
-            removidas = Inspecao.objects.filter(edificacao=edificacao).delete()
+            # todos_objects + apagar_definitivamente(): este comando é um
+            # reset de dados de carga, não uma exclusão de usuário — precisa
+            # remover de verdade, inclusive o que já tiver sido excluído
+            # logicamente antes, senão um recarregamento ficaria bloqueado
+            # pelas constraints de unicidade dos registros "excluídos".
+            qs = Inspecao.todos_objects.filter(edificacao=edificacao)
+            removidas = qs.count()
+            qs.apagar_definitivamente()
             self.stdout.write(f'Inspeções removidas: {removidas}')
 
         # ── 2b. Restaurar apenas Mecânica ─────────────────────────────────────
@@ -753,9 +760,11 @@ class Command(BaseCommand):
             if not inspecao:
                 self.stderr.write('Nenhuma inspeção encontrada para esta edificação.')
                 return
-            removidas = InspecaoEspecialidade.objects.filter(
+            qs_mec = InspecaoEspecialidade.todos_objects.filter(
                 inspecao=inspecao, especialidade='mecanica'
-            ).delete()
+            )
+            removidas = qs_mec.count()
+            qs_mec.apagar_definitivamente()
             self.stdout.write(f'Especialidade mecânica removida: {removidas}')
             esp_mec = InspecaoEspecialidade.objects.create(
                 inspecao=inspecao,

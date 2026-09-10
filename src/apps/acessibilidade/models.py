@@ -1,5 +1,8 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
+
+from apps.core.softdelete import SoftDeleteModel
 
 
 class Regiao(models.TextChoices):
@@ -28,7 +31,7 @@ class Regiao(models.TextChoices):
     # bloqueio para este módulo entrar em produção.
 
 
-class LocalAcessibilidade(models.Model):
+class LocalAcessibilidade(SoftDeleteModel):
     edificacao = models.ForeignKey(
         'edificacoes.Edificacao', on_delete=models.PROTECT, related_name='locais_acessibilidade',
         verbose_name='Edificação',
@@ -40,26 +43,39 @@ class LocalAcessibilidade(models.Model):
         verbose_name = 'Local de acessibilidade'
         verbose_name_plural = 'Locais de acessibilidade'
         ordering = ['edificacao__nome', 'regiao', 'nome']
-        unique_together = [('edificacao', 'regiao', 'nome')]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['edificacao', 'regiao', 'nome'], condition=Q(excluido_em__isnull=True),
+                name='unique_local_acessibilidade_ativo',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.edificacao.nome} — {self.get_regiao_display()} — {self.nome}'
 
 
-class CriterioAcessibilidade(models.Model):
-    nome = models.CharField('Critério', max_length=300, unique=True)
+class CriterioAcessibilidade(SoftDeleteModel):
+    # `nome` não é mais `unique=True` no campo — a unicidade é imposta pela
+    # constraint abaixo, restrita aos registros ativos.
+    nome = models.CharField('Critério', max_length=300)
     base_legal = models.TextField('Base legal', blank=True)
 
     class Meta:
         verbose_name = 'Critério de acessibilidade'
         verbose_name_plural = 'Critérios de acessibilidade'
         ordering = ['nome']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['nome'], condition=Q(excluido_em__isnull=True),
+                name='unique_criterio_acessibilidade_ativo',
+            ),
+        ]
 
     def __str__(self):
         return self.nome
 
 
-class Avaliacao(models.Model):
+class Avaliacao(SoftDeleteModel):
     class Status(models.TextChoices):
         OK = 'OK', 'OK'
         PENDENTE = 'PENDENTE', 'Pendente'
@@ -95,7 +111,12 @@ class Avaliacao(models.Model):
     class Meta:
         verbose_name = 'Avaliação'
         verbose_name_plural = 'Avaliações'
-        unique_together = [('local', 'criterio')]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['local', 'criterio'], condition=Q(excluido_em__isnull=True),
+                name='unique_avaliacao_ativa',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.local} — {self.criterio} — {self.get_status_display()}'

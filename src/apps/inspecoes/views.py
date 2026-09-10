@@ -225,7 +225,7 @@ def inspecao_delete(request, pk):
     inspecao = get_object_or_404(Inspecao, pk=pk)
     nome = str(inspecao)
     _log(request, 'inspecao_excluida', f'Inspeção excluída: "{nome}".')
-    inspecao.delete()
+    inspecao.excluir(request.user)
     messages.success(request, f'Inspeção "{nome}" excluída com sucesso.')
     return redirect('inspecoes:list')
 
@@ -317,7 +317,7 @@ def especialidade_delete(request, pk):
     inspecao_pk = esp.inspecao_id
     nome = esp.get_especialidade_display()
     _log(request, 'especialidade_excluida', f'{nome} excluída de "{esp.inspecao.edificacao}".')
-    esp.delete()
+    esp.excluir(request.user)
     messages.success(request, f'Especialidade "{nome}" excluída com sucesso.')
     return redirect('inspecoes:detail', pk=inspecao_pk)
 
@@ -436,7 +436,7 @@ def achado_delete(request, pk):
     _log(request, 'achado_excluido',
          f'Achado excluído: "{achado.verificacao}" em '
          f'{achado.especialidade.get_especialidade_display()} — "{achado.especialidade.inspecao.edificacao}".')
-    achado.delete()
+    achado.excluir(request.user)
     messages.success(request, 'Achado excluído com sucesso.')
     return _redirect_detail(inspecao_pk, esp_pk)
 
@@ -547,7 +547,7 @@ def foto_upload(request, achado_pk):
 @require_http_methods(['DELETE'])
 def foto_delete(request, pk):
     foto = get_object_or_404(Foto.objects.select_related('achado__especialidade'), pk=pk)
-    foto.delete()
+    foto.excluir(request.user)
     return HttpResponse(status=204)
 
 
@@ -904,7 +904,7 @@ def achado_sincronizar_edicao(request, pk):
     fotos_excluidas = 0
     fotos_excluir = dados.get('fotos_excluir') or []
     for foto in achado.fotos.filter(pk__in=fotos_excluir):
-        foto.delete()
+        foto.excluir(request.user)
         fotos_excluidas += 1
 
     # Fotos novas anexadas em campo (base64).
@@ -1761,7 +1761,7 @@ def configuracoes(request):
             try:
                 opcao = OpcaoCampo.objects.get(pk=opcao_id, is_padrao=False)
                 nome = opcao.label
-                opcao.delete()
+                opcao.excluir(request.user)
                 messages.success(request, f'Opção "{nome}" removida.')
             except OpcaoCampo.DoesNotExist:
                 messages.error(request, 'Opção não encontrada ou não pode ser removida.')
@@ -2030,7 +2030,7 @@ def visita_delete(request, pk):
     edif_pk = visita.edificacao_id
     _log(request, 'visita_excluida',
          f'Visita técnica excluída de "{visita.edificacao.nome}" ({visita.data_visita:%d/%m/%Y}).')
-    visita.delete()
+    visita.excluir(request.user)
     messages.success(request, 'Visita excluída com sucesso.')
     return redirect('inspecoes:visita_list', edif_pk=edif_pk)
 
@@ -2057,5 +2057,5 @@ def visita_foto_upload(request, visita_pk):
 @require_http_methods(['DELETE'])
 def visita_foto_delete(request, pk):
     foto = get_object_or_404(VisitaFoto, pk=pk)
-    foto.delete()
+    foto.excluir(request.user)
     return HttpResponse(status=204)

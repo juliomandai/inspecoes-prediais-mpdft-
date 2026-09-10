@@ -1,11 +1,14 @@
 import uuid
 from datetime import date
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
+from apps.core.softdelete import SoftDeleteModel, SoftDeleteQuerySet, manager_ativos, manager_todos
 
-class Inspecao(models.Model):
+
+class Inspecao(SoftDeleteModel):
     """Container principal da inspeção — uma por edificação por campanha."""
 
     edificacao = models.ForeignKey(
@@ -33,7 +36,7 @@ class Inspecao(models.Model):
         return 'finalizada' if all(e.status == 'finalizada' for e in especialidades) else 'em_andamento'
 
 
-class InspecaoEspecialidade(models.Model):
+class InspecaoEspecialidade(SoftDeleteModel):
     """Sub-inspeção por especialidade dentro de uma Inspeção."""
 
     ESPECIALIDADE_CHOICES = [
@@ -65,7 +68,7 @@ class InspecaoEspecialidade(models.Model):
         verbose_name_plural = 'Especialidades da Inspeção'
         constraints = [
             models.UniqueConstraint(
-                fields=['inspecao', 'especialidade'],
+                fields=['inspecao', 'especialidade'], condition=Q(excluido_em__isnull=True),
                 name='unique_inspecao_especialidade',
             )
         ]
@@ -90,7 +93,7 @@ class InspecaoEspecialidade(models.Model):
         return self.status == 'em_andamento'
 
 
-class AchadoQuerySet(models.QuerySet):
+class AchadoQuerySet(SoftDeleteQuerySet):
     """Consultas do módulo Acompanhamento — ficam com o model, não espalhadas pelas views."""
 
     def acompanhamento(self):
@@ -126,7 +129,7 @@ class AchadoQuerySet(models.QuerySet):
         )
 
 
-class Achado(models.Model):
+class Achado(SoftDeleteModel):
     GRUPO_TECNICO_CHOICES = [
         ('esquadrias', 'Esquadrias'),
         ('instalacoes', 'Instalações Hidrossanitárias'),
@@ -217,7 +220,8 @@ class Achado(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
-    objects = AchadoQuerySet.as_manager()
+    objects = manager_ativos(AchadoQuerySet)()
+    todos_objects = manager_todos(AchadoQuerySet)()
 
     class Meta:
         ordering = ['-criado_em']
@@ -292,7 +296,7 @@ class EncaminhamentoHistorico(models.Model):
         return f'{self.achado} — {self.get_de_direcionamento_display()} → {self.get_para_direcionamento_display()}'
 
 
-class OpcaoCampo(models.Model):
+class OpcaoCampo(SoftDeleteModel):
     """Opções configuráveis para campos do formulário de Achado."""
     CAMPO_CHOICES = [
         ('localizacao', 'Localização'),
@@ -308,7 +312,10 @@ class OpcaoCampo(models.Model):
     class Meta:
         ordering = ['campo', 'ordem', 'label']
         constraints = [
-            models.UniqueConstraint(fields=['campo', 'label'], name='unique_campo_label'),
+            models.UniqueConstraint(
+                fields=['campo', 'label'], condition=Q(excluido_em__isnull=True),
+                name='unique_campo_label',
+            ),
         ]
         verbose_name = 'Opção de campo'
         verbose_name_plural = 'Opções de campos'
@@ -323,7 +330,7 @@ def foto_upload_path(instance, filename):
     return f'fotos/{hoje.year}/{hoje.month:02d}/{instance.achado_id}/{uuid.uuid4()}.{ext}'
 
 
-class Foto(models.Model):
+class Foto(SoftDeleteModel):
     achado = models.ForeignKey(Achado, on_delete=models.CASCADE, related_name='fotos', verbose_name='Achado')
     arquivo = models.ImageField('Foto', upload_to=foto_upload_path)
     nome_original = models.CharField(max_length=255)
@@ -345,7 +352,7 @@ def visita_foto_upload_path(instance, filename):
     return f'visitas/{hoje.year}/{hoje.month:02d}/{instance.visita_id}/{uuid.uuid4()}.{ext}'
 
 
-class VisitaTecnica(models.Model):
+class VisitaTecnica(SoftDeleteModel):
     DISCIPLINA_CHOICES = [
         ('arquitetura', 'Arquitetura'),
         ('civil', 'Engenharia Civil'),
@@ -415,7 +422,7 @@ class VisitaTecnica(models.Model):
         return not self.is_subvisita and not self.concluida
 
 
-class VisitaFoto(models.Model):
+class VisitaFoto(SoftDeleteModel):
     visita = models.ForeignKey(VisitaTecnica, on_delete=models.CASCADE, related_name='fotos', verbose_name='Visita')
     arquivo = models.ImageField('Foto', upload_to=visita_foto_upload_path)
     nome_original = models.CharField(max_length=255)

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from apps.core.admin import SoftDeleteAdminMixin
 from .models import (
     Inspecao, InspecaoEspecialidade, Achado, Foto, LogAcesso,
     VisitaTecnica, VisitaFoto, EncaminhamentoHistorico,
@@ -27,8 +28,8 @@ class InspecaoEspecialidadeInline(admin.TabularInline):
 
 
 @admin.register(Inspecao)
-class InspecaoAdmin(admin.ModelAdmin):
-    list_display = ['edificacao', 'status_geral', 'criado_em']
+class InspecaoAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
+    list_display = ['edificacao', 'status_geral', 'criado_em', 'excluido_em']
     list_filter = ['edificacao']
     search_fields = ['edificacao__nome']
     date_hierarchy = 'criado_em'
@@ -36,8 +37,8 @@ class InspecaoAdmin(admin.ModelAdmin):
 
 
 @admin.register(InspecaoEspecialidade)
-class InspecaoEspecialidadeAdmin(admin.ModelAdmin):
-    list_display = ['inspecao', 'especialidade', 'profissional', 'data_inspecao', 'status']
+class InspecaoEspecialidadeAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
+    list_display = ['inspecao', 'especialidade', 'profissional', 'data_inspecao', 'status', 'excluido_em']
     list_filter = ['status', 'especialidade']
     search_fields = ['profissional', 'inspecao__edificacao__nome']
     date_hierarchy = 'data_inspecao'
@@ -45,8 +46,8 @@ class InspecaoEspecialidadeAdmin(admin.ModelAdmin):
 
 
 @admin.register(Achado)
-class AchadoAdmin(admin.ModelAdmin):
-    list_display = ['especialidade', 'localizacao', 'verificacao', 'gut_total', 'prioridade_risco', 'direcionamento', 'status']
+class AchadoAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
+    list_display = ['especialidade', 'localizacao', 'verificacao', 'gut_total', 'prioridade_risco', 'direcionamento', 'status', 'excluido_em']
     list_filter = ['prioridade_risco', 'grupo_tecnico', 'direcionamento', 'status']
     readonly_fields = ['gut_total']
     inlines = [FotoInline]
@@ -74,8 +75,8 @@ class VisitaFotoInline(admin.TabularInline):
 
 
 @admin.register(VisitaTecnica)
-class VisitaTecnicaAdmin(admin.ModelAdmin):
-    list_display = ['edificacao', 'data_visita', 'disciplina', 'participantes_resumo', 'criado_em']
+class VisitaTecnicaAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
+    list_display = ['edificacao', 'data_visita', 'disciplina', 'participantes_resumo', 'criado_em', 'excluido_em']
     list_filter = ['edificacao', 'disciplina']
     search_fields = ['participantes', 'edificacao__nome', 'motivo']
     date_hierarchy = 'data_visita'

@@ -103,7 +103,12 @@ class Command(BaseCommand):
             # apaga o placeholder antes de copiar a sigla para a oficial —
             # a coluna `sigla` é única, então as duas não podem carregar o
             # mesmo valor ao mesmo tempo.
-            placeholder.delete()
+            # Fusão de duplicata é limpeza de dados, não exclusão de usuário —
+            # remove de verdade (apagar_definitivamente); senão o placeholder
+            # ficaria "excluído" mas continuaria existindo, mesmo que a
+            # constraint de unicidade (agora condicional a excluido_em)
+            # deixe de bloquear a sigla/nome.
+            placeholder.apagar_definitivamente()
 
             update_fields = []
             if not oficial.sigla:
