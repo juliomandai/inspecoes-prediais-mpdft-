@@ -2,6 +2,7 @@ import pytest
 from datetime import date
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.db.utils import IntegrityError
 from django.urls import reverse
 
 from apps.edificacoes.models import Edificacao
@@ -68,5 +69,5 @@ def test_relatorio_final_e_versionado_e_unico_por_inspecao():
     assert list(insp.relatorios_finais.all()) == [r2, r1]  # ordering = ['-numero_versao']
     assert RelatorioFinalInspecao.objects.filter(pk=r1.pk).exists()  # gerar de novo não apaga o anterior
 
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         RelatorioFinalInspecao.objects.create(inspecao=insp, numero_versao=1, snapshot={}, gerado_por=u)
