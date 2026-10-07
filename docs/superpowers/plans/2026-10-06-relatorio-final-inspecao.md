@@ -1203,7 +1203,7 @@ git commit -m "feat: montagem do snapshot (dados gerais + achados + fotos) do Re
 - Modify: `src/apps/inspecoes/urls.py`
 - Create: `src/apps/inspecoes/templates/inspecoes/relatorio_final_pdf.html` (draft — see plan header Note on scope)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_relatorio_final_views.py`:
 
@@ -1275,12 +1275,12 @@ def test_foto_embutida_como_data_uri_no_pdf_mas_nao_no_snapshot_persistido(inspe
     assert not civil_original['achados_completos'][0]['fotos'][0].startswith('data:')
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvidas -v`
 Expected: FAIL with `NoReverseMatch`
 
-- [ ] **Step 3: Add the `Max` import**
+- [x] **Step 3: Add the `Max` import**
 
 In `src/apps/inspecoes/views.py`, line 11:
 
@@ -1288,7 +1288,7 @@ In `src/apps/inspecoes/views.py`, line 11:
 from django.db.models import Count, Q, Min, Max
 ```
 
-- [ ] **Step 4: Add `_gerar_pdf_bytes` and the photo-embedding helpers**
+- [x] **Step 4: Add `_gerar_pdf_bytes` and the photo-embedding helpers**
 
 **Correction found during execution (not in the original plan text):** the project's existing PDF templates (`analise_pdf.html`, `analise_geral_pdf.html`) embed every image as a `data:image/png;base64,...` URI (see `_png_data_uri` near the chart-rendering code) — there is no `link_callback` configured anywhere for `xhtml2pdf`/`pisa` to resolve a `MEDIA_URL`-style path to an actual file. A plain `<img src="{{ MEDIA_URL }}{{ caminho }}">` (as originally drafted for this step) would render with broken/missing images, which would defeat the entire point of this report. Fotos must be embedded as base64 data URIs, matching the established pattern — this replaces the original template snippet accordingly (see Step 7 below).
 
@@ -1338,7 +1338,7 @@ def _montar_contexto_pdf_com_fotos(snapshot):
 
 `base64` is already imported at the top of `views.py` (line 1) — don't add it again.
 
-- [ ] **Step 5: Implement `relatorio_final_gerar`**
+- [x] **Step 5: Implement `relatorio_final_gerar`**
 
 Right after `relatorio_final_editar_descritivo`:
 
@@ -1397,7 +1397,7 @@ from .models import (
 )
 ```
 
-- [ ] **Step 6: Add the URL**
+- [x] **Step 6: Add the URL**
 
 In `src/apps/inspecoes/urls.py`, after the `relatorio_final_editar_descritivo` route:
 
@@ -1405,7 +1405,7 @@ In `src/apps/inspecoes/urls.py`, after the `relatorio_final_editar_descritivo` r
     path('inspecoes/<int:pk>/relatorio-final/gerar/', views.relatorio_final_gerar, name='relatorio_final_gerar'),
 ```
 
-- [ ] **Step 7: Create the PDF template (draft — pending team review, per design doc Section 6)**
+- [x] **Step 7: Create the PDF template (draft — pending team review, per design doc Section 6)**
 
 Create `src/apps/inspecoes/templates/inspecoes/relatorio_final_pdf.html`:
 
@@ -1493,14 +1493,14 @@ Create `src/apps/inspecoes/templates/inspecoes/relatorio_final_pdf.html`:
 </html>
 ```
 
-- [ ] **Step 8: Run tests to verify they pass**
+- [x] **Step 8: Run tests to verify they pass**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvidas src/apps/inspecoes/tests/test_relatorio_final_views.py::test_foto_embutida_como_data_uri_no_pdf_mas_nao_no_snapshot_persistido -v`
 Expected: both PASS
 
-- [ ] **Step 9: Restore the `{% url 'inspecoes:relatorio_final_gerar' %}` form action in `relatorio_final_painel.html`** if it was commented out in Task 7.
+- [x] **Step 9: Restore the `{% url 'inspecoes:relatorio_final_gerar' %}` form action in `relatorio_final_painel.html`** if it was commented out in Task 7.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/urls.py src/apps/inspecoes/templates/inspecoes/relatorio_final_pdf.html src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html src/apps/inspecoes/tests/test_relatorio_final_views.py
