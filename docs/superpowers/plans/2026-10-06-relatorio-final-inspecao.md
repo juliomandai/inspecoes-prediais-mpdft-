@@ -105,7 +105,7 @@ git commit -m "feat: adiciona Edificacao.descritivo (ADR-08)"
 - Modify: `src/apps/inspecoes/views.py:327-339` (`especialidade_finalizar`)
 - Test: `src/apps/inspecoes/tests/test_relatorio_final_invariantes.py` (new)
 
-- [ ] **Step 1: Write the failing test for the field**
+- [x] **Step 1: Write the failing test for the field**
 
 Create `src/apps/inspecoes/tests/test_relatorio_final_invariantes.py`:
 
@@ -133,12 +133,12 @@ def test_conclusao_aceita_texto_livre_e_pode_ficar_vazia():
     assert 'manutenção preventiva' in esp.conclusao
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py -v`
 Expected: FAIL with `TypeError: InspecaoEspecialidade() got unexpected keyword arguments` (or `AttributeError` on `.conclusao`, depending on exact Django version's error) — the field doesn't exist yet.
 
-- [ ] **Step 3: Add the field**
+- [x] **Step 3: Add the field**
 
 In `src/apps/inspecoes/models.py`, inside `class InspecaoEspecialidade(SoftDeleteModel):`, after `status`:
 
@@ -151,7 +151,7 @@ In `src/apps/inspecoes/models.py`, inside `class InspecaoEspecialidade(SoftDelet
     )
 ```
 
-- [ ] **Step 4: Generate and apply the migration**
+- [x] **Step 4: Generate and apply the migration**
 
 Run: `python manage.py makemigrations inspecoes`
 Expected: `Migrations for 'inspecoes': ... + Add field conclusao to inspecaoespecialidade`
@@ -160,12 +160,12 @@ Rename to `0016_inspecaoespecialidade_conclusao.py`, then:
 Run: `python manage.py migrate`
 Expected: `Applying inspecoes.0016_inspecaoespecialidade_conclusao... OK`
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py -v`
 Expected: PASS
 
-- [ ] **Step 6: Write the failing test for the finalization requirement**
+- [x] **Step 6: Write the failing test for the finalization requirement**
 
 Append to the same test file:
 
@@ -197,12 +197,12 @@ def test_finalizar_especialidade_exige_conclusao_preenchida():
     assert esp.status == 'finalizada'
 ```
 
-- [ ] **Step 7: Run test to verify it fails**
+- [x] **Step 7: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py::test_finalizar_especialidade_exige_conclusao_preenchida -v`
 Expected: FAIL — the second assert fails because today's `especialidade_finalizar` finalizes regardless of `conclusao` AND the first assert fails too (it finalizes immediately since nothing blocks it yet).
 
-- [ ] **Step 8: Add the validation**
+- [x] **Step 8: Add the validation**
 
 In `src/apps/inspecoes/views.py`, inside `especialidade_finalizar` (currently at line 327), add a check right after the existing achados check:
 
@@ -216,12 +216,12 @@ In `src/apps/inspecoes/views.py`, inside `especialidade_finalizar` (currently at
     esp.status = 'finalizada'
 ```
 
-- [ ] **Step 9: Run test to verify it passes**
+- [x] **Step 9: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py -v`
 Expected: 2 passed
 
-- [ ] **Step 10: Add the field to the form and template**
+- [x] **Step 10: Add the field to the form and template**
 
 In `src/apps/inspecoes/forms.py`, in `class EspecialidadeForm(forms.ModelForm)`:
 
@@ -252,12 +252,12 @@ In `src/apps/inspecoes/templates/inspecoes/especialidade_form.html`, after the `
           </div>
 ```
 
-- [ ] **Step 11: Run the full inspecoes test suite to check nothing broke**
+- [x] **Step 11: Run the full inspecoes test suite to check nothing broke**
 
 Run: `pytest src/apps/inspecoes -v`
 Expected: all passing (the new `EspecialidadeForm` field is `required=False` at the HTML level since the model field is `blank=True` — finalization enforcement is the view check from Step 8, not form validation, so existing specialty-creation tests that don't set `conclusao` keep working)
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add src/apps/inspecoes/models.py src/apps/inspecoes/migrations/0016_inspecaoespecialidade_conclusao.py src/apps/inspecoes/views.py src/apps/inspecoes/forms.py src/apps/inspecoes/templates/inspecoes/especialidade_form.html src/apps/inspecoes/tests/test_relatorio_final_invariantes.py
