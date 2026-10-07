@@ -40,15 +40,12 @@
 <div class="card mb-4">
   <div class="card-header"><h5 class="mb-0">Descritivo da edificação</h5></div>
   <div class="card-body">
-    {% comment %}TODO Task 8: restore once 'inspecoes:relatorio_final_editar_descritivo' exists{% endcomment %}
-    {% comment %}
     <form method="post" action="{% url 'inspecoes:relatorio_final_editar_descritivo' inspecao.pk %}">
       {% csrf_token %}
       {{ descritivo_form.descritivo }}
       <div class="form-text">Reutilizado em todo relatório desta edificação — editar aqui não cria uma nova versão sozinho.</div>
       <button type="submit" class="btn btn-outline-primary btn-sm mt-2">Salvar descritivo</button>
     </form>
-    {% endcomment %}
   </div>
 </div>
 

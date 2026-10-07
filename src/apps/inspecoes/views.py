@@ -404,6 +404,22 @@ def relatorio_final_painel(request, pk):
     })
 
 
+@login_required
+@require_POST
+def relatorio_final_editar_descritivo(request, pk):
+    inspecao = get_object_or_404(Inspecao.objects.select_related('edificacao'), pk=pk)
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(request, 'Acesso negado.')
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+    form = DescritivoEdificacaoForm(request.POST, instance=inspecao.edificacao)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Descritivo da edificação atualizado.')
+    else:
+        messages.error(request, 'Não foi possível salvar o descritivo.')
+    return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+
 # ── Achados ────────────────────────────────────────────────────────────────────
 
 @login_required

@@ -35,6 +35,7 @@ urlpatterns = [
 
     # ── Relatório Final de Inspeção (ART/CREA) ─────────────────────────────────
     path('inspecoes/<int:pk>/relatorio-final/', views.relatorio_final_painel, name='relatorio_final_painel'),
+    path('inspecoes/<int:pk>/relatorio-final/descritivo/', views.relatorio_final_editar_descritivo, name='relatorio_final_editar_descritivo'),
 
     # ── Achados ────────────────────────────────────────────────────────────────
     path('especialidades/<int:esp_pk>/achados/novo/', views.achado_create, name='achado_create'),

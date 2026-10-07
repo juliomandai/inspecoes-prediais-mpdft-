@@ -59,3 +59,19 @@ def test_painel_nega_acesso_a_quem_nao_participou(client, inspecao_com_profissio
 
     assert resp.status_code == 200
     assert 'Acesso negado' in resp.content.decode()
+
+
+@pytest.mark.django_db
+def test_editar_descritivo_pelo_painel(client, inspecao_com_profissionais):
+    U = get_user_model()
+    civil = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil)
+
+    resp = client.post(
+        reverse('inspecoes:relatorio_final_editar_descritivo', kwargs={'pk': inspecao_com_profissionais.pk}),
+        {'descritivo': 'Prédio de 4 pavimentos, estrutura em concreto armado.'},
+    )
+
+    assert resp.status_code == 302
+    inspecao_com_profissionais.edificacao.refresh_from_db()
+    assert inspecao_com_profissionais.edificacao.descritivo == 'Prédio de 4 pavimentos, estrutura em concreto armado.'
