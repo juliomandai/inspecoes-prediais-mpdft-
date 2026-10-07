@@ -727,7 +727,7 @@ git commit -m "feat: permissao de geracao do Relatorio Final (qualquer especiali
 - Create: `src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html`
 - Test: `src/apps/inspecoes/tests/test_relatorio_final_views.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_relatorio_final_views.py`:
 
@@ -759,12 +759,12 @@ def test_painel_nega_acesso_a_quem_nao_participou(client, inspecao_com_profissio
     assert 'Acesso negado' in resp.content.decode()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py -v`
 Expected: FAIL with `django.urls.exceptions.NoReverseMatch: Reverse for 'relatorio_final_painel' not found`
 
-- [ ] **Step 3: Add the view**
+- [x] **Step 3: Add the view**
 
 In `src/apps/inspecoes/views.py`, add a new section after `especialidade_reabrir` (after line 363):
 
@@ -818,7 +818,7 @@ class DescritivoEdificacaoForm(forms.ModelForm):
         labels = {'descritivo': 'Descritivo da edificação'}
 ```
 
-- [ ] **Step 4: Add the URL**
+- [x] **Step 4: Add the URL**
 
 In `src/apps/inspecoes/urls.py`, after the especialidades block (after line 34), add a new section:
 
@@ -827,7 +827,7 @@ In `src/apps/inspecoes/urls.py`, after the especialidades block (after line 34),
     path('inspecoes/<int:pk>/relatorio-final/', views.relatorio_final_painel, name='relatorio_final_painel'),
 ```
 
-- [ ] **Step 5: Create the template**
+- [x] **Step 5: Create the template**
 
 Create `src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html`:
 
@@ -904,12 +904,12 @@ Create `src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html`:
 
 (This template references `relatorio_final_gerar`, `relatorio_final_editar_descritivo` and `relatorio_final_download` URLs, which don't exist yet — they're added in Tasks 8, 9 and 11. Until then, rendering this template raises `NoReverseMatch` for those links; that's expected and resolved task-by-task. If you want `test_painel_mostra_pendencias_para_quem_tem_acesso` to pass before those tasks, temporarily comment out the two `{% url %}` calls not yet defined, then restore them as each task lands.)
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py -v`
 Expected: PASS (once Tasks 8/9/11 land and the commented-out URLs are restored; see note above)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/urls.py src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html src/apps/edificacoes/forms.py src/apps/inspecoes/tests/test_relatorio_final_views.py
