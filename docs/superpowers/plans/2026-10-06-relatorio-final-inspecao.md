@@ -1515,7 +1515,7 @@ git commit -m "feat: geracao do PDF e da versao do Relatorio Final de Inspecao (
 - Modify: `src/apps/inspecoes/views.py`
 - Modify: `src/apps/inspecoes/urls.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_relatorio_final_views.py`:
 
@@ -1540,12 +1540,12 @@ def test_download_relatorio_final(client, inspecao_com_profissionais):
     assert resp.content.startswith(b'%PDF')
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_download_relatorio_final -v`
 Expected: FAIL with `NoReverseMatch`
 
-- [ ] **Step 3: Implement the view**
+- [x] **Step 3: Implement the view**
 
 Right after `relatorio_final_gerar`:
 
@@ -1562,7 +1562,7 @@ def relatorio_final_download(request, pk, versao_pk):
     return resp
 ```
 
-- [ ] **Step 4: Add the URL**
+- [x] **Step 4: Add the URL**
 
 In `src/apps/inspecoes/urls.py`, after the `relatorio_final_gerar` route:
 
@@ -1570,19 +1570,19 @@ In `src/apps/inspecoes/urls.py`, after the `relatorio_final_gerar` route:
     path('inspecoes/<int:pk>/relatorio-final/<int:versao_pk>/download/', views.relatorio_final_download, name='relatorio_final_download'),
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_download_relatorio_final -v`
 Expected: PASS
 
-- [ ] **Step 6: Restore the `{% url 'inspecoes:relatorio_final_download' %}` link in `relatorio_final_painel.html`** if it was commented out in Task 7.
+- [x] **Step 6: Restore the `{% url 'inspecoes:relatorio_final_download' %}` link in `relatorio_final_painel.html`** if it was commented out in Task 7.
 
-- [ ] **Step 7: Run the whole file to confirm every test in it passes now**
+- [x] **Step 7: Run the whole file to confirm every test in it passes now**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py -v`
 Expected: all passed
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/urls.py src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html src/apps/inspecoes/tests/test_relatorio_final_views.py
