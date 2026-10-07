@@ -455,7 +455,7 @@ git commit -m "feat: model RelatorioFinalInspecao, versionado e imutavel (ADR-03
 
 This is the single method the rest of the feature relies on for ADR-04/05/08/09 — it returns a list of human-readable pendências; an empty list means the report can be generated.
 
-- [ ] **Step 1: Write the failing tests — one per pendência, plus the happy path**
+- [x] **Step 1: Write the failing tests — one per pendência, plus the happy path**
 
 Append to `src/apps/inspecoes/tests/test_relatorio_final_invariantes.py`:
 
@@ -557,12 +557,12 @@ def test_sem_pendencias_quando_tudo_preenchido():
     assert insp.pode_gerar_relatorio_final
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py -v`
 Expected: FAIL with `AttributeError: 'Inspecao' object has no attribute 'pendencias_relatorio_final'`
 
-- [ ] **Step 3: Implement the invariant**
+- [x] **Step 3: Implement the invariant**
 
 In `src/apps/inspecoes/models.py`, inside `class Inspecao(SoftDeleteModel):`, after `status_geral`:
 
@@ -618,12 +618,12 @@ In `src/apps/inspecoes/models.py`, inside `class Inspecao(SoftDeleteModel):`, af
         return not self.pendencias_relatorio_final()
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py -v`
 Expected: all passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/apps/inspecoes/models.py src/apps/inspecoes/tests/test_relatorio_final_invariantes.py
