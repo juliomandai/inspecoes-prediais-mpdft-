@@ -273,6 +273,15 @@ def _pode_editar_especialidade(user, esp):
     return user.get_full_name() in esp.profissionais_lista
 
 
+def _acesso_negado_especialidade(request, esp):
+    messages.error(
+        request,
+        f'Acesso negado. Apenas os profissionais responsáveis '
+        f'("{esp.profissionais_display}") podem realizar esta ação.',
+    )
+    return _redirect_detail(esp.inspecao_id, esp.pk)
+
+
 def _pode_gerar_relatorio_final(user, inspecao):
     """Quem pode gerar/editar o Relatório Final de Inspeção: staff, superusuário,
     ou qualquer profissional listado em QUALQUER UMA das especialidades da
@@ -283,15 +292,6 @@ def _pode_gerar_relatorio_final(user, inspecao):
     for esp in inspecao.especialidades.all():
         nomes_permitidos.update(esp.profissionais_lista)
     return user.get_full_name() in nomes_permitidos
-
-
-def _acesso_negado_especialidade(request, esp):
-    messages.error(
-        request,
-        f'Acesso negado. Apenas os profissionais responsáveis '
-        f'("{esp.profissionais_display}") podem realizar esta ação.',
-    )
-    return _redirect_detail(esp.inspecao_id, esp.pk)
 
 
 @login_required
