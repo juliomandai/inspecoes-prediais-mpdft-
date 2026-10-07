@@ -1,6 +1,7 @@
 import pytest
 from datetime import date
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from apps.edificacoes.models import Edificacao
 from apps.inspecoes.models import Inspecao, InspecaoEspecialidade
@@ -34,3 +35,27 @@ def test_profissional_de_qualquer_uma_das_especialidades_pode_gerar(inspecao_com
     assert _pode_gerar_relatorio_final(eletrica, inspecao_com_profissionais)
     assert not _pode_gerar_relatorio_final(estranho, inspecao_com_profissionais)
     assert _pode_gerar_relatorio_final(staff, inspecao_com_profissionais)
+
+
+@pytest.mark.django_db
+def test_painel_mostra_pendencias_para_quem_tem_acesso(client, inspecao_com_profissionais):
+    U = get_user_model()
+    civil = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil)
+
+    resp = client.get(reverse('inspecoes:relatorio_final_painel', kwargs={'pk': inspecao_com_profissionais.pk}))
+
+    assert resp.status_code == 200
+    assert 'Falta cadastrar' in resp.content.decode()  # falta Mecânica
+
+
+@pytest.mark.django_db
+def test_painel_nega_acesso_a_quem_nao_participou(client, inspecao_com_profissionais):
+    U = get_user_model()
+    estranho = U.objects.create_user(username='carlos', password='1', first_name='Carlos', last_name='Estranho')
+    client.force_login(estranho)
+
+    resp = client.get(reverse('inspecoes:relatorio_final_painel', kwargs={'pk': inspecao_com_profissionais.pk}), follow=True)
+
+    assert resp.status_code == 200
+    assert 'Acesso negado' in resp.content.decode()

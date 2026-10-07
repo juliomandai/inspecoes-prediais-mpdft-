@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block title %}Relatório Final de Inspeção — {{ inspecao.edificacao }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'inspecoes:list' %}">Inspeções</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'inspecoes:detail' inspecao.pk %}">{{ inspecao.edificacao }}</a></li>
+    <li class="breadcrumb-item active">Relatório Final de Inspeção</li>
+  </ol>
+</nav>
+
+<div class="card mb-4">
+  <div class="card-header"><h4 class="mb-0"><i class="bi bi-file-earmark-text"></i> Relatório Final de Inspeção</h4></div>
+  <div class="card-body">
+    {% if pendencias %}
+    <div class="alert alert-warning">
+      <h6 class="alert-heading">Pendências antes de gerar:</h6>
+      <ul class="mb-0">
+        {% for p in pendencias %}<li>{{ p }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="alert alert-success mb-3">
+      <i class="bi bi-check-circle-fill"></i> Tudo pronto — esta inspeção pode gerar o Relatório Final.
+    </div>
+    {% comment %}TODO Task 9/10: restore once 'inspecoes:relatorio_final_gerar' exists{% endcomment %}
+    {% comment %}
+    <form method="post" action="{% url 'inspecoes:relatorio_final_gerar' inspecao.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-file-earmark-plus"></i> Gerar Relatório Final (versão {{ versoes.count|add:1 }})
+      </button>
+    </form>
+    {% endcomment %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><h5 class="mb-0">Descritivo da edificação</h5></div>
+  <div class="card-body">
+    {% comment %}TODO Task 8: restore once 'inspecoes:relatorio_final_editar_descritivo' exists{% endcomment %}
+    {% comment %}
+    <form method="post" action="{% url 'inspecoes:relatorio_final_editar_descritivo' inspecao.pk %}">
+      {% csrf_token %}
+      {{ descritivo_form.descritivo }}
+      <div class="form-text">Reutilizado em todo relatório desta edificação — editar aqui não cria uma nova versão sozinho.</div>
+      <button type="submit" class="btn btn-outline-primary btn-sm mt-2">Salvar descritivo</button>
+    </form>
+    {% endcomment %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h5 class="mb-0">Versões já geradas</h5></div>
+  <div class="card-body">
+    {% if not versoes %}
+    <p class="text-muted mb-0">Nenhuma versão gerada ainda.</p>
+    {% else %}
+    <ul class="list-group">
+      {% for v in versoes %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <span>Versão {{ v.numero_versao }} — gerada em {{ v.gerado_em|date:"d/m/Y H:i" }} por {{ v.gerado_por.get_full_name|default:v.gerado_por.username }}</span>
+        {% comment %}TODO Task 11: restore once 'inspecoes:relatorio_final_download' exists{% endcomment %}
+        {% comment %}
+        <a href="{% url 'inspecoes:relatorio_final_download' inspecao.pk v.pk %}" class="btn btn-sm btn-outline-success">
+          <i class="bi bi-download"></i> Baixar PDF
+        </a>
+        {% endcomment %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

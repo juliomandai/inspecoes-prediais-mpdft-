@@ -27,6 +27,7 @@ from .forms import (
     VisitaTecnicaForm, VisitaFilterForm, SignUpForm,
     AcompanhamentoFilterForm, ReclassificarForm, AcompanhamentoAchadoForm,
 )
+from apps.edificacoes.forms import DescritivoEdificacaoForm
 from .imagens import comprimir_imagem
 
 
@@ -376,6 +377,31 @@ def especialidade_reabrir(request, pk):
     esp.save(update_fields=['status', 'atualizado_em'])
     messages.success(request, f'{esp.get_especialidade_display()} reaberta.')
     return _redirect_detail(esp.inspecao_id, esp.pk)
+
+
+# ── Relatório Final de Inspeção (ART/CREA) ──────────────────────────────────
+
+@login_required
+def relatorio_final_painel(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades', 'especialidades__achados__fotos', 'relatorios_finais',
+        ),
+        pk=pk,
+    )
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(
+            request,
+            'Acesso negado. Apenas os profissionais responsáveis por esta '
+            'inspeção podem acessar o Relatório Final.',
+        )
+        return redirect('inspecoes:detail', pk=pk)
+    return render(request, 'inspecoes/relatorio_final_painel.html', {
+        'inspecao': inspecao,
+        'pendencias': inspecao.pendencias_relatorio_final(),
+        'versoes': inspecao.relatorios_finais.all(),
+        'descritivo_form': DescritivoEdificacaoForm(instance=inspecao.edificacao),
+    })
 
 
 # ── Achados ────────────────────────────────────────────────────────────────────
