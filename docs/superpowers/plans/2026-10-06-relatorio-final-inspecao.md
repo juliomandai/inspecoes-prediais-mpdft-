@@ -1673,7 +1673,7 @@ git commit -m "feat: aviso ao reabrir especialidade com Relatorio Final ja gerad
 **Files:**
 - Modify: `src/apps/inspecoes/templates/inspecoes/detail.html`
 
-- [ ] **Step 1: Add the link next to "Abrir Painel de Encerramento"**
+- [x] **Step 1: Add the link next to "Abrir Painel de Encerramento"**
 
 In `src/apps/inspecoes/templates/inspecoes/detail.html`, inside the conclusion banner (currently lines 15-25), add the new button next to the existing one:
 
@@ -1696,16 +1696,16 @@ In `src/apps/inspecoes/templates/inspecoes/detail.html`, inside the conclusion b
 {% endif %}
 ```
 
-- [ ] **Step 2: Manually verify in the browser**
+- [x] **Step 2: Manually verify in the browser**
 
 Run: `python manage.py runserver`, open an inspection with all 3 specialties finalized, confirm the new button appears and links to the painel.
 
-- [ ] **Step 3: Run the whole inspecoes test suite one more time**
+- [x] **Step 3: Run the whole inspecoes test suite one more time**
 
 Run: `pytest src/apps/inspecoes -v`
 Expected: all passing
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/apps/inspecoes/templates/inspecoes/detail.html
