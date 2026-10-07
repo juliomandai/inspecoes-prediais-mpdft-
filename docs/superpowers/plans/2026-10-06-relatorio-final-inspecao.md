@@ -1241,6 +1241,38 @@ def test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvida
 
     from apps.inspecoes.models import LogAcesso
     assert LogAcesso.objects.filter(tipo='relatorio_final_gerado').count() == 2
+
+
+@pytest.mark.django_db
+def test_foto_embutida_como_data_uri_no_pdf_mas_nao_no_snapshot_persistido(inspecao_com_profissionais):
+    """Cobre a correção feita durante a execução: o xhtml2pdf não resolve
+    MEDIA_URL/caminhos de arquivo, então as fotos entram no HTML do PDF como
+    data URI base64 (`_montar_contexto_pdf_com_fotos`) — mas o `snapshot`
+    que é de fato persistido em `RelatorioFinalInspecao.snapshot` continua
+    leve, com o caminho do arquivo, não a imagem inflada em base64."""
+    from apps.inspecoes.views import _montar_snapshot_relatorio, _montar_contexto_pdf_com_fotos
+
+    civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
+    achado = Achado.objects.create(
+        especialidade=civil, localizacao='L1', verificacao='Rachadura',
+        grupo_tecnico='estrutura', requisito_afetado='seguranca_estrutural',
+        gravidade=5, urgencia=5, tendencia=5,
+    )
+    Foto.objects.create(
+        achado=achado, arquivo=SimpleUploadedFile('f.jpg', b'conteudo-fake', content_type='image/jpeg'),
+        nome_original='f.jpg',
+    )
+
+    snapshot = _montar_snapshot_relatorio(inspecao_com_profissionais, numero_versao=1)
+    contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
+
+    civil_pdf = next(e for e in contexto_pdf['especialidades'] if e['especialidade'] == 'civil')
+    fotos_pdf = civil_pdf['achados_completos'][0]['fotos']
+    assert len(fotos_pdf) == 1
+    assert fotos_pdf[0].startswith('data:image/jpeg;base64,')
+
+    civil_original = next(e for e in snapshot['especialidades'] if e['especialidade'] == 'civil')
+    assert not civil_original['achados_completos'][0]['fotos'][0].startswith('data:')
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1256,7 +1288,9 @@ In `src/apps/inspecoes/views.py`, line 11:
 from django.db.models import Count, Q, Min, Max
 ```
 
-- [ ] **Step 4: Add `_gerar_pdf_bytes`**
+- [ ] **Step 4: Add `_gerar_pdf_bytes` and the photo-embedding helpers**
+
+**Correction found during execution (not in the original plan text):** the project's existing PDF templates (`analise_pdf.html`, `analise_geral_pdf.html`) embed every image as a `data:image/png;base64,...` URI (see `_png_data_uri` near the chart-rendering code) — there is no `link_callback` configured anywhere for `xhtml2pdf`/`pisa` to resolve a `MEDIA_URL`-style path to an actual file. A plain `<img src="{{ MEDIA_URL }}{{ caminho }}">` (as originally drafted for this step) would render with broken/missing images, which would defeat the entire point of this report. Fotos must be embedded as base64 data URIs, matching the established pattern — this replaces the original template snippet accordingly (see Step 7 below).
 
 Right after `_gerar_pdf` (currently ending at line 1335):
 
@@ -1271,7 +1305,38 @@ def _gerar_pdf_bytes(html_string):
     if result.err:
         return None
     return buffer.getvalue()
+
+
+def _foto_para_data_uri(caminho):
+    """Lê um arquivo de foto já copiado para o relatório (ver
+    `_copiar_fotos_para_relatorio`) e devolve como data URI base64 — mesmo
+    padrão já usado pelos gráficos do laudo (`_png_data_uri`), necessário
+    porque o xhtml2pdf não resolve MEDIA_URL/caminhos de arquivo (sem
+    link_callback configurado nesta base de código)."""
+    from django.core.files.storage import default_storage
+    ext = caminho.rsplit('.', 1)[-1].lower()
+    mime = 'image/png' if ext == 'png' else 'image/jpeg'
+    with default_storage.open(caminho, 'rb') as f:
+        dados = f.read()
+    return f'data:{mime};base64,' + base64.b64encode(dados).decode()
+
+
+def _montar_contexto_pdf_com_fotos(snapshot):
+    """Monta uma CÓPIA do snapshot só para renderizar o template do PDF, com
+    os caminhos de foto trocados por data URIs embutidas. O `snapshot`
+    original (com os caminhos leves, não as imagens infladas em base64)
+    continua sendo o que é persistido em `RelatorioFinalInspecao.snapshot` —
+    nunca passe o retorno desta função para lá, ou o JSONField no banco
+    incharia com uma cópia inteira das imagens a cada versão gerada."""
+    import copy
+    contexto = copy.deepcopy(snapshot)
+    for esp in contexto['especialidades']:
+        for achado in esp['achados_completos']:
+            achado['fotos'] = [_foto_para_data_uri(caminho) for caminho in achado['fotos']]
+    return contexto
 ```
+
+`base64` is already imported at the top of `views.py` (line 1) — don't add it again.
 
 - [ ] **Step 5: Implement `relatorio_final_gerar`**
 
@@ -1297,9 +1362,13 @@ def relatorio_final_gerar(request, pk):
         return redirect('inspecoes:relatorio_final_painel', pk=pk)
 
     numero_versao = (inspecao.relatorios_finais.aggregate(m=Max('numero_versao'))['m'] or 0) + 1
+    # `snapshot` (caminhos leves) é o que persiste no banco; `contexto_pdf`
+    # (fotos como data URI) é só para renderizar o HTML/PDF desta vez — ver
+    # a nota em `_montar_contexto_pdf_com_fotos` sobre nunca trocar os dois.
     snapshot = _montar_snapshot_relatorio(inspecao, numero_versao)
+    contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
     html = render_to_string('inspecoes/relatorio_final_pdf.html', {
-        'inspecao': inspecao, 'snapshot': snapshot, 'numero_versao': numero_versao,
+        'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
     }, request=request)
     pdf_bytes = _gerar_pdf_bytes(html)
     if pdf_bytes is None:
@@ -1397,7 +1466,7 @@ Create `src/apps/inspecoes/templates/inspecoes/relatorio_final_pdf.html`:
   <p><strong>GUT:</strong> {{ a.gut_total }} — <strong>Prioridade:</strong> {{ a.prioridade_risco }}</p>
   {% if a.recomendacao %}<p><strong>Recomendação:</strong> {{ a.recomendacao }}</p>{% endif %}
   <div class="achado-fotos">
-    {% for caminho in a.fotos %}<img src="{{ MEDIA_URL }}{{ caminho }}">{% endfor %}
+    {% for foto_data_uri in a.fotos %}<img src="{{ foto_data_uri }}">{% endfor %}
   </div>
 </div>
 {% endfor %}
@@ -1424,10 +1493,10 @@ Create `src/apps/inspecoes/templates/inspecoes/relatorio_final_pdf.html`:
 </html>
 ```
 
-- [ ] **Step 8: Run test to verify it passes**
+- [ ] **Step 8: Run tests to verify they pass**
 
-Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvidas -v`
-Expected: PASS
+Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvidas src/apps/inspecoes/tests/test_relatorio_final_views.py::test_foto_embutida_como_data_uri_no_pdf_mas_nao_no_snapshot_persistido -v`
+Expected: both PASS
 
 - [ ] **Step 9: Restore the `{% url 'inspecoes:relatorio_final_gerar' %}` form action in `relatorio_final_painel.html`** if it was commented out in Task 7.
 
