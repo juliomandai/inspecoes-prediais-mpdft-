@@ -271,7 +271,7 @@ git commit -m "feat: InspecaoEspecialidade.conclusao, exigida para finalizar (AD
 **Files:**
 - Modify: `src/apps/inspecoes/models.py:441-457` (`LogAcesso.TIPO_CHOICES`)
 
-- [ ] **Step 1: Add the choice**
+- [x] **Step 1: Add the choice**
 
 In `src/apps/inspecoes/models.py`, inside `LogAcesso.TIPO_CHOICES`, after `'subvisita_criada'`:
 
@@ -283,7 +283,7 @@ In `src/apps/inspecoes/models.py`, inside `LogAcesso.TIPO_CHOICES`, after `'subv
 
 `CharField` choices don't require a migration for a new choice value in SQLite/Postgres (no column constraint changes), but Django still records the choices change:
 
-- [ ] **Step 2: Generate and apply the migration**
+- [x] **Step 2: Generate and apply the migration**
 
 Run: `python manage.py makemigrations inspecoes`
 Expected: `Migrations for 'inspecoes': ... ~ Alter field tipo on logacesso`
@@ -292,7 +292,7 @@ Rename to `0017_logacesso_tipo_relatorio_final.py`, then:
 Run: `python manage.py migrate`
 Expected: `Applying inspecoes.0017_logacesso_tipo_relatorio_final... OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/apps/inspecoes/models.py src/apps/inspecoes/migrations/0017_logacesso_tipo_relatorio_final.py
