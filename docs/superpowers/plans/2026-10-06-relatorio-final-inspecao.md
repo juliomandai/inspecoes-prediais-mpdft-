@@ -1603,7 +1603,7 @@ git commit -m "feat: download de uma versao do Relatorio Final de Inspecao"
 > ADR-06 (edição de achado após relatório gerado) sem precisar duplicar o
 > aviso em cada view de edição de achado.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_relatorio_final_views.py`:
 
@@ -1628,12 +1628,12 @@ def test_reabrir_especialidade_avisa_quando_ja_ha_relatorio_gerado(client, inspe
     assert any('Relatório Final' in m and 'v1' in m for m in mensagens)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_reabrir_especialidade_avisa_quando_ja_ha_relatorio_gerado -v`
 Expected: FAIL — no such message is shown today.
 
-- [ ] **Step 3: Add the warning**
+- [x] **Step 3: Add the warning**
 
 In `src/apps/inspecoes/views.py`, inside `especialidade_reabrir` (currently lines 351-363), right before `esp.status = 'em_andamento'`:
 
@@ -1654,12 +1654,12 @@ In `src/apps/inspecoes/views.py`, inside `especialidade_reabrir` (currently line
 
 (`esp.inspecao.relatorios_finais.first()` returns the latest version because `RelatorioFinalInspecao.Meta.ordering = ['-numero_versao']`.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_reabrir_especialidade_avisa_quando_ja_ha_relatorio_gerado -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/tests/test_relatorio_final_views.py
