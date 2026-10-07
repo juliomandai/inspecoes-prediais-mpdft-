@@ -309,3 +309,34 @@ def test_reabrir_especialidade_avisa_quando_ja_ha_relatorio_gerado(client, inspe
     assert resp.status_code == 200
     mensagens = [str(m) for m in resp.context['messages']]
     assert any('Relatório Final' in m and 'v1' in m for m in mensagens)
+
+
+@pytest.mark.django_db
+def test_editar_especialidade_finalizada_avisa_quando_ja_ha_relatorio_gerado(client, inspecao_com_profissionais):
+    U = get_user_model()
+    civil_user = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil_user)
+    InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+        data_inspecao=date.today(), conclusao='ok', status='finalizada',
+    )
+    inspecao_com_profissionais.especialidades.update(status='finalizada')
+    client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+
+    civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
+    resp = client.post(
+        reverse('inspecoes:especialidade_update', kwargs={'pk': civil.pk}),
+        {
+            'especialidade': 'civil',
+            'data_inspecao': civil.data_inspecao.isoformat(),
+            'conclusao': 'Conclusão revisada após gerar o relatório.',
+            'profissionais': ['Ana Civil'],
+        },
+        follow=True,
+    )
+
+    assert resp.status_code == 200
+    civil.refresh_from_db()
+    assert civil.conclusao == 'Conclusão revisada após gerar o relatório.'
+    mensagens = [str(m) for m in resp.context['messages']]
+    assert any('Relatório Final' in m and 'v1' in m for m in mensagens)

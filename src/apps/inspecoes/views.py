@@ -411,6 +411,8 @@ def especialidade_update(request, pk):
             esp = form.save(commit=False)
             esp.profissional = '\n'.join(profissionais)
             esp.save()
+            if esp.status == 'finalizada':
+                _avisar_relatorio_final_desatualizado(request, esp)
             messages.success(request, 'Especialidade atualizada com sucesso.')
             return _redirect_detail(esp.inspecao_id, esp.pk)
     return render(request, 'inspecoes/especialidade_form.html', {
@@ -465,6 +467,22 @@ def especialidade_finalizar(request, pk):
     return redirect('inspecoes:analise', pk=pk)
 
 
+def _avisar_relatorio_final_desatualizado(request, esp):
+    """Se a inspeção já tem um Relatório Final gerado, avisa (sem bloquear)
+    que editar agora não atualiza retroativamente esse relatório — ver
+    ADR-06. Usado tanto ao reabrir uma especialidade quanto ao editar os
+    campos de uma especialidade já finalizada (ex.: conclusão), que é outra
+    porta de entrada para mudar algo que alimenta o relatório."""
+    ultimo_relatorio = esp.inspecao.relatorios_finais.first()
+    if ultimo_relatorio:
+        messages.warning(
+            request,
+            f'Esta inspeção já tem um Relatório Final gerado (v{ultimo_relatorio.numero_versao}, '
+            f'{ultimo_relatorio.gerado_em:%d/%m/%Y}). Editar agora não altera esse relatório — '
+            f'gere uma nova versão se precisar refletir esta mudança.',
+        )
+
+
 @login_required
 @require_POST
 def especialidade_reabrir(request, pk):
@@ -474,14 +492,7 @@ def especialidade_reabrir(request, pk):
     if esp.status == 'em_andamento':
         messages.error(request, 'Esta especialidade já está em andamento.')
         return _redirect_detail(esp.inspecao_id, esp.pk)
-    ultimo_relatorio = esp.inspecao.relatorios_finais.first()
-    if ultimo_relatorio:
-        messages.warning(
-            request,
-            f'Esta inspeção já tem um Relatório Final gerado (v{ultimo_relatorio.numero_versao}, '
-            f'{ultimo_relatorio.gerado_em:%d/%m/%Y}). Editar agora não altera esse relatório — '
-            f'gere uma nova versão se precisar refletir esta mudança.',
-        )
+    _avisar_relatorio_final_desatualizado(request, esp)
     esp.status = 'em_andamento'
     esp.save(update_fields=['status', 'atualizado_em'])
     messages.success(request, f'{esp.get_especialidade_display()} reaberta.')
