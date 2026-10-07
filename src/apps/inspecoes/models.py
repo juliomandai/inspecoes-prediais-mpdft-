@@ -459,6 +459,7 @@ class LogAcesso(models.Model):
         ('visita_concluida', 'Visita técnica concluída'),
         ('visita_reaberta', 'Visita técnica reaberta'),
         ('subvisita_criada', 'Subvisita de acompanhamento criada'),
+        ('relatorio_final_gerado', 'Relatório Final de Inspeção gerado'),
     ]
 
     usuario = models.ForeignKey(
