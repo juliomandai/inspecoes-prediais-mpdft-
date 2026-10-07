@@ -312,7 +312,7 @@ def test_reabrir_especialidade_avisa_quando_ja_ha_relatorio_gerado(client, inspe
 
 
 @pytest.mark.django_db
-def test_editar_especialidade_finalizada_avisa_quando_ja_ha_relatorio_gerado(client, inspecao_com_profissionais):
+def test_editar_conclusao_de_especialidade_finalizada_avisa_quando_ja_ha_relatorio_gerado(client, inspecao_com_profissionais):
     U = get_user_model()
     civil_user = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
     client.force_login(civil_user)
@@ -325,13 +325,8 @@ def test_editar_especialidade_finalizada_avisa_quando_ja_ha_relatorio_gerado(cli
 
     civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
     resp = client.post(
-        reverse('inspecoes:especialidade_update', kwargs={'pk': civil.pk}),
-        {
-            'especialidade': 'civil',
-            'data_inspecao': civil.data_inspecao.isoformat(),
-            'conclusao': 'Conclusão revisada após gerar o relatório.',
-            'profissionais': ['Ana Civil'],
-        },
+        reverse('inspecoes:especialidade_conclusao', kwargs={'pk': civil.pk}),
+        {'conclusao': 'Conclusão revisada após gerar o relatório.'},
         follow=True,
     )
 
@@ -340,3 +335,32 @@ def test_editar_especialidade_finalizada_avisa_quando_ja_ha_relatorio_gerado(cli
     assert civil.conclusao == 'Conclusão revisada após gerar o relatório.'
     mensagens = [str(m) for m in resp.context['messages']]
     assert any('Relatório Final' in m and 'v1' in m for m in mensagens)
+
+
+@pytest.mark.django_db
+def test_especialidade_update_nao_aceita_mais_campo_conclusao(client, inspecao_com_profissionais):
+    """A conclusão saiu de `EspecialidadeForm` (tela "Editar") para a tela
+    dedicada "Conclusão" (`especialidade_conclusao`) — editar os campos
+    cadastrais da especialidade não deve mais tocar na conclusão."""
+    U = get_user_model()
+    civil_user = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil_user)
+
+    civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
+    civil.conclusao = 'Conclusão original.'
+    civil.save(update_fields=['conclusao'])
+
+    resp = client.post(
+        reverse('inspecoes:especialidade_update', kwargs={'pk': civil.pk}),
+        {
+            'especialidade': 'civil',
+            'data_inspecao': civil.data_inspecao.isoformat(),
+            'conclusao': 'Tentativa de mudar a conclusão por aqui.',
+            'profissionais': ['Ana Civil'],
+        },
+        follow=True,
+    )
+
+    assert resp.status_code == 200
+    civil.refresh_from_db()
+    assert civil.conclusao == 'Conclusão original.'

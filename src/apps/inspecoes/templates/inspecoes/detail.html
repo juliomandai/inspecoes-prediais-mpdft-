@@ -162,6 +162,9 @@
         <a href="{% url 'inspecoes:especialidade_update' esp.pk %}" class="btn btn-outline-secondary btn-sm">
           <i class="bi bi-pencil"></i> Editar
         </a>
+        <a href="{% url 'inspecoes:especialidade_conclusao' esp.pk %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-journal-text"></i> Conclusão
+        </a>
         {% if esp.status == 'em_andamento' %}
         <form method="post" action="{% url 'inspecoes:especialidade_finalizar' esp.pk %}"
               onsubmit="return confirm('Finalizar {{ esp.get_especialidade_display }}?');">

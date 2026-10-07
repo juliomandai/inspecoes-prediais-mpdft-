@@ -45,14 +45,12 @@ class EspecialidadeForm(forms.ModelForm):
 
     class Meta:
         model = InspecaoEspecialidade
-        fields = ['especialidade', 'data_inspecao', 'conclusao']
+        fields = ['especialidade', 'data_inspecao']
         widgets = {
             'especialidade': forms.Select(attrs={'class': 'form-select'}),
-            'conclusao': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
         }
         labels = {
             'especialidade': 'Especialidade',
-            'conclusao': 'Conclusão e direcionamentos',
         }
 
     def __init__(self, *args, inspecao=None, **kwargs):
@@ -67,6 +65,23 @@ class EspecialidadeForm(forms.ModelForm):
             ]
             if not self.fields['especialidade'].choices:
                 self.fields['especialidade'].choices = [('', 'Todas as especialidades já foram adicionadas')]
+
+
+class ConclusaoEspecialidadeForm(forms.ModelForm):
+    """Formulário dedicado para a conclusão e direcionamentos de uma
+    especialidade — separado de `EspecialidadeForm` (tela "Editar") porque é
+    um texto redigido num momento diferente do ciclo (perto de finalizar),
+    não um dado cadastral da especialidade."""
+
+    class Meta:
+        model = InspecaoEspecialidade
+        fields = ['conclusao']
+        widgets = {
+            'conclusao': forms.Textarea(attrs={'class': 'form-control', 'rows': 6}),
+        }
+        labels = {
+            'conclusao': 'Conclusão e direcionamentos',
+        }
 
 
 class AchadoForm(forms.ModelForm):

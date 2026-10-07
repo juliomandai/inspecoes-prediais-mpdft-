@@ -27,6 +27,7 @@ urlpatterns = [
     # ── Especialidades ─────────────────────────────────────────────────────────
     path('inspecoes/<int:inspecao_pk>/especialidades/nova/', views.especialidade_create, name='especialidade_create'),
     path('especialidades/<int:pk>/editar/', views.especialidade_update, name='especialidade_update'),
+    path('especialidades/<int:pk>/conclusao/', views.especialidade_conclusao, name='especialidade_conclusao'),
     path('especialidades/<int:pk>/excluir/', views.especialidade_delete, name='especialidade_delete'),
     path('especialidades/<int:pk>/finalizar/', views.especialidade_finalizar, name='especialidade_finalizar'),
     path('especialidades/<int:pk>/reabrir/', views.especialidade_reabrir, name='especialidade_reabrir'),

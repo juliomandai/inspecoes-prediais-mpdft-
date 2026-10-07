@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Conclusão — {{ especialidade.get_especialidade_display }} — Inspeções Prediais MPDFT{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'inspecoes:list' %}">Inspeções</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'inspecoes:detail' inspecao.pk %}">{{ inspecao.edificacao }}</a></li>
+        <li class="breadcrumb-item active">Conclusão — {{ especialidade.get_especialidade_display }}</li>
+      </ol>
+    </nav>
+    <div class="card">
+      <div class="card-header">
+        <h4 class="mb-0"><i class="bi bi-journal-text"></i> Conclusão e Direcionamentos</h4>
+        <small class="text-muted">{{ especialidade.get_especialidade_display }} — {{ inspecao.edificacao }}</small>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label for="{{ form.conclusao.id_for_label }}" class="form-label">{{ form.conclusao.label }}</label>
+            {{ form.conclusao }}
+            <div class="form-text">Obrigatório para finalizar esta especialidade — alimenta o Relatório Final de Inspeção.</div>
+            {% if form.conclusao.errors %}
+            <div class="text-danger small mt-1">{{ form.conclusao.errors }}</div>
+            {% endif %}
+          </div>
+
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+          <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg"></i> Salvar conclusão
+            </button>
+            <a href="{% url 'inspecoes:detail' inspecao.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -26,6 +26,7 @@ from .forms import (
     InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm,
     VisitaTecnicaForm, VisitaFilterForm, SignUpForm,
     AcompanhamentoFilterForm, ReclassificarForm, AcompanhamentoAchadoForm,
+    ConclusaoEspecialidadeForm,
 )
 from apps.edificacoes.forms import DescritivoEdificacaoForm
 from .imagens import comprimir_imagem
@@ -421,6 +422,28 @@ def especialidade_update(request, pk):
         'especialidade': esp,
         'profissionais': profissionais or [''],
         'erro_profissionais': erro_profissionais,
+    })
+
+
+@login_required
+def especialidade_conclusao(request, pk):
+    """Tela dedicada para a conclusão e direcionamentos — separada da edição
+    cadastral da especialidade (`especialidade_update`), já que é um texto
+    redigido perto de finalizar, não um dado de cadastro."""
+    esp = get_object_or_404(InspecaoEspecialidade.objects.select_related('inspecao'), pk=pk)
+    if not _pode_editar_especialidade(request.user, esp):
+        return _acesso_negado_especialidade(request, esp)
+    form = ConclusaoEspecialidadeForm(request.POST or None, instance=esp)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        if esp.status == 'finalizada':
+            _avisar_relatorio_final_desatualizado(request, esp)
+        messages.success(request, 'Conclusão atualizada com sucesso.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
+    return render(request, 'inspecoes/especialidade_conclusao.html', {
+        'form': form,
+        'inspecao': esp.inspecao,
+        'especialidade': esp,
     })
 
 
