@@ -1002,7 +1002,7 @@ git commit -m "feat: editar descritivo da edificacao pelo painel do Relatorio Fi
 - Modify: `src/apps/inspecoes/views.py`
 - Test: `src/apps/inspecoes/tests/test_relatorio_final_views.py`
 
-- [ ] **Step 1: Write the failing tests** (photo copy/summarizing, and the general-numbers section)
+- [x] **Step 1: Write the failing tests** (photo copy/summarizing, and the general-numbers section)
 
 Append to `test_relatorio_final_views.py`:
 
@@ -1071,12 +1071,12 @@ def test_snapshot_inclui_dados_gerais_iguais_ao_painel_de_encerramento(inspecao_
     assert civil_gerais == {'especialidade_nome': 'Engenharia Civil', 'total': 2, 'total_nc': 1, 'p1': 1, 'p2': 0, 'p3': 0}
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_snapshot_copia_fotos_e_resume_conformes -v`
 Expected: FAIL with `ImportError: cannot import name '_montar_snapshot_relatorio'`
 
-- [ ] **Step 3: Implement the helpers**
+- [x] **Step 3: Implement the helpers**
 
 In `src/apps/inspecoes/views.py`, add after `_pode_gerar_relatorio_final`:
 
@@ -1182,12 +1182,12 @@ def _montar_snapshot_relatorio(inspecao, numero_versao):
     }
 ```
 
-- [ ] **Step 4: Run both tests to verify they pass**
+- [x] **Step 4: Run both tests to verify they pass**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_snapshot_copia_fotos_e_resume_conformes src/apps/inspecoes/tests/test_relatorio_final_views.py::test_snapshot_inclui_dados_gerais_iguais_ao_painel_de_encerramento -v`
 Expected: both PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/tests/test_relatorio_final_views.py
