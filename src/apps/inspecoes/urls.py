@@ -33,6 +33,12 @@ urlpatterns = [
     path('especialidades/<int:pk>/analise/', views.especialidade_analise, name='analise'),
     path('especialidades/<int:pk>/analise/pdf/', views.especialidade_analise_pdf, name='analise_pdf'),
 
+    # ── Relatório Final de Inspeção (ART/CREA) ─────────────────────────────────
+    path('inspecoes/<int:pk>/relatorio-final/', views.relatorio_final_painel, name='relatorio_final_painel'),
+    path('inspecoes/<int:pk>/relatorio-final/descritivo/', views.relatorio_final_editar_descritivo, name='relatorio_final_editar_descritivo'),
+    path('inspecoes/<int:pk>/relatorio-final/gerar/', views.relatorio_final_gerar, name='relatorio_final_gerar'),
+    path('inspecoes/<int:pk>/relatorio-final/<int:versao_pk>/download/', views.relatorio_final_download, name='relatorio_final_download'),
+
     # ── Achados ────────────────────────────────────────────────────────────────
     path('especialidades/<int:esp_pk>/achados/novo/', views.achado_create, name='achado_create'),
     path('achados/<int:pk>/', views.achado_detail, name='achado_detail'),

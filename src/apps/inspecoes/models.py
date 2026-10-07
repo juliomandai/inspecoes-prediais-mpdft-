@@ -35,6 +35,56 @@ class Inspecao(SoftDeleteModel):
             return 'em_andamento'
         return 'finalizada' if all(e.status == 'finalizada' for e in especialidades) else 'em_andamento'
 
+    ESPECIALIDADES_OBRIGATORIAS = {'civil', 'eletrica', 'mecanica'}
+
+    def pendencias_relatorio_final(self):
+        """Lista de pendências (texto legível) que impedem gerar o
+        Relatório Final de Inspeção. Lista vazia = pode gerar
+        (ver ADR-04, ADR-05, ADR-08, ADR-09)."""
+        pendencias = []
+        especialidades = list(self.especialidades.all())
+        existentes = {e.especialidade: e for e in especialidades}
+        faltando = self.ESPECIALIDADES_OBRIGATORIAS - set(existentes)
+
+        if faltando:
+            nomes_choices = dict(InspecaoEspecialidade.ESPECIALIDADE_CHOICES)
+            nomes = ', '.join(nomes_choices[k] for k in sorted(faltando))
+            pendencias.append(f'Falta cadastrar: {nomes}.')
+            return pendencias  # sem as 3, nada mais faz sentido checar ainda
+
+        obrigatorias = [e for e in especialidades if e.especialidade in self.ESPECIALIDADES_OBRIGATORIAS]
+        nao_finalizadas = [e for e in obrigatorias if e.status != 'finalizada']
+        if nao_finalizadas:
+            nomes = ', '.join(e.get_especialidade_display() for e in nao_finalizadas)
+            pendencias.append(f'Especialidade(s) não finalizada(s): {nomes}.')
+            return pendencias  # idem — com especialidade em andamento, conclusão/fotos ainda podem mudar
+
+        if not self.edificacao.descritivo.strip():
+            pendencias.append('Falta o descritivo da edificação.')
+
+        for esp in obrigatorias:
+            if not esp.conclusao.strip():
+                pendencias.append(f'Falta a conclusão de {esp.get_especialidade_display()}.')
+
+        achados_insuficientes = []
+        for esp in obrigatorias:
+            for achado in esp.achados.filter(gut_total__gt=0):
+                if achado.fotos.count() < 2:
+                    achados_insuficientes.append(achado)
+        if achados_insuficientes:
+            primeiros = ', '.join(f'"{a.verificacao}"' for a in achados_insuficientes[:5])
+            reticencias = '...' if len(achados_insuficientes) > 5 else ''
+            pendencias.append(
+                f'{len(achados_insuficientes)} achado(s) não conforme(s) com menos de 2 fotos: '
+                f'{primeiros}{reticencias}.'
+            )
+
+        return pendencias
+
+    @property
+    def pode_gerar_relatorio_final(self):
+        return not self.pendencias_relatorio_final()
+
 
 class InspecaoEspecialidade(SoftDeleteModel):
     """Sub-inspeção por especialidade dentro de uma Inspeção."""
@@ -59,6 +109,11 @@ class InspecaoEspecialidade(SoftDeleteModel):
     profissional = models.TextField('Profissionais responsáveis', help_text='Um nome por linha.')
     data_inspecao = models.DateField('Data da inspeção')
     status = models.CharField('Status', max_length=20, choices=STATUS_CHOICES, default='em_andamento')
+    conclusao = models.TextField(
+        'Conclusão e direcionamentos', blank=True,
+        help_text='Texto livre, redigido pelo profissional responsável — exigido '
+                   'para finalizar esta especialidade.',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -454,6 +509,7 @@ class LogAcesso(models.Model):
         ('visita_concluida', 'Visita técnica concluída'),
         ('visita_reaberta', 'Visita técnica reaberta'),
         ('subvisita_criada', 'Subvisita de acompanhamento criada'),
+        ('relatorio_final_gerado', 'Relatório Final de Inspeção gerado'),
     ]
 
     usuario = models.ForeignKey(
@@ -476,3 +532,48 @@ class LogAcesso(models.Model):
     def __str__(self):
         usuario = self.usuario.get_full_name() or self.usuario.username if self.usuario else 'Desconhecido'
         return f'{self.get_tipo_display()} — {usuario} — {self.criado_em:%d/%m/%Y %H:%M}'
+
+
+def relatorio_pdf_upload_path(instance, filename):
+    return f'relatorios/{instance.inspecao_id}/v{instance.numero_versao}/{filename}'
+
+
+class RelatorioFinalInspecao(models.Model):
+    """Documento formal (PDF + snapshot) gerado ao encerrar uma inspeção
+    completa, para instruir ART junto ao CREA.
+
+    Imutável depois de gerado (ADR-03): gerar de novo cria uma nova versão,
+    nunca sobrescreve. NÃO herda SoftDeleteModel — é um registro de
+    auditoria/legal, mesma categoria de LogAcesso/EncaminhamentoHistorico;
+    nada o exclui, nem logicamente.
+
+    `snapshot` guarda uma cópia estruturada do conteúdo (achados, conclusões,
+    descritivo) no momento da geração, incluindo os CAMINHOS das fotos
+    copiadas para este relatório (não FKs para `Foto` — ver ADR-07: o
+    snapshot sobrevive a uma purga futura dos originais).
+    """
+    inspecao = models.ForeignKey(
+        Inspecao, on_delete=models.PROTECT, related_name='relatorios_finais',
+        verbose_name='Inspeção',
+    )
+    numero_versao = models.PositiveIntegerField('Versão')
+    arquivo_pdf = models.FileField('PDF gerado', upload_to=relatorio_pdf_upload_path)
+    snapshot = models.JSONField('Snapshot')
+    gerado_por = models.ForeignKey(
+        get_user_model(), on_delete=models.PROTECT, related_name='relatorios_finais_gerados',
+        verbose_name='Gerado por',
+    )
+    gerado_em = models.DateTimeField('Gerado em', auto_now_add=True)
+
+    class Meta:
+        ordering = ['-numero_versao']
+        verbose_name = 'Relatório Final de Inspeção'
+        verbose_name_plural = 'Relatórios Finais de Inspeção'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['inspecao', 'numero_versao'], name='unique_versao_por_inspecao',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.inspecao.edificacao} — Relatório Final v{self.numero_versao}'

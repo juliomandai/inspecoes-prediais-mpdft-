@@ -20,3 +20,13 @@ class EdificacaoForm(forms.ModelForm):
         if qs.exists():
             raise forms.ValidationError('Já existe uma edificação com este nome.')
         return nome
+
+
+class DescritivoEdificacaoForm(forms.ModelForm):
+    class Meta:
+        model = Edificacao
+        fields = ['descritivo']
+        widgets = {
+            'descritivo': forms.Textarea(attrs={'class': 'form-control', 'rows': 5}),
+        }
+        labels = {'descritivo': 'Descritivo da edificação'}

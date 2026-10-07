@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.core.exceptions import RequestDataTooBig
-from django.db.models import Count, Q, Min
+from django.db.models import Count, Q, Min, Max
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -20,13 +20,14 @@ from django.utils import timezone
 
 from .models import (
     Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso,
-    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico,
+    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico, RelatorioFinalInspecao,
 )
 from .forms import (
     InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm,
     VisitaTecnicaForm, VisitaFilterForm, SignUpForm,
     AcompanhamentoFilterForm, ReclassificarForm, AcompanhamentoAchadoForm,
 )
+from apps.edificacoes.forms import DescritivoEdificacaoForm
 from .imagens import comprimir_imagem
 
 
@@ -282,6 +283,119 @@ def _acesso_negado_especialidade(request, esp):
     return _redirect_detail(esp.inspecao_id, esp.pk)
 
 
+def _pode_gerar_relatorio_final(user, inspecao):
+    """Quem pode gerar/editar o Relatório Final de Inspeção: staff, superusuário,
+    ou qualquer profissional listado em QUALQUER UMA das especialidades da
+    inspeção (não precisa ter participado das 3 — ver glossário, Seção 5)."""
+    if user.is_staff or user.is_superuser:
+        return True
+    nomes_permitidos = set()
+    for esp in inspecao.especialidades.all():
+        nomes_permitidos.update(esp.profissionais_lista)
+    return user.get_full_name() in nomes_permitidos
+
+
+def _copiar_fotos_para_relatorio(inspecao_pk, numero_versao, achado, fotos):
+    """Copia os arquivos de imagem usados para um caminho próprio do
+    relatório — independente do ciclo de vida da Foto original (ADR-07).
+    Retorna a lista de caminhos salvos (relativos ao storage)."""
+    from django.core.files.storage import default_storage
+    caminhos = []
+    for i, foto in enumerate(fotos, start=1):
+        ext = foto.arquivo.name.rsplit('.', 1)[-1]
+        destino = f'relatorios/{inspecao_pk}/v{numero_versao}/achado_{achado.pk}_{i}.{ext}'
+        with foto.arquivo.open('rb') as origem:
+            caminho_salvo = default_storage.save(destino, ContentFile(origem.read()))
+        caminhos.append(caminho_salvo)
+    return caminhos
+
+
+def _dados_gerais_snapshot(especialidades):
+    """Reaproveita o mesmo recorte de números do painel de encerramento
+    (análise geral — `_analise_data`/`por_especialidade` em
+    `inspecao_analise_pdf`), mas como valores simples (int/str), não
+    instâncias de `Achado` — o resultado precisa ser JSON-serializável
+    para entrar no snapshot."""
+    todos_achados = []
+    for esp in especialidades:
+        todos_achados.extend(list(esp.achados.all()))
+    total = len(todos_achados)
+    nao_conformes = [a for a in todos_achados if a.gut_total > 0]
+    total_nc = len(nao_conformes)
+
+    por_especialidade = []
+    for esp in especialidades:
+        ach = [a for a in todos_achados if a.especialidade_id == esp.pk]
+        nc = [a for a in ach if a.gut_total > 0]
+        por_especialidade.append({
+            'especialidade_nome': esp.get_especialidade_display(),
+            'total': len(ach),
+            'total_nc': len(nc),
+            'p1': len([a for a in nc if a.prioridade_risco == 1]),
+            'p2': len([a for a in nc if a.prioridade_risco == 2]),
+            'p3': len([a for a in nc if a.prioridade_risco == 3]),
+        })
+
+    return {
+        'total_achados': total,
+        'total_nao_conformes': total_nc,
+        'total_conformes': total - total_nc,
+        'p1': len([a for a in nao_conformes if a.prioridade_risco == 1]),
+        'p2': len([a for a in nao_conformes if a.prioridade_risco == 2]),
+        'p3': len([a for a in nao_conformes if a.prioridade_risco == 3]),
+        'por_especialidade': por_especialidade,
+    }
+
+
+def _montar_snapshot_relatorio(inspecao, numero_versao):
+    """Monta o conteúdo estruturado (JSON-serializável) congelado numa
+    geração do Relatório Final — ver ADR-03. Inclui os dados gerais
+    (mesmos números do painel de encerramento) e, por especialidade,
+    achados completos (não conformes, com fotos copiadas) e resumidos
+    (conformes, sem foto)."""
+    edificacao = inspecao.edificacao
+    especialidades = list(inspecao.especialidades.all())
+    especialidades_data = []
+    for esp in especialidades:
+        achados_completos = []
+        achados_resumidos = []
+        for achado in esp.achados.all():
+            if achado.gut_total > 0:
+                fotos = list(achado.fotos.order_by('data_upload')[:2])
+                caminhos_fotos = _copiar_fotos_para_relatorio(inspecao.pk, numero_versao, achado, fotos)
+                achados_completos.append({
+                    'localizacao': achado.localizacao,
+                    'sub_localizacao': achado.sub_localizacao,
+                    'verificacao': achado.verificacao,
+                    'descricao_nao_conformidade': achado.descricao_nao_conformidade,
+                    'gut_total': achado.gut_total,
+                    'prioridade_risco': achado.get_prioridade_risco_display(),
+                    'recomendacao': achado.recomendacao,
+                    'fotos': caminhos_fotos,
+                })
+            else:
+                achados_resumidos.append({
+                    'localizacao': achado.localizacao,
+                    'verificacao': achado.verificacao,
+                })
+        especialidades_data.append({
+            'especialidade': esp.especialidade,
+            'especialidade_nome': esp.get_especialidade_display(),
+            'profissionais': esp.profissionais_lista,
+            'conclusao': esp.conclusao,
+            'achados_completos': achados_completos,
+            'achados_resumidos': achados_resumidos,
+        })
+    return {
+        'edificacao_nome': edificacao.nome,
+        'edificacao_endereco': edificacao.endereco,
+        'edificacao_descritivo': edificacao.descritivo,
+        'inspecao_criada_em': inspecao.criado_em.isoformat(),
+        'dados_gerais': _dados_gerais_snapshot(especialidades),
+        'especialidades': especialidades_data,
+    }
+
+
 @login_required
 def especialidade_update(request, pk):
     esp = get_object_or_404(InspecaoEspecialidade.objects.select_related('inspecao'), pk=pk)
@@ -297,6 +411,8 @@ def especialidade_update(request, pk):
             esp = form.save(commit=False)
             esp.profissional = '\n'.join(profissionais)
             esp.save()
+            if esp.status == 'finalizada':
+                _avisar_relatorio_final_desatualizado(request, esp)
             messages.success(request, 'Especialidade atualizada com sucesso.')
             return _redirect_detail(esp.inspecao_id, esp.pk)
     return render(request, 'inspecoes/especialidade_form.html', {
@@ -334,6 +450,9 @@ def especialidade_finalizar(request, pk):
     if not esp.achados.exists():
         messages.error(request, 'Não é possível finalizar sem achados registrados.')
         return _redirect_detail(esp.inspecao_id, esp.pk)
+    if not esp.conclusao.strip():
+        messages.error(request, 'Não é possível finalizar sem preencher a conclusão e os direcionamentos.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
     esp.status = 'finalizada'
     esp.save(update_fields=['status', 'atualizado_em'])
     messages.success(request, f'{esp.get_especialidade_display()} finalizada.')
@@ -348,6 +467,22 @@ def especialidade_finalizar(request, pk):
     return redirect('inspecoes:analise', pk=pk)
 
 
+def _avisar_relatorio_final_desatualizado(request, esp):
+    """Se a inspeção já tem um Relatório Final gerado, avisa (sem bloquear)
+    que editar agora não atualiza retroativamente esse relatório — ver
+    ADR-06. Usado tanto ao reabrir uma especialidade quanto ao editar os
+    campos de uma especialidade já finalizada (ex.: conclusão), que é outra
+    porta de entrada para mudar algo que alimenta o relatório."""
+    ultimo_relatorio = esp.inspecao.relatorios_finais.first()
+    if ultimo_relatorio:
+        messages.warning(
+            request,
+            f'Esta inspeção já tem um Relatório Final gerado (v{ultimo_relatorio.numero_versao}, '
+            f'{ultimo_relatorio.gerado_em:%d/%m/%Y}). Editar agora não altera esse relatório — '
+            f'gere uma nova versão se precisar refletir esta mudança.',
+        )
+
+
 @login_required
 @require_POST
 def especialidade_reabrir(request, pk):
@@ -357,10 +492,118 @@ def especialidade_reabrir(request, pk):
     if esp.status == 'em_andamento':
         messages.error(request, 'Esta especialidade já está em andamento.')
         return _redirect_detail(esp.inspecao_id, esp.pk)
+    _avisar_relatorio_final_desatualizado(request, esp)
     esp.status = 'em_andamento'
     esp.save(update_fields=['status', 'atualizado_em'])
     messages.success(request, f'{esp.get_especialidade_display()} reaberta.')
     return _redirect_detail(esp.inspecao_id, esp.pk)
+
+
+# ── Relatório Final de Inspeção (ART/CREA) ──────────────────────────────────
+
+@login_required
+def relatorio_final_painel(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades', 'especialidades__achados__fotos', 'relatorios_finais',
+        ),
+        pk=pk,
+    )
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(
+            request,
+            'Acesso negado. Apenas os profissionais responsáveis por esta '
+            'inspeção podem acessar o Relatório Final.',
+        )
+        return redirect('inspecoes:detail', pk=pk)
+    return render(request, 'inspecoes/relatorio_final_painel.html', {
+        'inspecao': inspecao,
+        'pendencias': inspecao.pendencias_relatorio_final(),
+        'versoes': inspecao.relatorios_finais.all(),
+        'descritivo_form': DescritivoEdificacaoForm(instance=inspecao.edificacao),
+    })
+
+
+@login_required
+@require_POST
+def relatorio_final_editar_descritivo(request, pk):
+    inspecao = get_object_or_404(Inspecao.objects.select_related('edificacao'), pk=pk)
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(request, 'Acesso negado.')
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+    form = DescritivoEdificacaoForm(request.POST, instance=inspecao.edificacao)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Descritivo da edificação atualizado.')
+    else:
+        messages.error(request, 'Não foi possível salvar o descritivo.')
+    return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+
+@login_required
+@require_POST
+def relatorio_final_gerar(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades', 'especialidades__achados__fotos', 'relatorios_finais',
+        ),
+        pk=pk,
+    )
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(request, 'Acesso negado.')
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+    pendencias = inspecao.pendencias_relatorio_final()
+    if pendencias:
+        messages.error(request, 'Não é possível gerar o relatório: ' + ' '.join(pendencias))
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+    numero_versao = (inspecao.relatorios_finais.aggregate(m=Max('numero_versao'))['m'] or 0) + 1
+    # `snapshot` (caminhos leves) é o que persiste no banco; `contexto_pdf`
+    # (fotos como data URI) é só para renderizar o HTML/PDF desta vez — ver
+    # a nota em `_montar_contexto_pdf_com_fotos` sobre nunca trocar os dois.
+    snapshot = _montar_snapshot_relatorio(inspecao, numero_versao)
+    contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
+    html = render_to_string('inspecoes/relatorio_final_pdf.html', {
+        'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
+    }, request=request)
+    pdf_bytes = _gerar_pdf_bytes(html)
+    if pdf_bytes is None:
+        # `_montar_snapshot_relatorio` já copiou as fotos para
+        # relatorios/<pk>/v<numero_versao>/... antes de sabermos que o PDF
+        # falharia — sem isso, ficariam órfãs (nenhuma RelatorioFinalInspecao
+        # aponta pra elas) e o número de versão ficaria abandonado.
+        from django.core.files.storage import default_storage
+        for esp in snapshot['especialidades']:
+            for achado in esp['achados_completos']:
+                for caminho in achado['fotos']:
+                    default_storage.delete(caminho)
+        messages.error(request, 'Erro ao gerar o PDF do relatório. Tente novamente.')
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+    relatorio = RelatorioFinalInspecao(
+        inspecao=inspecao, numero_versao=numero_versao, snapshot=snapshot, gerado_por=request.user,
+    )
+    nome_arquivo = f"relatorio_final_{inspecao.edificacao.nome.replace(' ', '_')}_v{numero_versao}.pdf"
+    relatorio.arquivo_pdf.save(nome_arquivo, ContentFile(pdf_bytes), save=False)
+    relatorio.save()
+
+    _log(request, 'relatorio_final_gerado',
+         f'Relatório Final de Inspeção (v{numero_versao}) gerado para "{inspecao.edificacao}".')
+    messages.success(request, f'Relatório Final de Inspeção (versão {numero_versao}) gerado com sucesso.')
+    return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+
+@login_required
+def relatorio_final_download(request, pk, versao_pk):
+    inspecao = get_object_or_404(Inspecao, pk=pk)
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(request, 'Acesso negado.')
+        return redirect('inspecoes:detail', pk=pk)
+    relatorio = get_object_or_404(RelatorioFinalInspecao, pk=versao_pk, inspecao=inspecao)
+    resp = HttpResponse(relatorio.arquivo_pdf.read(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="{os.path.basename(relatorio.arquivo_pdf.name)}"'
+    return resp
 
 
 # ── Achados ────────────────────────────────────────────────────────────────────
@@ -1333,6 +1576,47 @@ def _gerar_pdf(html_string, nome_arquivo):
     resp = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     resp['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
     return resp
+
+
+def _gerar_pdf_bytes(html_string):
+    """Como `_gerar_pdf`, mas devolve os bytes do PDF em vez de um
+    HttpResponse — usado quando o PDF precisa ser salvo num FileField
+    (RelatorioFinalInspecao), não só servido para download direto."""
+    from xhtml2pdf import pisa
+    buffer = io.BytesIO()
+    result = pisa.pisaDocument(io.BytesIO(html_string.encode('utf-8')), buffer, encoding='utf-8')
+    if result.err:
+        return None
+    return buffer.getvalue()
+
+
+def _foto_para_data_uri(caminho):
+    """Lê um arquivo de foto já copiado para o relatório (ver
+    `_copiar_fotos_para_relatorio`) e devolve como data URI base64 — mesmo
+    padrão já usado pelos gráficos do laudo (`_png_data_uri`), necessário
+    porque o xhtml2pdf não resolve MEDIA_URL/caminhos de arquivo (sem
+    link_callback configurado nesta base de código)."""
+    from django.core.files.storage import default_storage
+    ext = caminho.rsplit('.', 1)[-1].lower()
+    mime = 'image/png' if ext == 'png' else 'image/jpeg'
+    with default_storage.open(caminho, 'rb') as f:
+        dados = f.read()
+    return f'data:{mime};base64,' + base64.b64encode(dados).decode()
+
+
+def _montar_contexto_pdf_com_fotos(snapshot):
+    """Monta uma CÓPIA do snapshot só para renderizar o template do PDF, com
+    os caminhos de foto trocados por data URIs embutidas. O `snapshot`
+    original (com os caminhos leves, não as imagens infladas em base64)
+    continua sendo o que é persistido em `RelatorioFinalInspecao.snapshot` —
+    nunca passe o retorno desta função para lá, ou o JSONField no banco
+    incharia com uma cópia inteira das imagens a cada versão gerada."""
+    import copy
+    contexto = copy.deepcopy(snapshot)
+    for esp in contexto['especialidades']:
+        for achado in esp['achados_completos']:
+            achado['fotos'] = [_foto_para_data_uri(caminho) for caminho in achado['fotos']]
+    return contexto
 
 
 # ── Análise por especialidade ─────────────────────────────────────────────────
