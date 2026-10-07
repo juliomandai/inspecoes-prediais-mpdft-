@@ -474,6 +474,14 @@ def especialidade_reabrir(request, pk):
     if esp.status == 'em_andamento':
         messages.error(request, 'Esta especialidade já está em andamento.')
         return _redirect_detail(esp.inspecao_id, esp.pk)
+    ultimo_relatorio = esp.inspecao.relatorios_finais.first()
+    if ultimo_relatorio:
+        messages.warning(
+            request,
+            f'Esta inspeção já tem um Relatório Final gerado (v{ultimo_relatorio.numero_versao}, '
+            f'{ultimo_relatorio.gerado_em:%d/%m/%Y}). Editar agora não altera esse relatório — '
+            f'gere uma nova versão se precisar refletir esta mudança.',
+        )
     esp.status = 'em_andamento'
     esp.save(update_fields=['status', 'atualizado_em'])
     messages.success(request, f'{esp.get_especialidade_display()} reaberta.')
