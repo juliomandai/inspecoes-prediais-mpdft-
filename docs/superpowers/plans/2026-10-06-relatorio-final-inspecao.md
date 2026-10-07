@@ -640,7 +640,7 @@ git commit -m "feat: Inspecao.pendencias_relatorio_final / pode_gerar_relatorio_
 **Files:**
 - Test: `src/apps/inspecoes/tests/test_relatorio_final_views.py` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/apps/inspecoes/tests/test_relatorio_final_views.py`:
 
@@ -683,12 +683,12 @@ def test_profissional_de_qualquer_uma_das_especialidades_pode_gerar(inspecao_com
     assert _pode_gerar_relatorio_final(staff, inspecao_com_profissionais)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py -v`
 Expected: FAIL with `ImportError: cannot import name '_pode_gerar_relatorio_final'`
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 In `src/apps/inspecoes/views.py`, right after `_acesso_negado_especialidade` (currently ending at line 282), add:
 
@@ -705,12 +705,12 @@ def _pode_gerar_relatorio_final(user, inspecao):
     return user.get_full_name() in nomes_permitidos
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/tests/test_relatorio_final_views.py
