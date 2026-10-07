@@ -308,7 +308,7 @@ git commit -m "feat: novo tipo de LogAcesso para geracao do Relatorio Final"
 - Modify: `src/apps/inspecoes/admin.py`
 - Test: `src/apps/inspecoes/tests/test_relatorio_final_invariantes.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `src/apps/inspecoes/tests/test_relatorio_final_invariantes.py`:
 
@@ -339,12 +339,12 @@ def test_relatorio_final_e_versionado_e_unico_por_inspecao():
         RelatorioFinalInspecao.objects.create(inspecao=insp, numero_versao=1, snapshot={}, gerado_por=u)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py::test_relatorio_final_e_versionado_e_unico_por_inspecao -v`
 Expected: FAIL with `ImportError: cannot import name 'RelatorioFinalInspecao'`
 
-- [ ] **Step 3: Add the model**
+- [x] **Step 3: Add the model**
 
 In `src/apps/inspecoes/models.py`, after the `LogAcesso` class (end of file):
 
@@ -394,7 +394,7 @@ class RelatorioFinalInspecao(models.Model):
         return f'{self.inspecao.edificacao} — Relatório Final v{self.numero_versao}'
 ```
 
-- [ ] **Step 4: Generate and apply the migration**
+- [x] **Step 4: Generate and apply the migration**
 
 Run: `python manage.py makemigrations inspecoes`
 Expected: `Migrations for 'inspecoes': ... + Create model RelatorioFinalInspecao`
@@ -403,12 +403,12 @@ Rename to `0018_relatoriofinalinspecao.py`, then:
 Run: `python manage.py migrate`
 Expected: `Applying inspecoes.0018_relatoriofinalinspecao... OK`
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_invariantes.py::test_relatorio_final_e_versionado_e_unico_por_inspecao -v`
 Expected: PASS
 
-- [ ] **Step 6: Register in admin (read-only — it's an immutable audit record)**
+- [x] **Step 6: Register in admin (read-only — it's an immutable audit record)**
 
 In `src/apps/inspecoes/admin.py`, add the import and a new registration (do **not** use `SoftDeleteAdminMixin` — this model has no soft delete):
 
@@ -433,12 +433,12 @@ class RelatorioFinalInspecaoAdmin(admin.ModelAdmin):
         return False
 ```
 
-- [ ] **Step 7: Confirm the admin page loads**
+- [x] **Step 7: Confirm the admin page loads**
 
 Run: `python manage.py check`
 Expected: `System check identified no issues (0 silenced).`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/apps/inspecoes/models.py src/apps/inspecoes/migrations/0018_relatoriofinalinspecao.py src/apps/inspecoes/admin.py src/apps/inspecoes/tests/test_relatorio_final_invariantes.py
