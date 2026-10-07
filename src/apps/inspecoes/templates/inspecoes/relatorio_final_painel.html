@@ -56,12 +56,9 @@
       {% for v in versoes %}
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <span>Versão {{ v.numero_versao }} — gerada em {{ v.gerado_em|date:"d/m/Y H:i" }} por {{ v.gerado_por.get_full_name|default:v.gerado_por.username }}</span>
-        {% comment %}TODO Task 11: restore once 'inspecoes:relatorio_final_download' exists{% endcomment %}
-        {% comment %}
         <a href="{% url 'inspecoes:relatorio_final_download' inspecao.pk v.pk %}" class="btn btn-sm btn-outline-success">
           <i class="bi bi-download"></i> Baixar PDF
         </a>
-        {% endcomment %}
       </li>
       {% endfor %}
     </ul>

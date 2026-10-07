@@ -269,3 +269,23 @@ def test_falha_na_geracao_do_pdf_limpa_fotos_ja_copiadas(client, inspecao_com_pr
     assert len(caminhos_copiados) == 2  # sanity: as fotos foram de fato copiadas antes da falha
     for caminho in caminhos_copiados:
         assert not default_storage.exists(caminho)
+
+
+@pytest.mark.django_db
+def test_download_relatorio_final(client, inspecao_com_profissionais):
+    U = get_user_model()
+    civil = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil)
+    InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+        data_inspecao=date.today(), conclusao='ok', status='finalizada',
+    )
+    inspecao_com_profissionais.especialidades.update(status='finalizada')
+    client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+    relatorio = inspecao_com_profissionais.relatorios_finais.get()
+
+    resp = client.get(reverse('inspecoes:relatorio_final_download', kwargs={'pk': inspecao_com_profissionais.pk, 'versao_pk': relatorio.pk}))
+
+    assert resp.status_code == 200
+    assert resp['Content-Type'] == 'application/pdf'
+    assert resp.content.startswith(b'%PDF')

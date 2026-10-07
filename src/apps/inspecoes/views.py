@@ -575,6 +575,18 @@ def relatorio_final_gerar(request, pk):
     return redirect('inspecoes:relatorio_final_painel', pk=pk)
 
 
+@login_required
+def relatorio_final_download(request, pk, versao_pk):
+    inspecao = get_object_or_404(Inspecao, pk=pk)
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(request, 'Acesso negado.')
+        return redirect('inspecoes:detail', pk=pk)
+    relatorio = get_object_or_404(RelatorioFinalInspecao, pk=versao_pk, inspecao=inspecao)
+    resp = HttpResponse(relatorio.arquivo_pdf.read(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="{os.path.basename(relatorio.arquivo_pdf.name)}"'
+    return resp
+
+
 # ── Achados ────────────────────────────────────────────────────────────────────
 
 @login_required
