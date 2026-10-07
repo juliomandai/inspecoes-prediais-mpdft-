@@ -550,6 +550,15 @@ def relatorio_final_gerar(request, pk):
     }, request=request)
     pdf_bytes = _gerar_pdf_bytes(html)
     if pdf_bytes is None:
+        # `_montar_snapshot_relatorio` já copiou as fotos para
+        # relatorios/<pk>/v<numero_versao>/... antes de sabermos que o PDF
+        # falharia — sem isso, ficariam órfãs (nenhuma RelatorioFinalInspecao
+        # aponta pra elas) e o número de versão ficaria abandonado.
+        from django.core.files.storage import default_storage
+        for esp in snapshot['especialidades']:
+            for achado in esp['achados_completos']:
+                for caminho in achado['fotos']:
+                    default_storage.delete(caminho)
         messages.error(request, 'Erro ao gerar o PDF do relatório. Tente novamente.')
         return redirect('inspecoes:relatorio_final_painel', pk=pk)
 

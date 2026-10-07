@@ -205,3 +205,67 @@ def test_foto_embutida_como_data_uri_no_pdf_mas_nao_no_snapshot_persistido(inspe
 
     civil_original = next(e for e in snapshot['especialidades'] if e['especialidade'] == 'civil')
     assert not civil_original['achados_completos'][0]['fotos'][0].startswith('data:')
+
+
+@pytest.mark.django_db
+def test_falha_na_geracao_do_pdf_limpa_fotos_ja_copiadas(client, inspecao_com_profissionais):
+    """Cobre o achado da revisão de qualidade: `_montar_snapshot_relatorio`
+    (chamado antes de `_gerar_pdf_bytes`) já copiou as fotos para
+    relatorios/<pk>/v<N>/... antes de sabermos se o PDF vai ser gerado com
+    sucesso. Se `_gerar_pdf_bytes` falhar, essas cópias não podem ficar
+    órfãs — nenhuma RelatorioFinalInspecao vai apontar pra elas.
+
+    Captura os caminhos reais via um espião em `_montar_snapshot_relatorio`
+    em vez de prever o nome do arquivo: o storage de mídia deste projeto não
+    é isolado por teste, então um arquivo de uma execução anterior pode já
+    ocupar o nome "óbvio" e forçar o Django a usar um sufixo diferente.
+    """
+    from unittest.mock import patch
+    from django.core.files.storage import default_storage
+    import apps.inspecoes.views as views_module
+
+    U = get_user_model()
+    civil_user = U.objects.create_user(username='ana2', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil_user)
+
+    InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+        data_inspecao=date.today(), conclusao='ok', status='finalizada',
+    )
+    inspecao_com_profissionais.especialidades.update(status='finalizada')
+    civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
+    achado = Achado.objects.create(
+        especialidade=civil, localizacao='L1', verificacao='Rachadura',
+        grupo_tecnico='estrutura', requisito_afetado='seguranca_estrutural',
+        gravidade=5, urgencia=5, tendencia=5,
+    )
+    Foto.objects.create(
+        achado=achado, arquivo=SimpleUploadedFile('f1.jpg', b'conteudo1', content_type='image/jpeg'),
+        nome_original='f1.jpg',
+    )
+    Foto.objects.create(
+        achado=achado, arquivo=SimpleUploadedFile('f2.jpg', b'conteudo2', content_type='image/jpeg'),
+        nome_original='f2.jpg',
+    )
+
+    capturado = {}
+    original_montar_snapshot = views_module._montar_snapshot_relatorio
+
+    def _snapshot_espiao(inspecao, numero_versao):
+        resultado = original_montar_snapshot(inspecao, numero_versao)
+        capturado['snapshot'] = resultado
+        return resultado
+
+    with patch('apps.inspecoes.views._montar_snapshot_relatorio', side_effect=_snapshot_espiao), \
+         patch('apps.inspecoes.views._gerar_pdf_bytes', return_value=None):
+        resp = client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+
+    assert resp.status_code == 302
+    assert inspecao_com_profissionais.relatorios_finais.count() == 0
+
+    snapshot = capturado['snapshot']
+    civil_data = next(e for e in snapshot['especialidades'] if e['especialidade'] == 'civil')
+    caminhos_copiados = civil_data['achados_completos'][0]['fotos']
+    assert len(caminhos_copiados) == 2  # sanity: as fotos foram de fato copiadas antes da falha
+    for caminho in caminhos_copiados:
+        assert not default_storage.exists(caminho)
