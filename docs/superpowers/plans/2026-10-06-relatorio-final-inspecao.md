@@ -40,7 +40,7 @@
 - Modify: `src/apps/edificacoes/models.py`
 - Test: `src/apps/edificacoes/tests.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `src/apps/edificacoes/tests.py`:
 
@@ -57,12 +57,12 @@ def test_descritivo_aceita_texto_livre_e_pode_ficar_vazio():
     assert e2.descritivo == ''
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/edificacoes/tests.py::test_descritivo_aceita_texto_livre_e_pode_ficar_vazio -v`
 Expected: FAIL with `TypeError: Edificacao() got unexpected keyword arguments: 'descritivo'`
 
-- [ ] **Step 3: Add the field**
+- [x] **Step 3: Add the field**
 
 In `src/apps/edificacoes/models.py`, inside `class Edificacao(SoftDeleteModel):`, after `endereco`:
 
@@ -75,7 +75,7 @@ In `src/apps/edificacoes/models.py`, inside `class Edificacao(SoftDeleteModel):`
     )
 ```
 
-- [ ] **Step 4: Generate and apply the migration**
+- [x] **Step 4: Generate and apply the migration**
 
 Run: `python manage.py makemigrations edificacoes`
 Expected: `Migrations for 'edificacoes': ... + Add field descritivo to edificacao`
@@ -84,12 +84,12 @@ Rename the generated file to `0004_edificacao_descritivo.py` if Django picked an
 Run: `python manage.py migrate`
 Expected: `Applying edificacoes.0004_edificacao_descritivo... OK`
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pytest src/apps/edificacoes/tests.py::test_descritivo_aceita_texto_livre_e_pode_ficar_vazio -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/apps/edificacoes/models.py src/apps/edificacoes/migrations/0004_edificacao_descritivo.py src/apps/edificacoes/tests.py
