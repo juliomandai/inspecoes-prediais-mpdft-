@@ -295,6 +295,107 @@ def _pode_gerar_relatorio_final(user, inspecao):
     return user.get_full_name() in nomes_permitidos
 
 
+def _copiar_fotos_para_relatorio(inspecao_pk, numero_versao, achado, fotos):
+    """Copia os arquivos de imagem usados para um caminho próprio do
+    relatório — independente do ciclo de vida da Foto original (ADR-07).
+    Retorna a lista de caminhos salvos (relativos ao storage)."""
+    from django.core.files.storage import default_storage
+    caminhos = []
+    for i, foto in enumerate(fotos, start=1):
+        ext = foto.arquivo.name.rsplit('.', 1)[-1]
+        destino = f'relatorios/{inspecao_pk}/v{numero_versao}/achado_{achado.pk}_{i}.{ext}'
+        with foto.arquivo.open('rb') as origem:
+            caminho_salvo = default_storage.save(destino, ContentFile(origem.read()))
+        caminhos.append(caminho_salvo)
+    return caminhos
+
+
+def _dados_gerais_snapshot(especialidades):
+    """Reaproveita o mesmo recorte de números do painel de encerramento
+    (análise geral — `_analise_data`/`por_especialidade` em
+    `inspecao_analise_pdf`), mas como valores simples (int/str), não
+    instâncias de `Achado` — o resultado precisa ser JSON-serializável
+    para entrar no snapshot."""
+    todos_achados = []
+    for esp in especialidades:
+        todos_achados.extend(list(esp.achados.all()))
+    total = len(todos_achados)
+    nao_conformes = [a for a in todos_achados if a.gut_total > 0]
+    total_nc = len(nao_conformes)
+
+    por_especialidade = []
+    for esp in especialidades:
+        ach = [a for a in todos_achados if a.especialidade_id == esp.pk]
+        nc = [a for a in ach if a.gut_total > 0]
+        por_especialidade.append({
+            'especialidade_nome': esp.get_especialidade_display(),
+            'total': len(ach),
+            'total_nc': len(nc),
+            'p1': len([a for a in nc if a.prioridade_risco == 1]),
+            'p2': len([a for a in nc if a.prioridade_risco == 2]),
+            'p3': len([a for a in nc if a.prioridade_risco == 3]),
+        })
+
+    return {
+        'total_achados': total,
+        'total_nao_conformes': total_nc,
+        'total_conformes': total - total_nc,
+        'p1': len([a for a in nao_conformes if a.prioridade_risco == 1]),
+        'p2': len([a for a in nao_conformes if a.prioridade_risco == 2]),
+        'p3': len([a for a in nao_conformes if a.prioridade_risco == 3]),
+        'por_especialidade': por_especialidade,
+    }
+
+
+def _montar_snapshot_relatorio(inspecao, numero_versao):
+    """Monta o conteúdo estruturado (JSON-serializável) congelado numa
+    geração do Relatório Final — ver ADR-03. Inclui os dados gerais
+    (mesmos números do painel de encerramento) e, por especialidade,
+    achados completos (não conformes, com fotos copiadas) e resumidos
+    (conformes, sem foto)."""
+    edificacao = inspecao.edificacao
+    especialidades = list(inspecao.especialidades.all())
+    especialidades_data = []
+    for esp in especialidades:
+        achados_completos = []
+        achados_resumidos = []
+        for achado in esp.achados.all():
+            if achado.gut_total > 0:
+                fotos = list(achado.fotos.order_by('data_upload')[:2])
+                caminhos_fotos = _copiar_fotos_para_relatorio(inspecao.pk, numero_versao, achado, fotos)
+                achados_completos.append({
+                    'localizacao': achado.localizacao,
+                    'sub_localizacao': achado.sub_localizacao,
+                    'verificacao': achado.verificacao,
+                    'descricao_nao_conformidade': achado.descricao_nao_conformidade,
+                    'gut_total': achado.gut_total,
+                    'prioridade_risco': achado.get_prioridade_risco_display(),
+                    'recomendacao': achado.recomendacao,
+                    'fotos': caminhos_fotos,
+                })
+            else:
+                achados_resumidos.append({
+                    'localizacao': achado.localizacao,
+                    'verificacao': achado.verificacao,
+                })
+        especialidades_data.append({
+            'especialidade': esp.especialidade,
+            'especialidade_nome': esp.get_especialidade_display(),
+            'profissionais': esp.profissionais_lista,
+            'conclusao': esp.conclusao,
+            'achados_completos': achados_completos,
+            'achados_resumidos': achados_resumidos,
+        })
+    return {
+        'edificacao_nome': edificacao.nome,
+        'edificacao_endereco': edificacao.endereco,
+        'edificacao_descritivo': edificacao.descritivo,
+        'inspecao_criada_em': inspecao.criado_em.isoformat(),
+        'dados_gerais': _dados_gerais_snapshot(especialidades),
+        'especialidades': especialidades_data,
+    }
+
+
 @login_required
 def especialidade_update(request, pk):
     esp = get_object_or_404(InspecaoEspecialidade.objects.select_related('inspecao'), pk=pk)
