@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #222; }
+  h1 { font-size: 16pt; }
+  h2 { font-size: 13pt; margin-top: 24px; border-bottom: 1px solid #999; padding-bottom: 4px; }
+  h3 { font-size: 11.5pt; margin-bottom: 2px; }
+  .achado { margin-bottom: 16px; page-break-inside: avoid; }
+  .achado-fotos img { width: 48%; margin-right: 2%; border: 1px solid #ccc; }
+  .conforme-linha { font-size: 9.5pt; color: #444; }
+  .assinatura { margin-top: 40px; page-break-inside: avoid; }
+  .assinatura-linha { border-top: 1px solid #333; width: 60%; margin-top: 36px; padding-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Relatório Final de Inspeção — {{ inspecao.edificacao.nome }}</h1>
+<p>Versão {{ numero_versao }} — gerado em {% now "d/m/Y H:i" %}</p>
+
+<h2>1. Descritivo da edificação</h2>
+<p>{{ snapshot.edificacao_descritivo|linebreaks }}</p>
+{% if snapshot.edificacao_endereco %}<p>Endereço: {{ snapshot.edificacao_endereco }}</p>{% endif %}
+
+<h2>2. Dados gerais</h2>
+<p>
+  Total de itens verificados: {{ snapshot.dados_gerais.total_achados }} —
+  Não conformes: {{ snapshot.dados_gerais.total_nao_conformes }} —
+  Conformes: {{ snapshot.dados_gerais.total_conformes }}
+</p>
+<p>
+  Prioridade 1 (crítico): {{ snapshot.dados_gerais.p1 }} —
+  Prioridade 2 (regular): {{ snapshot.dados_gerais.p2 }} —
+  Prioridade 3 (mínimo): {{ snapshot.dados_gerais.p3 }}
+</p>
+<table border="1" cellpadding="4" style="border-collapse: collapse; width: 100%;">
+  <tr><th>Especialidade</th><th>Total</th><th>Não conformes</th><th>P1</th><th>P2</th><th>P3</th></tr>
+  {% for linha in snapshot.dados_gerais.por_especialidade %}
+  <tr>
+    <td>{{ linha.especialidade_nome }}</td><td>{{ linha.total }}</td><td>{{ linha.total_nc }}</td>
+    <td>{{ linha.p1 }}</td><td>{{ linha.p2 }}</td><td>{{ linha.p3 }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% for esp in snapshot.especialidades %}
+<h2>3.{{ forloop.counter }} Achados — {{ esp.especialidade_nome }}</h2>
+
+{% for a in esp.achados_completos %}
+<div class="achado">
+  <h3>{{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</h3>
+  <p>{{ a.descricao_nao_conformidade }}</p>
+  <p><strong>GUT:</strong> {{ a.gut_total }} — <strong>Prioridade:</strong> {{ a.prioridade_risco }}</p>
+  {% if a.recomendacao %}<p><strong>Recomendação:</strong> {{ a.recomendacao }}</p>{% endif %}
+  <div class="achado-fotos">
+    {% for foto_data_uri in a.fotos %}<img src="{{ foto_data_uri }}">{% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+{% for a in esp.achados_resumidos %}
+<p class="conforme-linha">{{ a.localizacao }} — {{ a.verificacao }} — conforme</p>
+{% endfor %}
+
+<h3>Conclusão e direcionamentos</h3>
+<p>{{ esp.conclusao|linebreaks }}</p>
+{% endfor %}
+
+<h2>4. Assinaturas</h2>
+{% for esp in snapshot.especialidades %}
+<h3>{{ esp.especialidade_nome }}</h3>
+{% for nome in esp.profissionais %}
+<div class="assinatura">
+  <div class="assinatura-linha">{{ nome }}</div>
+</div>
+{% endfor %}
+{% endfor %}
+
+</body>
+</html>

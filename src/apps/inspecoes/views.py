@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.core.exceptions import RequestDataTooBig
-from django.db.models import Count, Q, Min
+from django.db.models import Count, Q, Min, Max
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from .models import (
     Inspecao, InspecaoEspecialidade, Achado, Foto, OpcaoCampo, LogAcesso,
-    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico,
+    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico, RelatorioFinalInspecao,
 )
 from .forms import (
     InspecaoForm, EspecialidadeForm, AchadoForm, InspecaoFilterForm,
@@ -518,6 +518,51 @@ def relatorio_final_editar_descritivo(request, pk):
         messages.success(request, 'Descritivo da edificação atualizado.')
     else:
         messages.error(request, 'Não foi possível salvar o descritivo.')
+    return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+
+@login_required
+@require_POST
+def relatorio_final_gerar(request, pk):
+    inspecao = get_object_or_404(
+        Inspecao.objects.select_related('edificacao').prefetch_related(
+            'especialidades', 'especialidades__achados__fotos', 'relatorios_finais',
+        ),
+        pk=pk,
+    )
+    if not _pode_gerar_relatorio_final(request.user, inspecao):
+        messages.error(request, 'Acesso negado.')
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+    pendencias = inspecao.pendencias_relatorio_final()
+    if pendencias:
+        messages.error(request, 'Não é possível gerar o relatório: ' + ' '.join(pendencias))
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+    numero_versao = (inspecao.relatorios_finais.aggregate(m=Max('numero_versao'))['m'] or 0) + 1
+    # `snapshot` (caminhos leves) é o que persiste no banco; `contexto_pdf`
+    # (fotos como data URI) é só para renderizar o HTML/PDF desta vez — ver
+    # a nota em `_montar_contexto_pdf_com_fotos` sobre nunca trocar os dois.
+    snapshot = _montar_snapshot_relatorio(inspecao, numero_versao)
+    contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
+    html = render_to_string('inspecoes/relatorio_final_pdf.html', {
+        'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
+    }, request=request)
+    pdf_bytes = _gerar_pdf_bytes(html)
+    if pdf_bytes is None:
+        messages.error(request, 'Erro ao gerar o PDF do relatório. Tente novamente.')
+        return redirect('inspecoes:relatorio_final_painel', pk=pk)
+
+    relatorio = RelatorioFinalInspecao(
+        inspecao=inspecao, numero_versao=numero_versao, snapshot=snapshot, gerado_por=request.user,
+    )
+    nome_arquivo = f"relatorio_final_{inspecao.edificacao.nome.replace(' ', '_')}_v{numero_versao}.pdf"
+    relatorio.arquivo_pdf.save(nome_arquivo, ContentFile(pdf_bytes), save=False)
+    relatorio.save()
+
+    _log(request, 'relatorio_final_gerado',
+         f'Relatório Final de Inspeção (v{numero_versao}) gerado para "{inspecao.edificacao}".')
+    messages.success(request, f'Relatório Final de Inspeção (versão {numero_versao}) gerado com sucesso.')
     return redirect('inspecoes:relatorio_final_painel', pk=pk)
 
 
@@ -1491,6 +1536,47 @@ def _gerar_pdf(html_string, nome_arquivo):
     resp = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     resp['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
     return resp
+
+
+def _gerar_pdf_bytes(html_string):
+    """Como `_gerar_pdf`, mas devolve os bytes do PDF em vez de um
+    HttpResponse — usado quando o PDF precisa ser salvo num FileField
+    (RelatorioFinalInspecao), não só servido para download direto."""
+    from xhtml2pdf import pisa
+    buffer = io.BytesIO()
+    result = pisa.pisaDocument(io.BytesIO(html_string.encode('utf-8')), buffer, encoding='utf-8')
+    if result.err:
+        return None
+    return buffer.getvalue()
+
+
+def _foto_para_data_uri(caminho):
+    """Lê um arquivo de foto já copiado para o relatório (ver
+    `_copiar_fotos_para_relatorio`) e devolve como data URI base64 — mesmo
+    padrão já usado pelos gráficos do laudo (`_png_data_uri`), necessário
+    porque o xhtml2pdf não resolve MEDIA_URL/caminhos de arquivo (sem
+    link_callback configurado nesta base de código)."""
+    from django.core.files.storage import default_storage
+    ext = caminho.rsplit('.', 1)[-1].lower()
+    mime = 'image/png' if ext == 'png' else 'image/jpeg'
+    with default_storage.open(caminho, 'rb') as f:
+        dados = f.read()
+    return f'data:{mime};base64,' + base64.b64encode(dados).decode()
+
+
+def _montar_contexto_pdf_com_fotos(snapshot):
+    """Monta uma CÓPIA do snapshot só para renderizar o template do PDF, com
+    os caminhos de foto trocados por data URIs embutidas. O `snapshot`
+    original (com os caminhos leves, não as imagens infladas em base64)
+    continua sendo o que é persistido em `RelatorioFinalInspecao.snapshot` —
+    nunca passe o retorno desta função para lá, ou o JSONField no banco
+    incharia com uma cópia inteira das imagens a cada versão gerada."""
+    import copy
+    contexto = copy.deepcopy(snapshot)
+    for esp in contexto['especialidades']:
+        for achado in esp['achados_completos']:
+            achado['fotos'] = [_foto_para_data_uri(caminho) for caminho in achado['fotos']]
+    return contexto
 
 
 # ── Análise por especialidade ─────────────────────────────────────────────────

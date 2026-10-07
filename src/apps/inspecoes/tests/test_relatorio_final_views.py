@@ -138,3 +138,70 @@ def test_snapshot_inclui_dados_gerais_iguais_ao_painel_de_encerramento(inspecao_
     assert gerais['p1'] == 1
     civil_gerais = next(e for e in gerais['por_especialidade'] if e['especialidade_nome'] == 'Engenharia Civil')
     assert civil_gerais == {'especialidade_nome': 'Engenharia Civil', 'total': 2, 'total_nc': 1, 'p1': 1, 'p2': 0, 'p3': 0}
+
+
+@pytest.mark.django_db
+def test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvidas(client, inspecao_com_profissionais):
+    U = get_user_model()
+    civil = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil)
+
+    # falta mecânica — deve ser bloqueado, nenhuma versão criada
+    resp = client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+    assert resp.status_code == 302
+    assert inspecao_com_profissionais.relatorios_finais.count() == 0
+
+    InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+        data_inspecao=date.today(), conclusao='ok', status='finalizada',
+    )
+    inspecao_com_profissionais.especialidades.update(status='finalizada')
+
+    resp = client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+    assert resp.status_code == 302
+    assert inspecao_com_profissionais.relatorios_finais.count() == 1
+    relatorio = inspecao_com_profissionais.relatorios_finais.first()
+    assert relatorio.numero_versao == 1
+    assert relatorio.gerado_por == civil
+    assert relatorio.arquivo_pdf.name
+    assert relatorio.snapshot['edificacao_nome'] == 'Sede'
+
+    # gerar de novo cria a versão 2, não sobrescreve a 1
+    resp = client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+    assert inspecao_com_profissionais.relatorios_finais.count() == 2
+    assert set(inspecao_com_profissionais.relatorios_finais.values_list('numero_versao', flat=True)) == {1, 2}
+
+    from apps.inspecoes.models import LogAcesso
+    assert LogAcesso.objects.filter(tipo='relatorio_final_gerado').count() == 2
+
+
+@pytest.mark.django_db
+def test_foto_embutida_como_data_uri_no_pdf_mas_nao_no_snapshot_persistido(inspecao_com_profissionais):
+    """Cobre a correção feita durante a execução: o xhtml2pdf não resolve
+    MEDIA_URL/caminhos de arquivo, então as fotos entram no HTML do PDF como
+    data URI base64 (`_montar_contexto_pdf_com_fotos`) — mas o `snapshot`
+    que é de fato persistido em `RelatorioFinalInspecao.snapshot` continua
+    leve, com o caminho do arquivo, não a imagem inflada em base64."""
+    from apps.inspecoes.views import _montar_snapshot_relatorio, _montar_contexto_pdf_com_fotos
+
+    civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
+    achado = Achado.objects.create(
+        especialidade=civil, localizacao='L1', verificacao='Rachadura',
+        grupo_tecnico='estrutura', requisito_afetado='seguranca_estrutural',
+        gravidade=5, urgencia=5, tendencia=5,
+    )
+    Foto.objects.create(
+        achado=achado, arquivo=SimpleUploadedFile('f.jpg', b'conteudo-fake', content_type='image/jpeg'),
+        nome_original='f.jpg',
+    )
+
+    snapshot = _montar_snapshot_relatorio(inspecao_com_profissionais, numero_versao=1)
+    contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
+
+    civil_pdf = next(e for e in contexto_pdf['especialidades'] if e['especialidade'] == 'civil')
+    fotos_pdf = civil_pdf['achados_completos'][0]['fotos']
+    assert len(fotos_pdf) == 1
+    assert fotos_pdf[0].startswith('data:image/jpeg;base64,')
+
+    civil_original = next(e for e in snapshot['especialidades'] if e['especialidade'] == 'civil')
+    assert not civil_original['achados_completos'][0]['fotos'][0].startswith('data:')
