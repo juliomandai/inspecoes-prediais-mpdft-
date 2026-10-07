@@ -35,6 +35,56 @@ class Inspecao(SoftDeleteModel):
             return 'em_andamento'
         return 'finalizada' if all(e.status == 'finalizada' for e in especialidades) else 'em_andamento'
 
+    ESPECIALIDADES_OBRIGATORIAS = {'civil', 'eletrica', 'mecanica'}
+
+    def pendencias_relatorio_final(self):
+        """Lista de pendências (texto legível) que impedem gerar o
+        Relatório Final de Inspeção. Lista vazia = pode gerar
+        (ver ADR-04, ADR-05, ADR-08, ADR-09)."""
+        pendencias = []
+        especialidades = list(self.especialidades.all())
+        existentes = {e.especialidade: e for e in especialidades}
+        faltando = self.ESPECIALIDADES_OBRIGATORIAS - set(existentes)
+
+        if faltando:
+            nomes_choices = dict(InspecaoEspecialidade.ESPECIALIDADE_CHOICES)
+            nomes = ', '.join(nomes_choices[k] for k in sorted(faltando))
+            pendencias.append(f'Falta cadastrar: {nomes}.')
+            return pendencias  # sem as 3, nada mais faz sentido checar ainda
+
+        obrigatorias = [e for e in especialidades if e.especialidade in self.ESPECIALIDADES_OBRIGATORIAS]
+        nao_finalizadas = [e for e in obrigatorias if e.status != 'finalizada']
+        if nao_finalizadas:
+            nomes = ', '.join(e.get_especialidade_display() for e in nao_finalizadas)
+            pendencias.append(f'Especialidade(s) não finalizada(s): {nomes}.')
+            return pendencias  # idem — com especialidade em andamento, conclusão/fotos ainda podem mudar
+
+        if not self.edificacao.descritivo.strip():
+            pendencias.append('Falta o descritivo da edificação.')
+
+        for esp in obrigatorias:
+            if not esp.conclusao.strip():
+                pendencias.append(f'Falta a conclusão de {esp.get_especialidade_display()}.')
+
+        achados_insuficientes = []
+        for esp in obrigatorias:
+            for achado in esp.achados.filter(gut_total__gt=0):
+                if achado.fotos.count() < 2:
+                    achados_insuficientes.append(achado)
+        if achados_insuficientes:
+            primeiros = ', '.join(f'"{a.verificacao}"' for a in achados_insuficientes[:5])
+            reticencias = '...' if len(achados_insuficientes) > 5 else ''
+            pendencias.append(
+                f'{len(achados_insuficientes)} achado(s) não conforme(s) com menos de 2 fotos: '
+                f'{primeiros}{reticencias}.'
+            )
+
+        return pendencias
+
+    @property
+    def pode_gerar_relatorio_final(self):
+        return not self.pendencias_relatorio_final()
+
 
 class InspecaoEspecialidade(SoftDeleteModel):
     """Sub-inspeção por especialidade dentro de uma Inspeção."""

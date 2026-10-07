@@ -2,6 +2,7 @@ import pytest
 from datetime import date
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.utils import IntegrityError
 from django.urls import reverse
 
@@ -71,3 +72,97 @@ def test_relatorio_final_e_versionado_e_unico_por_inspecao():
 
     with pytest.raises(IntegrityError):
         RelatorioFinalInspecao.objects.create(inspecao=insp, numero_versao=1, snapshot={}, gerado_por=u)
+
+
+def _criar_especialidade(insp, especialidade, conclusao='Conclusão padrão.', finalizada=True):
+    esp = InspecaoEspecialidade.objects.create(
+        inspecao=insp, especialidade=especialidade, profissional='Ana',
+        data_inspecao=date.today(), conclusao=conclusao,
+    )
+    if finalizada:
+        esp.status = 'finalizada'
+        esp.save(update_fields=['status'])
+    return esp
+
+
+def _achado_nao_conforme(esp, n_fotos=2):
+    achado = Achado.objects.create(
+        especialidade=esp, localizacao='L1', verificacao='V', grupo_tecnico='estrutura',
+        requisito_afetado='durabilidade', gravidade=4, urgencia=4, tendencia=4,
+    )
+    for i in range(n_fotos):
+        Foto.objects.create(
+            achado=achado,
+            arquivo=SimpleUploadedFile(f'f{i}.jpg', b'fake', content_type='image/jpeg'),
+            nome_original=f'f{i}.jpg',
+        )
+    return achado
+
+
+@pytest.mark.django_db
+def test_pendencia_quando_falta_especialidade():
+    edif = Edificacao.objects.create(nome='Sede', descritivo='x')
+    insp = Inspecao.objects.create(edificacao=edif)
+    _criar_especialidade(insp, 'civil')
+    _criar_especialidade(insp, 'eletrica')
+    # mecânica nunca cadastrada
+    pendencias = insp.pendencias_relatorio_final()
+    assert any('Falta cadastrar' in p and 'Mecânica' in p for p in pendencias)
+    assert not insp.pode_gerar_relatorio_final
+
+
+@pytest.mark.django_db
+def test_pendencia_quando_especialidade_nao_finalizada():
+    edif = Edificacao.objects.create(nome='Sede', descritivo='x')
+    insp = Inspecao.objects.create(edificacao=edif)
+    _criar_especialidade(insp, 'civil', finalizada=False)
+    _criar_especialidade(insp, 'eletrica')
+    _criar_especialidade(insp, 'mecanica')
+    pendencias = insp.pendencias_relatorio_final()
+    assert any('não finalizada' in p for p in pendencias)
+    assert not insp.pode_gerar_relatorio_final
+
+
+@pytest.mark.django_db
+def test_pendencia_quando_falta_descritivo_da_edificacao():
+    edif = Edificacao.objects.create(nome='Sede')  # sem descritivo
+    insp = Inspecao.objects.create(edificacao=edif)
+    for e in ('civil', 'eletrica', 'mecanica'):
+        _criar_especialidade(insp, e)
+    pendencias = insp.pendencias_relatorio_final()
+    assert any('descritivo' in p for p in pendencias)
+
+
+@pytest.mark.django_db
+def test_pendencia_quando_falta_conclusao_de_alguma_especialidade():
+    edif = Edificacao.objects.create(nome='Sede', descritivo='x')
+    insp = Inspecao.objects.create(edificacao=edif)
+    _criar_especialidade(insp, 'civil', conclusao='')
+    _criar_especialidade(insp, 'eletrica')
+    _criar_especialidade(insp, 'mecanica')
+    pendencias = insp.pendencias_relatorio_final()
+    assert any('conclusão' in p and 'Civil' in p for p in pendencias)
+
+
+@pytest.mark.django_db
+def test_pendencia_quando_achado_nao_conforme_tem_menos_de_2_fotos():
+    edif = Edificacao.objects.create(nome='Sede', descritivo='x')
+    insp = Inspecao.objects.create(edificacao=edif)
+    civil = _criar_especialidade(insp, 'civil')
+    _criar_especialidade(insp, 'eletrica')
+    _criar_especialidade(insp, 'mecanica')
+    _achado_nao_conforme(civil, n_fotos=1)
+    pendencias = insp.pendencias_relatorio_final()
+    assert any('menos de 2 fotos' in p for p in pendencias)
+
+
+@pytest.mark.django_db
+def test_sem_pendencias_quando_tudo_preenchido():
+    edif = Edificacao.objects.create(nome='Sede', descritivo='Prédio de 2 pavimentos.')
+    insp = Inspecao.objects.create(edificacao=edif)
+    civil = _criar_especialidade(insp, 'civil')
+    _criar_especialidade(insp, 'eletrica')
+    _criar_especialidade(insp, 'mecanica')
+    _achado_nao_conforme(civil, n_fotos=2)
+    assert insp.pendencias_relatorio_final() == []
+    assert insp.pode_gerar_relatorio_final
