@@ -1,10 +1,12 @@
 import pytest
 from datetime import date
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 from django.urls import reverse
 
 from apps.edificacoes.models import Edificacao
 from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado, Foto
+from apps.inspecoes.models import RelatorioFinalInspecao
 
 
 @pytest.mark.django_db
@@ -46,3 +48,25 @@ def test_finalizar_especialidade_exige_conclusao_preenchida():
     resp = client.post(reverse('inspecoes:especialidade_finalizar', kwargs={'pk': esp.pk}))
     esp.refresh_from_db()
     assert esp.status == 'finalizada'
+
+
+@pytest.mark.django_db
+def test_relatorio_final_e_versionado_e_unico_por_inspecao():
+    U = get_user_model()
+    u = U.objects.create_user(username='ana', password='1')
+    edif = Edificacao.objects.create(nome='Sede')
+    insp = Inspecao.objects.create(edificacao=edif)
+
+    r1 = RelatorioFinalInspecao.objects.create(
+        inspecao=insp, numero_versao=1, snapshot={'ok': True}, gerado_por=u,
+    )
+    r1.arquivo_pdf.save('teste.pdf', ContentFile(b'%PDF-fake'), save=True)
+    r2 = RelatorioFinalInspecao.objects.create(
+        inspecao=insp, numero_versao=2, snapshot={'ok': True}, gerado_por=u,
+    )
+
+    assert list(insp.relatorios_finais.all()) == [r2, r1]  # ordering = ['-numero_versao']
+    assert RelatorioFinalInspecao.objects.filter(pk=r1.pk).exists()  # gerar de novo não apaga o anterior
+
+    with pytest.raises(Exception):
+        RelatorioFinalInspecao.objects.create(inspecao=insp, numero_versao=1, snapshot={}, gerado_por=u)

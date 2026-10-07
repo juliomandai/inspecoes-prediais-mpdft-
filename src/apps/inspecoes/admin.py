@@ -2,7 +2,7 @@ from django.contrib import admin
 from apps.core.admin import SoftDeleteAdminMixin
 from .models import (
     Inspecao, InspecaoEspecialidade, Achado, Foto, LogAcesso,
-    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico,
+    VisitaTecnica, VisitaFoto, EncaminhamentoHistorico, RelatorioFinalInspecao,
 )
 
 
@@ -94,6 +94,19 @@ class LogAcessoAdmin(admin.ModelAdmin):
     search_fields = ['usuario__username', 'usuario__first_name', 'descricao']
     date_hierarchy = 'criado_em'
     readonly_fields = ['usuario', 'tipo', 'descricao', 'ip', 'criado_em']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(RelatorioFinalInspecao)
+class RelatorioFinalInspecaoAdmin(admin.ModelAdmin):
+    list_display = ['inspecao', 'numero_versao', 'gerado_por', 'gerado_em']
+    list_filter = ['inspecao__edificacao']
+    readonly_fields = ['inspecao', 'numero_versao', 'arquivo_pdf', 'snapshot', 'gerado_por', 'gerado_em']
 
     def has_add_permission(self, request):
         return False

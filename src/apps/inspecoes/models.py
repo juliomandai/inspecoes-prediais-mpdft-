@@ -482,3 +482,48 @@ class LogAcesso(models.Model):
     def __str__(self):
         usuario = self.usuario.get_full_name() or self.usuario.username if self.usuario else 'Desconhecido'
         return f'{self.get_tipo_display()} — {usuario} — {self.criado_em:%d/%m/%Y %H:%M}'
+
+
+def relatorio_pdf_upload_path(instance, filename):
+    return f'relatorios/{instance.inspecao_id}/v{instance.numero_versao}/{filename}'
+
+
+class RelatorioFinalInspecao(models.Model):
+    """Documento formal (PDF + snapshot) gerado ao encerrar uma inspeção
+    completa, para instruir ART junto ao CREA.
+
+    Imutável depois de gerado (ADR-03): gerar de novo cria uma nova versão,
+    nunca sobrescreve. NÃO herda SoftDeleteModel — é um registro de
+    auditoria/legal, mesma categoria de LogAcesso/EncaminhamentoHistorico;
+    nada o exclui, nem logicamente.
+
+    `snapshot` guarda uma cópia estruturada do conteúdo (achados, conclusões,
+    descritivo) no momento da geração, incluindo os CAMINHOS das fotos
+    copiadas para este relatório (não FKs para `Foto` — ver ADR-07: o
+    snapshot sobrevive a uma purga futura dos originais).
+    """
+    inspecao = models.ForeignKey(
+        Inspecao, on_delete=models.PROTECT, related_name='relatorios_finais',
+        verbose_name='Inspeção',
+    )
+    numero_versao = models.PositiveIntegerField('Versão')
+    arquivo_pdf = models.FileField('PDF gerado', upload_to=relatorio_pdf_upload_path)
+    snapshot = models.JSONField('Snapshot')
+    gerado_por = models.ForeignKey(
+        get_user_model(), on_delete=models.PROTECT, related_name='relatorios_finais_gerados',
+        verbose_name='Gerado por',
+    )
+    gerado_em = models.DateTimeField('Gerado em', auto_now_add=True)
+
+    class Meta:
+        ordering = ['-numero_versao']
+        verbose_name = 'Relatório Final de Inspeção'
+        verbose_name_plural = 'Relatórios Finais de Inspeção'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['inspecao', 'numero_versao'], name='unique_versao_por_inspecao',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.inspecao.edificacao} — Relatório Final v{self.numero_versao}'
