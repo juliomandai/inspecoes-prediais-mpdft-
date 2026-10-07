@@ -925,7 +925,7 @@ git commit -m "feat: painel de status do Relatorio Final de Inspecao"
 - Modify: `src/apps/inspecoes/views.py`
 - Modify: `src/apps/inspecoes/urls.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_relatorio_final_views.py`:
 
@@ -946,12 +946,12 @@ def test_editar_descritivo_pelo_painel(client, inspecao_com_profissionais):
     assert inspecao_com_profissionais.edificacao.descritivo == 'Prédio de 4 pavimentos, estrutura em concreto armado.'
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_editar_descritivo_pelo_painel -v`
 Expected: FAIL with `NoReverseMatch`
 
-- [ ] **Step 3: Implement the view**
+- [x] **Step 3: Implement the view**
 
 In `src/apps/inspecoes/views.py`, right after `relatorio_final_painel`:
 
@@ -972,7 +972,7 @@ def relatorio_final_editar_descritivo(request, pk):
     return redirect('inspecoes:relatorio_final_painel', pk=pk)
 ```
 
-- [ ] **Step 4: Add the URL**
+- [x] **Step 4: Add the URL**
 
 In `src/apps/inspecoes/urls.py`, after the `relatorio_final_painel` route:
 
@@ -980,14 +980,14 @@ In `src/apps/inspecoes/urls.py`, after the `relatorio_final_painel` route:
     path('inspecoes/<int:pk>/relatorio-final/descritivo/', views.relatorio_final_editar_descritivo, name='relatorio_final_editar_descritivo'),
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pytest src/apps/inspecoes/tests/test_relatorio_final_views.py::test_editar_descritivo_pelo_painel -v`
 Expected: PASS
 
-- [ ] **Step 6: Restore the `{% url 'inspecoes:relatorio_final_editar_descritivo' %}` reference in `relatorio_final_painel.html`** if it was commented out in Task 7.
+- [x] **Step 6: Restore the `{% url 'inspecoes:relatorio_final_editar_descritivo' %}` reference in `relatorio_final_painel.html`** if it was commented out in Task 7.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/apps/inspecoes/views.py src/apps/inspecoes/urls.py src/apps/inspecoes/templates/inspecoes/relatorio_final_painel.html src/apps/inspecoes/tests/test_relatorio_final_views.py
