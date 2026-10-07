@@ -334,6 +334,9 @@ def especialidade_finalizar(request, pk):
     if not esp.achados.exists():
         messages.error(request, 'Não é possível finalizar sem achados registrados.')
         return _redirect_detail(esp.inspecao_id, esp.pk)
+    if not esp.conclusao.strip():
+        messages.error(request, 'Não é possível finalizar sem preencher a conclusão e os direcionamentos.')
+        return _redirect_detail(esp.inspecao_id, esp.pk)
     esp.status = 'finalizada'
     esp.save(update_fields=['status', 'atualizado_em'])
     messages.success(request, f'{esp.get_especialidade_display()} finalizada.')

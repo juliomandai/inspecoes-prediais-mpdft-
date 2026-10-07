@@ -59,6 +59,11 @@ class InspecaoEspecialidade(SoftDeleteModel):
     profissional = models.TextField('Profissionais responsáveis', help_text='Um nome por linha.')
     data_inspecao = models.DateField('Data da inspeção')
     status = models.CharField('Status', max_length=20, choices=STATUS_CHOICES, default='em_andamento')
+    conclusao = models.TextField(
+        'Conclusão e direcionamentos', blank=True,
+        help_text='Texto livre, redigido pelo profissional responsável — exigido '
+                   'para finalizar esta especialidade.',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
