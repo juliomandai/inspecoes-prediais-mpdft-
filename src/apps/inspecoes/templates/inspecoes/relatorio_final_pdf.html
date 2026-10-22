@@ -13,8 +13,8 @@
   p { text-align: justify; margin: 0 0 8pt; }
 
   h2 {
-    font-size: 10pt; font-weight: bold;
-    background: #003366; color: #fff;
+    font-size: 10pt; font-weight: bold; font-style: italic;
+    background: #00ad00; color: #000;
     padding: 4pt 8pt; margin: 16pt 0 8pt;
   }
   h3 { font-size: 9.5pt; font-weight: bold; margin: 10pt 0 4pt; color: #003366; }
@@ -50,28 +50,30 @@
 </head>
 <body>
 
-{# ── Cabeçalho ──────────────────────────────────────────────────────────────── #}
+{# ── Cabeçalho (mesma formatação do modelo de laudo do MPDFT/SPO) ────────────── #}
 <table style="width:100%;border-collapse:collapse;margin-bottom:0">
-  <tr>
-    <td style="background:#003366;color:#fff;padding:10pt 14pt;text-align:center">
-      <span style="font-size:15pt;font-weight:bold;display:block;letter-spacing:1pt">RELATÓRIO FINAL DE INSPEÇÃO</span>
-      <span style="font-size:8.5pt;color:#b0c8e8;display:block;margin-top:2pt">MPDFT/SPO — LAUDO TÉCNICO DE INSPEÇÃO PREDIAL</span>
-    </td>
-  </tr>
-</table>
-<table style="width:100%;border-collapse:collapse;margin-bottom:14pt;border:1pt solid #b0bec9">
-  <tr>
-    <td style="background:#e8edf5;padding:4pt 12pt;font-size:8pt;color:#333">
-      <strong>Edifício:</strong> {{ inspecao.edificacao.nome }}
-      &nbsp;&nbsp;|&nbsp;&nbsp;
-      <strong>Versão:</strong> {{ numero_versao }}
-      &nbsp;&nbsp;|&nbsp;&nbsp;
-      <strong>Gerado em:</strong> {% now "d/m/Y H:i" %}
-      {% if inspecao.edificacao.endereco %}
-      <br><strong>Endereço:</strong> {{ inspecao.edificacao.endereco }}
-      {% endif %}
-    </td>
-  </tr>
+  <tr><td style="text-align:center;padding:6pt 0 4pt">
+    <img src="{{ logo_mpdft }}" style="height:46pt">
+  </td></tr>
+  <tr><td style="text-align:center;font-size:10pt;font-weight:bold;line-height:1.6;padding-bottom:10pt">
+    MINISTÉRIO PÚBLICO DA UNIÃO<br>
+    MINISTÉRIO PÚBLICO DO DISTRITO FEDERAL E TERRITÓRIOS<br>
+    SECRETARIA DE PROJETOS E OBRAS
+  </td></tr>
+  <tr><td style="text-align:center;font-size:15pt;font-weight:bold;padding:4pt 0 10pt">
+    RELATÓRIO FINAL DE INSPEÇÃO
+  </td></tr>
+  <tr><td style="text-align:center;font-size:10pt;font-weight:bold;padding-bottom:4pt">
+    Edifício: {{ inspecao.edificacao.nome }}
+  </td></tr>
+  {% if inspecao.edificacao.endereco %}
+  <tr><td style="text-align:center;font-size:9pt;padding-bottom:4pt">
+    Endereço: {{ inspecao.edificacao.endereco }}
+  </td></tr>
+  {% endif %}
+  <tr><td style="text-align:center;font-size:8pt;color:#666;padding-bottom:10pt">
+    Versão {{ numero_versao }} — gerado em {% now "d/m/Y H:i" %}
+  </td></tr>
 </table>
 
 {# ── 1. Descritivo ─────────────────────────────────────────────────────────── #}
@@ -155,7 +157,7 @@
 
 {% for a in esp.achados_completos %}
 <div class="achado">
-  <div class="achado-titulo">4.{{ forloop.parentloop.counter }}.{{ forloop.counter }} — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
+  <div class="achado-titulo"><span style="color:#00ad00">4.{{ forloop.parentloop.counter }}.{{ forloop.counter }}</span> — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
   <div class="achado-meta">
     <span class="badge bp{{ a.prioridade_risco_num }}">{{ a.prioridade_risco }}</span>
     &nbsp;Índice GUT: <strong>{{ a.gut_total }}</strong>
@@ -164,6 +166,20 @@
   {% if a.recomendacao %}<p><strong>Recomendação:</strong> {{ a.recomendacao }}</p>{% endif %}
   {% if a.fotos %}
   <div class="achado-fotos">
+    {% if a.fotos|length == 1 %}
+    {% comment %}
+    td vazios dos lados centralizam a foto — % de largura só é confiável em
+    células de tabela neste renderizador (xhtml2pdf/reportlab).
+    {% endcomment %}
+    <table><tr>
+      <td style="width:25%"></td>
+      <td class="foto-cel">
+        <img src="{{ a.fotos.0 }}">
+        <div class="foto-legenda">Foto 1</div>
+      </td>
+      <td style="width:25%"></td>
+    </tr></table>
+    {% else %}
     <table><tr>
       {% for foto_data_uri in a.fotos %}
       <td class="foto-cel">
@@ -172,6 +188,7 @@
       </td>
       {% endfor %}
     </tr></table>
+    {% endif %}
   </div>
   {% endif %}
 </div>

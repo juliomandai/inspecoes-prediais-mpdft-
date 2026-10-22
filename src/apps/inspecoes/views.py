@@ -1,4 +1,5 @@
 import base64
+import functools
 import json
 import io
 import zipfile
@@ -591,7 +592,7 @@ def relatorio_final_gerar(request, pk):
     graficos = _graficos_relatorio_final(inspecao)
     html = render_to_string('inspecoes/relatorio_final_pdf.html', {
         'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
-        'graficos': graficos,
+        'graficos': graficos, 'logo_mpdft': _logo_mpdft_data_uri(),
     }, request=request)
     pdf_bytes = _gerar_pdf_bytes(html)
     if pdf_bytes is None:
@@ -1514,6 +1515,18 @@ def _png_data_uri(img):
     buf = io.BytesIO()
     img.save(buf, 'PNG')
     return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+
+
+@functools.lru_cache(maxsize=1)
+def _logo_mpdft_data_uri():
+    """Logomarca do MPDFT para o cabeçalho do Relatório Final, como PNG data
+    URI — embutida porque o xhtml2pdf não resolve STATIC_URL/arquivos
+    estáticos (sem link_callback configurado nesta base de código)."""
+    from django.conf import settings
+    caminho = settings.BASE_DIR / 'static' / 'img' / 'mpdft_logo.png'
+    with open(caminho, 'rb') as f:
+        dados = f.read()
+    return 'data:image/png;base64,' + base64.b64encode(dados).decode()
 
 
 def _fonte(tamanho):
