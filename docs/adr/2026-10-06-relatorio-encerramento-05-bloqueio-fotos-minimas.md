@@ -1,7 +1,7 @@
 # ADR-05: Geração do relatório é bloqueada se algum achado não conforme tiver menos de 2 fotos
 
 ## Status
-Aceita (2026-10-06, sessão de grilling)
+Superada (2026-10-22, ver [ADR-10](2026-10-22-relatorio-encerramento-10-remove-bloqueio-fotos-minimas.md)) — aceita originalmente em 2026-10-06, sessão de grilling
 
 ## Contexto
 O relatório exige, por achado não conforme, no mínimo 2 fotos (ver glossário

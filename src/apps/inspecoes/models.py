@@ -40,7 +40,8 @@ class Inspecao(SoftDeleteModel):
     def pendencias_relatorio_final(self):
         """Lista de pendências (texto legível) que impedem gerar o
         Relatório Final de Inspeção. Lista vazia = pode gerar
-        (ver ADR-04, ADR-05, ADR-08, ADR-09)."""
+        (ver ADR-04, ADR-08, ADR-09 — ADR-05 foi revertida, achados com
+        menos de 2 fotos não bloqueiam mais a geração)."""
         pendencias = []
         especialidades = list(self.especialidades.all())
         existentes = {e.especialidade: e for e in especialidades}
@@ -65,19 +66,6 @@ class Inspecao(SoftDeleteModel):
         for esp in obrigatorias:
             if not esp.conclusao.strip():
                 pendencias.append(f'Falta a conclusão de {esp.get_especialidade_display()}.')
-
-        achados_insuficientes = []
-        for esp in obrigatorias:
-            for achado in esp.achados.filter(gut_total__gt=0):
-                if achado.fotos.count() < 2:
-                    achados_insuficientes.append(achado)
-        if achados_insuficientes:
-            primeiros = ', '.join(f'"{a.verificacao}"' for a in achados_insuficientes[:5])
-            reticencias = '...' if len(achados_insuficientes) > 5 else ''
-            pendencias.append(
-                f'{len(achados_insuficientes)} achado(s) não conforme(s) com menos de 2 fotos: '
-                f'{primeiros}{reticencias}.'
-            )
 
         return pendencias
 

@@ -145,15 +145,17 @@ def test_pendencia_quando_falta_conclusao_de_alguma_especialidade():
 
 
 @pytest.mark.django_db
-def test_pendencia_quando_achado_nao_conforme_tem_menos_de_2_fotos():
+def test_achado_nao_conforme_com_poucas_fotos_nao_e_mais_pendencia():
+    """ADR-05 foi revertida: achado não conforme com menos de 2 fotos (ou
+    nenhuma) não bloqueia mais a geração do relatório."""
     edif = Edificacao.objects.create(nome='Sede', descritivo='x')
     insp = Inspecao.objects.create(edificacao=edif)
     civil = _criar_especialidade(insp, 'civil')
     _criar_especialidade(insp, 'eletrica')
     _criar_especialidade(insp, 'mecanica')
-    _achado_nao_conforme(civil, n_fotos=1)
-    pendencias = insp.pendencias_relatorio_final()
-    assert any('menos de 2 fotos' in p for p in pendencias)
+    _achado_nao_conforme(civil, n_fotos=0)
+    assert insp.pendencias_relatorio_final() == []
+    assert insp.pode_gerar_relatorio_final
 
 
 @pytest.mark.django_db
