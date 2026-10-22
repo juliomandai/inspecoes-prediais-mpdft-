@@ -74,6 +74,37 @@
   .tabela-anexo01 th, .tabela-anexo01 td { border: 0.5pt solid #000; padding: 4pt; vertical-align: top; overflow: hidden; }
   .tabela-anexo01 th { background: #d0d0d0; font-weight: bold; text-align: left; }
 
+  {% comment %}
+  Painel de Encerramento reproduzido no PDF (pedido do usuário: usar os
+  mesmos painéis/gráficos da plataforma, não um layout próprio do laudo).
+  {% endcomment %}
+  h4.painel-titulo { font-size: 10pt; font-weight: bold; text-transform: uppercase; color: #555; margin: 14pt 0 6pt; }
+  .painel-stats-row { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
+  .painel-stats-row td { border: 1pt solid #ccc; padding: 8pt; text-align: center; vertical-align: top; }
+  .painel-stat-label { font-size: 7.5pt; color: #666; text-transform: uppercase; }
+  .painel-stat-num { font-size: 17pt; font-weight: bold; }
+  .painel-cards-row { width: 100%; border-collapse: collapse; margin-bottom: 10pt; table-layout: fixed; }
+  .painel-cards-row td { border: 0.5pt solid #ccc; padding: 8pt; text-align: center; vertical-align: top; }
+  .painel-card-label { font-size: 7.5pt; color: #666; text-transform: uppercase; }
+  .painel-gut-componentes td { border: none; padding: 4pt; }
+
+  .tabela-painel { width: 100%; border-collapse: collapse; margin-bottom: 10pt; font-size: 8pt; }
+  .tabela-painel th { background: #f1f2f1; padding: 4pt 5pt; text-align: left; font-weight: bold; border-bottom: 1pt solid #ccc; }
+  .tabela-painel td { padding: 4pt 5pt; border-bottom: 0.5pt solid #eee; text-align: center; }
+  .tabela-painel td:first-child, .tabela-painel th:first-child { text-align: left; }
+  .tabela-painel tr.total-geral td { font-weight: bold; border-top: 1pt solid #999; }
+
+  .badge-p1 { background: #dc3545; color: #fff; padding: 1pt 5pt; border-radius: 3pt; font-size: 7.5pt; font-weight: bold; }
+  .badge-p2 { background: #fd7e14; color: #fff; padding: 1pt 5pt; border-radius: 3pt; font-size: 7.5pt; font-weight: bold; }
+  .badge-p3 { background: #198754; color: #fff; padding: 1pt 5pt; border-radius: 3pt; font-size: 7.5pt; font-weight: bold; }
+
+  .tabela-matriz { width: 100%; border-collapse: collapse; margin-bottom: 4pt; font-size: 8pt; }
+  .tabela-matriz th, .tabela-matriz td { border: 0.5pt solid #ccc; padding: 4pt; text-align: center; }
+  .tabela-matriz th { background: #f1f2f1; }
+  .tabela-matriz td.incoerencia { background: #fde2e2; }
+  .tabela-matriz td.ganho-rapido { background: #d9f2df; }
+  .legenda-matriz { font-size: 7.5pt; color: #555; margin-bottom: 10pt; }
+
   .badge { display: inline; padding: 1pt 4pt; border-radius: 2pt; font-size: 7pt; font-weight: bold; color: #fff; }
   .bp1 { background: #cc0000; }
   .bp2 { background: #cc6600; }
@@ -172,65 +203,24 @@ Diagnóstica.</p>
 <p class="p-estatico">Responsáveis pela inspeção:</p>
 {% for esp in snapshot.especialidades %}
 {% for nome in esp.profissionais %}
-<div class="item-respons">• {{ esp.titulo_profissional }}: {{ nome }} CREA: <span class="preencher">[A PREENCHER]</span></div>
+<div class="item-respons">• {{ esp.titulo_profissional }}: {{ nome }}</div>
 {% endfor %}
 {% endfor %}
 
 <p class="p-dinamico">Diligências in loco: {{ snapshot.datas_vistorias|join:"; " }}.</p>
 
-<p class="p-dinamico">Fazem parte deste relatório os anexos:</p>
-<div class="item-anexo">1. Planilha com Lista de verificações.</div>
-
 {# ── 2. Descrição técnica do objeto ──────────────────────────────────────── #}
 <pdf:nextpage name="main" />
 <h2>2. Descrição técnica do objeto:</h2>
 
-<div style="text-align:center;margin-bottom:10pt">
-  <table style="margin:0 auto"><tr><td class="preencher" style="display:block;padding:40pt 60pt">
-    [A PREENCHER: imagem de localização do edifício]
-  </td></tr></table>
-</div>
-
 <p class="p-dinamico">{{ snapshot.edificacao_descritivo|linebreaks }}</p>
-
-<p class="p-dinamico">As últimas obras no edifício foram:</p>
-<div class="item-obras">• <span class="preencher">[A PREENCHER: últimas obras no edifício]</span></div>
 
 {# ── 3. Metodologia aplicada (texto 100% estático, extraído do modelo) ──── #}
 <h2>3. Metodologia aplicada:</h2>
 {% include "inspecoes/_relatorio_final_metodologia.html" %}
 
-{# ── 4. Análise de documentação ──────────────────────────────────────────── #}
-<h2>4. Análise de documentação:</h2>
-
-<table class="tabela-doc">
-  <thead>
-    <tr><th style="width:149pt">Documentação base</th><th style="width:136pt">Status</th><th style="width:151pt">Recomendação</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td class="preencher">[A PREENCHER]</td>
-      <td class="preencher">[A PREENCHER]</td>
-      <td class="preencher">[A PREENCHER]</td>
-    </tr>
-  </tbody>
-</table>
-
-<table class="tabela-doc">
-  <thead>
-    <tr><th style="width:149pt">Verificções de rotina e testes periódicos</th><th style="width:136pt">Status</th><th style="width:151pt">Recomendação</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td class="preencher">[A PREENCHER]</td>
-      <td class="preencher">[A PREENCHER]</td>
-      <td class="preencher">[A PREENCHER]</td>
-    </tr>
-  </tbody>
-</table>
-
-{# ── 5. Exame técnico ─────────────────────────────────────────────────────── #}
-<h2>5. Exame técnico:</h2>
+{# ── 4. Exame técnico ─────────────────────────────────────────────────────── #}
+<h2>4. Exame técnico:</h2>
 
 <p class="p-estatico">A estratégia adotada consistiu em apresentar, no corpo deste relatório, as principais
 ocorrências identificadas e compreendidas conforme a conjugação entre o Grau de
@@ -247,36 +237,14 @@ planilha completa e individualizada das verificações e não conformidades regi
 <p class="p-estatico">O estudo realizado tem como objetivo estabelecer parâmetros para definir os
 patamares de prioridade, nos termos da NBR 16747.</p>
 
-<div style="text-align:center;margin-bottom:6pt">
-  <h3 style="margin-top:0">Distribuição por Grau de Risco</h3>
-  {% if graficos.risco %}<img src="{{ graficos.risco }}" style="width:260pt">{% else %}<p>Sem dados.</p>{% endif %}
-</div>
-
-<div style="text-align:center;margin-bottom:6pt">
-  {% if graficos.grupo_tecnico %}<img src="{{ graficos.grupo_tecnico }}" style="width:453pt">{% else %}<p>Sem dados.</p>{% endif %}
-</div>
-
-<div style="text-align:center;margin-bottom:6pt">
-  <h3 style="margin-top:0">Prazos Recomendados para intervenção</h3>
-  {% if graficos.prazo %}<img src="{{ graficos.prazo }}" style="width:400pt">{% else %}<p>Sem dados.</p>{% endif %}
-</div>
-
-<div style="text-align:center;margin-bottom:6pt">
-  <h3 style="margin-top:0">Requisito Afetado X Quantidade</h3>
-  {% if graficos.requisitos %}<img src="{{ graficos.requisitos }}" style="width:420pt">{% else %}<p>Sem dados.</p>{% endif %}
-</div>
-
-<div style="text-align:center;margin-bottom:10pt">
-  <h3 style="margin-top:0">Distribuição por Categoria</h3>
-  {% if graficos.direcionamento %}<img src="{{ graficos.direcionamento }}" style="width:260pt">{% else %}<p>Sem dados.</p>{% endif %}
-</div>
+{% include "inspecoes/_relatorio_final_painel.html" %}
 
 {% for esp in snapshot.especialidades %}
-<h3>5.{{ forloop.counter }}. {{ esp.especialidade_nome }}</h3>
+<h3>4.{{ forloop.counter }}. {{ esp.especialidade_nome }}</h3>
 
 {% for a in esp.achados_completos %}
 <div class="achado">
-  <div class="achado-titulo">5.{{ forloop.parentloop.counter }}.{{ forloop.counter }} — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
+  <div class="achado-titulo">4.{{ forloop.parentloop.counter }}.{{ forloop.counter }} — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
   <div class="achado-meta">
     <span class="badge bp{{ a.prioridade_risco_num }}">{{ a.prioridade_risco }}</span>
     &nbsp;Índice GUT: <strong>{{ a.gut_total }}</strong>
@@ -326,8 +294,8 @@ patamares de prioridade, nos termos da NBR 16747.</p>
 </div>
 {% endfor %}
 
-{# ── 6. Referências (texto estático) ─────────────────────────────────────── #}
-<h2>6. Referências:</h2>
+{# ── 5. Referências (texto estático) ─────────────────────────────────────── #}
+<h2>5. Referências:</h2>
 <p class="p-dinamico">ABNT NBR 13752:1996 – Perícias de Engenharia na Construção Civil</p>
 <p class="p-dinamico">ABNT NBR 14037:2014 - Diretrizes para elaboração de manuais de uso, operação e
 manutenção das edificações - Requisitos para elaboração e apresentação dos
@@ -342,15 +310,15 @@ conteúdos</p>
 <div class="assinatura">
   <div class="assinatura-linha">
     {{ nome }}<br>
-    <span class="assinatura-crea">{{ esp.titulo_profissional }} — CREA nº <span class="preencher">[A PREENCHER]</span></span>
+    <span class="assinatura-crea">{{ esp.titulo_profissional }}</span>
   </div>
 </div>
 {% endfor %}
 {% endfor %}
 
-{# ── 7. Anexo 01 - Planilha (paisagem) ───────────────────────────────────── #}
+{# ── 6. Anexo 01 - Planilha (paisagem) ───────────────────────────────────── #}
 <pdf:nextpage name="anexo" />
-<h2>7. Anexo 01 - Planilha:</h2>
+<h2>6. Anexo 01 - Planilha:</h2>
 
 <table class="tabela-anexo01">
   <thead>

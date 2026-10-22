@@ -331,6 +331,9 @@ def _dados_gerais_snapshot(especialidades):
         nc = [a for a in ach if a.gut_total > 0]
         por_especialidade.append({
             'especialidade_nome': esp.get_especialidade_display(),
+            'profissionais': esp.profissionais_display,
+            'data_inspecao': esp.data_inspecao.strftime('%d/%m/%Y'),
+            'status': esp.get_status_display(),
             'total': len(ach),
             'total_nc': len(nc),
             'p1': len([a for a in nc if a.prioridade_risco == 1]),
@@ -617,10 +620,10 @@ def relatorio_final_gerar(request, pk):
     # a nota em `_montar_contexto_pdf_com_fotos` sobre nunca trocar os dois.
     snapshot = _montar_snapshot_relatorio(inspecao, numero_versao)
     contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
-    graficos = _graficos_relatorio_final(inspecao)
+    painel = _painel_encerramento_relatorio(inspecao, list(inspecao.especialidades.all()))
     html = render_to_string('inspecoes/relatorio_final_pdf.html', {
         'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
-        'graficos': graficos, 'logo_mpdft': _logo_mpdft_data_uri(),
+        'painel': painel, 'logo_mpdft': _logo_mpdft_data_uri(),
         'fontes_css': _fontes_pdf_css(),
     }, request=request)
     pdf_bytes = _gerar_pdf_bytes(html)
@@ -1747,10 +1750,16 @@ def _grafico_barras_horizontais(dados):
     label_w = 200 * S
     pad_r = 90 * S
     plot_w = W - label_w - pad_r
+    max_label_w = label_w - 8 * S
     for i, (lab, val, cor, sufixo) in enumerate(dados):
         y0 = 10 * S + i * row_h
         yc = y0 + row_h / 2
-        d.text((label_w - 8 * S, yc), lab, fill=(60, 60, 60), font=f, anchor='rm')
+        texto = lab
+        while d.textlength(texto, font=f) > max_label_w and len(texto) > 1:
+            texto = texto[:-1]
+        if texto != lab:
+            texto = texto[:-1].rstrip() + '…'
+        d.text((label_w - 8 * S, yc), texto, fill=(60, 60, 60), font=f, anchor='rm')
         bw = (val / maxv) * plot_w
         d.rectangle([label_w, y0 + 4 * S, label_w + bw, y0 + row_h - 4 * S], fill=cor)
         d.text((label_w + bw + 6 * S, yc), f'{val}{sufixo or ""}', fill=(40, 40, 40), font=f, anchor='lm')
@@ -1759,59 +1768,93 @@ def _grafico_barras_horizontais(dados):
 
 
 def _grafico_barras_requisitos(por_requisito):
-    """Barras horizontais de NC por requisito de desempenho afetado, com as mesmas
+    """Colunas verticais de NC por requisito de desempenho afetado, com as mesmas
     cores do `chartRequisitos` do painel de encerramento. data URI PNG ou None."""
-    dados = [(r['label'], r['total'], _hex_rgb(r['color']), None) for r in por_requisito if r['total'] > 0]
-    return _grafico_barras_horizontais(dados)
+    dados = [(r['label'], r['total'], _hex_rgb(r['color'])) for r in por_requisito if r['total'] > 0]
+    return _grafico_barras_verticais_coloridas(dados)
 
 
-def _grafico_colunas_grupo_tecnico(grupos):
-    """Colunas agrupadas por grupo técnico, 3 séries (P1/P2/P3) lado a lado —
-    gráfico 2 do Relatório Final (laudo-modelo MPDFT/SPO), com rótulos de
-    dados, legenda e eixo X rotacionado 45° para nomes longos de grupo
-    técnico. Cores e fundo creme (#FFFFF2) amostrados do laudo-modelo.
-    data URI PNG ou None."""
+def _grafico_barras_verticais_coloridas(dados):
+    """Colunas verticais com uma cor própria por barra (ex.: Requisito Afetado
+    X Quantidade do Painel de Encerramento) — `dados` = [(label, valor, cor_rgb), ...],
+    já filtrado (valor > 0 fica normal, zerado some, mas a categoria continua
+    aparecendo com barra vazia). data URI PNG ou None."""
     from PIL import Image, ImageDraw
-    dados = [g for g in grupos if g['total'] > 0]
+    import textwrap
     if not dados:
         return None
     S = 4
-    W, H = 580 * S, 330 * S
-    img = Image.new('RGB', (W, H), (255, 255, 242))
+    W, H = 600 * S, 300 * S
+    img = Image.new('RGB', (W, H), 'white')
     d = ImageDraw.Draw(img)
-    f = _fonte(11 * S)
-    f_lab = _fonte(10 * S)
-    cores = {'p1': (204, 0, 0), 'p2': (204, 102, 0), 'p3': (0, 102, 0)}
-    maxv = max(max(g['p1'], g['p2'], g['p3']) for g in dados) or 1
-    pad_l, pad_b, pad_t, pad_r = 36 * S, 70 * S, 16 * S, 16 * S
+    f_val = _fonte(12 * S)
+    f_lab = _fonte(9 * S)
+    maxv = max(v for _, v, _ in dados) or 1
+    pad_l, pad_b, pad_t, pad_r = 10 * S, 54 * S, 24 * S, 10 * S
     plot_w = W - pad_l - pad_r
     plot_h = H - pad_b - pad_t
     base_y = pad_t + plot_h
     gap = plot_w / len(dados)
-    bw = gap * 0.24
+    bw = gap * 0.5
+    for i, (lab, val, cor) in enumerate(dados):
+        cx = pad_l + i * gap + gap / 2
+        bh = (val / maxv) * plot_h if maxv else 0
+        if val:
+            d.rectangle([cx - bw / 2, base_y - bh, cx + bw / 2, base_y], fill=cor)
+            d.text((cx, base_y - bh - 6 * S), str(val), fill=(40, 40, 40), font=f_val, anchor='mb')
+        linhas = textwrap.wrap(lab, width=14)[:2]
+        for li, linha in enumerate(linhas):
+            d.text((cx, base_y + 8 * S + li * 11 * S), linha, fill=(60, 60, 60), font=f_lab, anchor='ma')
+    d.line([pad_l, base_y, W - pad_r, base_y], fill=(170, 170, 170), width=S)
+    img = img.resize((W // S, H // S), Image.LANCZOS)
+    return _png_data_uri(img)
+
+
+def _grafico_pareto_combo(pareto):
+    """Combo barras (quantidade, eixo esquerdo) + linha (% acumulado, eixo
+    direito) — mesmo gráfico "Pareto por Grupo Técnico (80/20)" do Painel de
+    Encerramento (`chartPareto`). data URI PNG ou None."""
+    from PIL import Image, ImageDraw
+    import textwrap
+    dados = [g for g in pareto if g['total'] > 0]
+    if not dados:
+        return None
+    S = 4
+    W, H = 580 * S, 320 * S
+    img = Image.new('RGB', (W, H), 'white')
+    d = ImageDraw.Draw(img)
+    f_val = _fonte(10 * S)
+    f_lab = _fonte(9 * S)
+    f_axis = _fonte(9 * S)
+    maxv = max(g['total'] for g in dados) or 1
+    pad_l, pad_b, pad_t, pad_r = 28 * S, 60 * S, 16 * S, 36 * S
+    plot_w = W - pad_l - pad_r
+    plot_h = H - pad_b - pad_t
+    base_y = pad_t + plot_h
+    gap = plot_w / len(dados)
+    bw = gap * 0.55
+    cor_barra = (13, 110, 253)
+    cor_linha = (220, 53, 69)
+    pontos = []
     for i, g in enumerate(dados):
         cx = pad_l + i * gap + gap / 2
-        for j, chave in enumerate(('p1', 'p2', 'p3')):
-            val = g[chave]
-            x = cx + (j - 1) * (bw + 4 * S) - bw / 2
-            bh = (val / maxv) * plot_h
-            d.rectangle([x, base_y - bh, x + bw, base_y], fill=cores[chave])
-            if val:
-                d.text((x + bw / 2, base_y - bh - 4 * S), str(val), fill=(60, 60, 60), font=f_lab, anchor='mb')
-        # rótulo do grupo técnico, rotacionado 45°
-        label_img = Image.new('RGBA', (220 * S, 40 * S), (255, 255, 242, 0))
-        ld = ImageDraw.Draw(label_img)
-        ld.text((0, 0), g['nome'], fill=(60, 60, 60), font=f, anchor='lm')
-        label_img = label_img.rotate(45, expand=True, resample=Image.BICUBIC)
-        img.paste(label_img, (int(cx - label_img.width * 0.15), int(base_y + 4 * S)), label_img)
+        bh = (g['total'] / maxv) * plot_h
+        d.rectangle([cx - bw / 2, base_y - bh, cx + bw / 2, base_y], fill=cor_barra)
+        d.text((cx, base_y - bh - 5 * S), str(g['total']), fill=(40, 40, 40), font=f_val, anchor='mb')
+        linhas = textwrap.wrap(g['nome'], width=12)[:2]
+        for li, linha in enumerate(linhas):
+            d.text((cx, base_y + 8 * S + li * 11 * S), linha, fill=(60, 60, 60), font=f_lab, anchor='ma')
+        y_linha = base_y - (g['acumulado_pct'] / 100) * plot_h
+        pontos.append((cx, y_linha))
+    d.line(pontos, fill=cor_linha, width=S)
+    for x, y in pontos:
+        r = 3.5 * S
+        d.ellipse([x - r, y - r, x + r, y + r], fill=cor_linha)
+    for pct in (0, 25, 50, 75, 100):
+        y = base_y - (pct / 100) * plot_h
+        d.text((W - pad_r + 6 * S, y), f'{pct}%', fill=(150, 150, 150), font=f_axis, anchor='lm')
     d.line([pad_l, pad_t, pad_l, base_y], fill=(170, 170, 170), width=S)
     d.line([pad_l, base_y, W - pad_r, base_y], fill=(170, 170, 170), width=S)
-    # legenda interna à direita, ordem prioridade 1/2/3 (como no laudo-modelo)
-    lx, ly = W - 150 * S, pad_t + 10 * S
-    for k, (chave, nome) in enumerate((('p1', 'prioridade 1'), ('p2', 'prioridade 2'), ('p3', 'prioridade 3'))):
-        y = ly + k * 22 * S
-        d.rectangle([lx, y, lx + 14 * S, y + 14 * S], fill=cores[chave])
-        d.text((lx + 20 * S, y + 7 * S), nome, fill=(60, 60, 60), font=f_lab, anchor='lm')
     img = img.resize((W // S, H // S), Image.LANCZOS)
     return _png_data_uri(img)
 
@@ -1825,21 +1868,50 @@ def _adicionar_graficos(ctx):
     return ctx
 
 
-def _graficos_relatorio_final(inspecao):
-    """Gera, como PNG data URI, os mesmos gráficos do Painel de Encerramento
-    (`inspecao_analise`/`_analise_data`) para embutir no PDF do Relatório Final —
-    este fluxo roda fora do navegador (sem Chart.js), por isso reaproveita as
-    funções PIL já usadas no laudo por especialidade/geral."""
+def _fmt_decimal(valor):
+    """1 casa decimal com vírgula (pt-BR) — mesmo formato do Painel de Encerramento."""
+    return f'{valor:.1f}'.replace('.', ',')
+
+
+def _painel_encerramento_relatorio(inspecao, especialidades):
+    """Reproduz, como HTML + imagens PNG, os painéis do Dashboard de
+    Encerramento (`_insights.html`) e da Análise geral (`analise.html`) — por
+    pedido do usuário, o Relatório Final usa os MESMOS gráficos/paineis já
+    existentes na plataforma, na mesma ordem em que aparecem lá, em vez de um
+    layout próprio só para o PDF. Roda fora do navegador (sem Chart.js), por
+    isso os gráficos viram imagem (PIL) e os cartões/tabelas viram HTML."""
     todos_achados = []
-    for esp in inspecao.especialidades.all():
+    for esp in especialidades:
         todos_achados.extend(list(esp.achados.all()))
     dados = _analise_data(todos_achados)
+    top_gut = [{
+        'localizacao': a.localizacao, 'verificacao': a.verificacao, 'gut_total': a.gut_total,
+    } for a in dados['top_gut']]
     return {
-        'risco': _grafico_rosca_risco(len(dados['p1']), len(dados['p2']), len(dados['p3'])),
-        'grupo_tecnico': _grafico_colunas_grupo_tecnico(dados['grupos']),
-        'prazo': _grafico_barras_prazo(dados['por_prazo']),
-        'requisitos': _grafico_barras_requisitos(dados['por_requisito']),
-        'direcionamento': _grafico_rosca_direcionamento(dados['por_direcionamento']),
+        'resumo_especialidade': _dados_gerais_snapshot(especialidades),
+        'total': dados['total'], 'total_nc': dados['total_nc'], 'total_conformes': dados['total_conformes'],
+        'gut_media': _fmt_decimal(dados['gut_media']), 'gut_max': dados['gut_max'],
+        'gut_min': dados['gut_min'], 'gut_desvio': _fmt_decimal(dados['gut_desvio']),
+        'iqe': dados['iqe'], 'iqe_faixa': dados['iqe_faixa'], 'pct_conformidade': dados['pct_conformidade'],
+        'g_media': _fmt_decimal(dados['g_media']), 'u_media': _fmt_decimal(dados['u_media']),
+        't_media': _fmt_decimal(dados['t_media']),
+        'por_direcionamento': dados['por_direcionamento'],
+        'matriz_risco_prazo': dados['matriz_risco_prazo'], 'matriz_prazos': dados['matriz_prazos'],
+        'n_incoerencias': dados['n_incoerencias'], 'n_ganhos_rapidos': dados['n_ganhos_rapidos'],
+        'por_localizacao': dados['por_localizacao'],
+        'p1_total': len(dados['p1']), 'p2_total': len(dados['p2']), 'p3_total': len(dados['p3']),
+        'top_gut': top_gut,
+        'img_risco': _grafico_rosca_risco(len(dados['p1']), len(dados['p2']), len(dados['p3'])),
+        'img_direcionamento': _grafico_rosca_direcionamento(dados['por_direcionamento']),
+        'img_pareto': _grafico_pareto_combo(dados['pareto']),
+        'img_concentracao_localizacao': _grafico_barras_horizontais([
+            (l['localizacao'], l['soma_gut'], (220, 53, 69), None) for l in dados['por_localizacao_gut'][:8]
+        ]),
+        'img_requisitos': _grafico_barras_requisitos(dados['por_requisito']),
+        'img_prazo': _grafico_barras_prazo(dados['por_prazo']),
+        'img_top_gut': _grafico_barras_horizontais([
+            (f"{a['localizacao']} — {a['verificacao']}", a['gut_total'], (220, 53, 69), None) for a in top_gut
+        ]),
     }
 
 

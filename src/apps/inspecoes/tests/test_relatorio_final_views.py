@@ -137,7 +137,11 @@ def test_snapshot_inclui_dados_gerais_iguais_ao_painel_de_encerramento(inspecao_
     assert gerais['total_conformes'] == 1
     assert gerais['p1'] == 1
     civil_gerais = next(e for e in gerais['por_especialidade'] if e['especialidade_nome'] == 'Engenharia Civil')
-    assert civil_gerais == {'especialidade_nome': 'Engenharia Civil', 'total': 2, 'total_nc': 1, 'p1': 1, 'p2': 0, 'p3': 0}
+    assert civil_gerais == {
+        'especialidade_nome': 'Engenharia Civil', 'profissionais': 'Ana Civil',
+        'data_inspecao': civil.data_inspecao.strftime('%d/%m/%Y'), 'status': 'Em andamento',
+        'total': 2, 'total_nc': 1, 'p1': 1, 'p2': 0, 'p3': 0,
+    }
 
 
 @pytest.mark.django_db
