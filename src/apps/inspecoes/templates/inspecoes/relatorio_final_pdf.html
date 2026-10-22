@@ -157,7 +157,7 @@
 
 {% for a in esp.achados_completos %}
 <div class="achado">
-  <div class="achado-titulo"><span style="color:#00ad00">4.{{ forloop.parentloop.counter }}.{{ forloop.counter }}</span> — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
+  <div class="achado-titulo">4.{{ forloop.parentloop.counter }}.{{ forloop.counter }} — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
   <div class="achado-meta">
     <span class="badge bp{{ a.prioridade_risco_num }}">{{ a.prioridade_risco }}</span>
     &nbsp;Índice GUT: <strong>{{ a.gut_total }}</strong>
