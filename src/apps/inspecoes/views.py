@@ -588,8 +588,10 @@ def relatorio_final_gerar(request, pk):
     # a nota em `_montar_contexto_pdf_com_fotos` sobre nunca trocar os dois.
     snapshot = _montar_snapshot_relatorio(inspecao, numero_versao)
     contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
+    graficos = _graficos_relatorio_final(inspecao)
     html = render_to_string('inspecoes/relatorio_final_pdf.html', {
         'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
+        'graficos': graficos,
     }, request=request)
     pdf_bytes = _gerar_pdf_bytes(html)
     if pdf_bytes is None:
@@ -1524,10 +1526,15 @@ def _fonte(tamanho):
     return ImageFont.load_default()
 
 
-def _grafico_rosca_risco(n1, n2, n3):
-    """Rosca (donut) com a distribuição de prioridades. Retorna data URI PNG ou None."""
+def _hex_rgb(hexstr):
+    hexstr = hexstr.lstrip('#')
+    return tuple(int(hexstr[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _grafico_rosca(valores, cores):
+    """Rosca (donut) genérica: `valores` e `cores` (RGB) paralelos. data URI PNG ou None."""
     from PIL import Image, ImageDraw
-    total = n1 + n2 + n3
+    total = sum(valores)
     if total == 0:
         return None
     S = 4
@@ -1537,7 +1544,7 @@ def _grafico_rosca_risco(n1, n2, n3):
     margem = 8 * S
     box = [margem, margem, size - margem, size - margem]
     ang = -90.0
-    for val, cor in ((n1, (204, 0, 0)), (n2, (204, 102, 0)), (n3, (0, 102, 0))):
+    for val, cor in zip(valores, cores):
         if val <= 0:
             continue
         fim = ang + (val / total) * 360.0
@@ -1549,6 +1556,19 @@ def _grafico_rosca_risco(n1, n2, n3):
     d.ellipse([c - r, c - r, c + r, c + r], fill='white')
     img = img.resize((340, 340), Image.LANCZOS)
     return _png_data_uri(img)
+
+
+def _grafico_rosca_risco(n1, n2, n3):
+    """Rosca (donut) com a distribuição de prioridades. Retorna data URI PNG ou None."""
+    return _grafico_rosca([n1, n2, n3], [(204, 0, 0), (204, 102, 0), (0, 102, 0)])
+
+
+def _grafico_rosca_direcionamento(por_direcionamento):
+    """Rosca (donut) com a distribuição por direcionamento (garantia/manutenção/nova
+    contratação) — mesmas cores do `chartDirecionamento` do painel de encerramento."""
+    valores = [d['total'] for d in por_direcionamento]
+    cores = [(111, 66, 193), (13, 202, 240), (255, 193, 7)]
+    return _grafico_rosca(valores, cores[:len(valores)])
 
 
 def _grafico_barras_prazo(por_prazo):
@@ -1582,6 +1602,54 @@ def _grafico_barras_prazo(por_prazo):
     return _png_data_uri(img)
 
 
+def _grafico_barras_horizontais(dados):
+    """Barras horizontais: `dados` = [(label, valor, cor_rgb, sufixo_ou_None), ...], já
+    filtrado (valor > 0). Preferível às barras verticais quando os rótulos são longos
+    (nomes de grupo técnico/requisito não cabem sob uma barra estreita)."""
+    from PIL import Image, ImageDraw
+    if not dados:
+        return None
+    S = 4
+    row_h = 30 * S
+    W = 560 * S
+    H = len(dados) * row_h + 20 * S
+    img = Image.new('RGB', (W, H), 'white')
+    d = ImageDraw.Draw(img)
+    f = _fonte(13 * S)
+    maxv = max(v for _, v, _, _ in dados) or 1
+    label_w = 200 * S
+    pad_r = 90 * S
+    plot_w = W - label_w - pad_r
+    for i, (lab, val, cor, sufixo) in enumerate(dados):
+        y0 = 10 * S + i * row_h
+        yc = y0 + row_h / 2
+        d.text((label_w - 8 * S, yc), lab, fill=(60, 60, 60), font=f, anchor='rm')
+        bw = (val / maxv) * plot_w
+        d.rectangle([label_w, y0 + 4 * S, label_w + bw, y0 + row_h - 4 * S], fill=cor)
+        d.text((label_w + bw + 6 * S, yc), f'{val}{sufixo or ""}', fill=(40, 40, 40), font=f, anchor='lm')
+    img = img.resize((W // S, H // S), Image.LANCZOS)
+    return _png_data_uri(img)
+
+
+def _grafico_barras_requisitos(por_requisito):
+    """Barras horizontais de NC por requisito de desempenho afetado, com as mesmas
+    cores do `chartRequisitos` do painel de encerramento. data URI PNG ou None."""
+    dados = [(r['label'], r['total'], _hex_rgb(r['color']), None) for r in por_requisito if r['total'] > 0]
+    return _grafico_barras_horizontais(dados)
+
+
+def _grafico_pareto(pareto):
+    """Barras horizontais de NC por grupo técnico, ordenadas como no Pareto 80/20
+    (`chartPareto`), com o percentual acumulado ao lado de cada barra — layout mais
+    legível em PDF do que o combo barra+linha do painel, que depende de rótulos
+    curtos sob cada barra. data URI PNG ou None."""
+    dados = [
+        (g['nome'], g['total'], (13, 110, 253), f" ({g['acumulado_pct']}% acum.)")
+        for g in pareto if g['total'] > 0
+    ]
+    return _grafico_barras_horizontais(dados)
+
+
 def _adicionar_graficos(ctx):
     """Acrescenta ao contexto as imagens dos gráficos (risco e prazo)."""
     ctx['grafico_risco_img'] = _grafico_rosca_risco(
@@ -1589,6 +1657,24 @@ def _adicionar_graficos(ctx):
     )
     ctx['grafico_prazo_img'] = _grafico_barras_prazo(ctx.get('por_prazo', []))
     return ctx
+
+
+def _graficos_relatorio_final(inspecao):
+    """Gera, como PNG data URI, os mesmos gráficos do Painel de Encerramento
+    (`inspecao_analise`/`_analise_data`) para embutir no PDF do Relatório Final —
+    este fluxo roda fora do navegador (sem Chart.js), por isso reaproveita as
+    funções PIL já usadas no laudo por especialidade/geral."""
+    todos_achados = []
+    for esp in inspecao.especialidades.all():
+        todos_achados.extend(list(esp.achados.all()))
+    dados = _analise_data(todos_achados)
+    return {
+        'risco': _grafico_rosca_risco(len(dados['p1']), len(dados['p2']), len(dados['p3'])),
+        'prazo': _grafico_barras_prazo(dados['por_prazo']),
+        'requisitos': _grafico_barras_requisitos(dados['por_requisito']),
+        'direcionamento': _grafico_rosca_direcionamento(dados['por_direcionamento']),
+        'pareto': _grafico_pareto(dados['pareto']),
+    }
 
 
 def _gerar_pdf(html_string, nome_arquivo):

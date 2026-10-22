@@ -118,10 +118,40 @@
   </tbody>
 </table>
 
-{# ── 3.x Achados por especialidade ─────────────────────────────────────────── #}
+{# ── 3. Gráficos (mesmos do Painel de Encerramento) ──────────────────────────── #}
+<div class="page-break"></div>
+<h2>3. Gráficos — Painel de Encerramento</h2>
+<table style="width:100%;border-collapse:collapse;margin-bottom:10pt">
+  <tr>
+    <td style="width:50%;vertical-align:top;padding-right:8pt;text-align:center">
+      <h3 style="margin-top:0">Grau de Risco</h3>
+      {% if graficos.risco %}<img src="{{ graficos.risco }}" style="width:170pt">{% else %}<p>Sem dados.</p>{% endif %}
+    </td>
+    <td style="width:50%;vertical-align:top;padding-left:8pt;text-align:center">
+      <h3 style="margin-top:0">Distribuição por Prazo</h3>
+      {% if graficos.prazo %}<img src="{{ graficos.prazo }}" style="width:100%">{% else %}<p>Sem dados.</p>{% endif %}
+    </td>
+  </tr>
+</table>
+<h3>Requisito de Desempenho Afetado</h3>
+{% if graficos.requisitos %}<div style="text-align:center"><img src="{{ graficos.requisitos }}" style="width:90%"></div>{% else %}<p>Sem dados.</p>{% endif %}
+<table style="width:100%;border-collapse:collapse;margin-top:10pt">
+  <tr>
+    <td style="width:40%;vertical-align:top;padding-right:8pt;text-align:center">
+      <h3 style="margin-top:0">Encaminhamento</h3>
+      {% if graficos.direcionamento %}<img src="{{ graficos.direcionamento }}" style="width:150pt">{% else %}<p>Sem dados.</p>{% endif %}
+    </td>
+    <td style="width:60%;vertical-align:top;padding-left:8pt;text-align:center">
+      <h3 style="margin-top:0">Pareto por Grupo Técnico (80/20)</h3>
+      {% if graficos.pareto %}<img src="{{ graficos.pareto }}" style="width:100%">{% else %}<p>Sem dados.</p>{% endif %}
+    </td>
+  </tr>
+</table>
+
+{# ── 4.x Achados por especialidade ─────────────────────────────────────────── #}
 {% for esp in snapshot.especialidades %}
 <div class="page-break"></div>
-<h2>3.{{ forloop.counter }} Achados — {{ esp.especialidade_nome }}</h2>
+<h2>4.{{ forloop.counter }} Achados — {{ esp.especialidade_nome }}</h2>
 
 {% for a in esp.achados_completos %}
 <div class="achado">
@@ -158,9 +188,9 @@
 <div class="conclusao-box">{{ esp.conclusao|linebreaks }}</div>
 {% endfor %}
 
-{# ── 4. Assinaturas ────────────────────────────────────────────────────────── #}
+{# ── 5. Assinaturas ────────────────────────────────────────────────────────── #}
 <div class="page-break"></div>
-<h2>4. Assinaturas</h2>
+<h2>5. Assinaturas</h2>
 {% for esp in snapshot.especialidades %}
 <h3>{{ esp.especialidade_nome }}</h3>
 {% for nome in esp.profissionais %}
