@@ -1,72 +1,165 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="pt-br">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
+<title>Relatório Final de Inspeção</title>
 <style>
-  body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #222; }
-  h1 { font-size: 16pt; }
-  h2 { font-size: 13pt; margin-top: 24px; border-bottom: 1px solid #999; padding-bottom: 4px; }
-  h3 { font-size: 11.5pt; margin-bottom: 2px; }
-  .achado { margin-bottom: 16px; page-break-inside: avoid; }
-  .achado-fotos img { width: 48%; margin-right: 2%; border: 1px solid #ccc; }
-  .conforme-linha { font-size: 9.5pt; color: #444; }
-  .assinatura { margin-top: 40px; page-break-inside: avoid; }
-  .assinatura-linha { border-top: 1px solid #333; width: 60%; margin-top: 36px; padding-top: 4px; }
+  @page {
+    size: A4;
+    margin: 1.8cm 1.5cm 2.2cm 1.5cm;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #222; line-height: 1.45; }
+  p { text-align: justify; margin: 0 0 8pt; }
+
+  h2 {
+    font-size: 10pt; font-weight: bold;
+    background: #003366; color: #fff;
+    padding: 4pt 8pt; margin: 16pt 0 8pt;
+  }
+  h3 { font-size: 9.5pt; font-weight: bold; margin: 10pt 0 4pt; color: #003366; }
+
+  table.dados { width: 100%; border-collapse: collapse; margin-bottom: 8pt; font-size: 8pt; }
+  table.dados th { background: #003366; color: #fff; padding: 3pt 5pt; text-align: left; font-size: 7.5pt; }
+  table.dados td { padding: 3pt 5pt; border-bottom: 0.5pt solid #ddd; vertical-align: top; }
+  table.dados tr.par td { background: #f4f6fb; }
+
+  .badge { display: inline; padding: 1pt 4pt; border-radius: 2pt; font-size: 7pt; font-weight: bold; color: #fff; }
+  .bp1 { background: #cc0000; }
+  .bp2 { background: #cc6600; }
+  .bp3 { background: #006600; }
+
+  .achado { margin-bottom: 14pt; padding: 8pt 10pt; border: 0.5pt solid #c0c8d8; page-break-inside: avoid; }
+  .achado-titulo { font-size: 9.5pt; font-weight: bold; color: #003366; margin-bottom: 3pt; }
+  .achado-meta { font-size: 8pt; color: #444; margin-bottom: 5pt; }
+  .achado-fotos { margin-top: 8pt; }
+  .achado-fotos table { width: 100%; border-collapse: collapse; }
+  .achado-fotos td.foto-cel { width: 100%; text-align: center; padding: 4pt 0; }
+  .achado-fotos .foto-legenda { font-size: 7.5pt; color: #666; margin-bottom: 2pt; }
+  .achado-fotos img { width: 70%; max-height: 260pt; border: 0.5pt solid #ccc; }
+
+  .conforme-linha { font-size: 8pt; color: #555; padding: 2pt 0; border-bottom: 0.5pt solid #eee; }
+
+  .conclusao-box { background: #f4f6fb; border: 0.5pt solid #c0c8d8; padding: 8pt 10pt; margin: 6pt 0 14pt; }
+
+  .assinatura { margin-top: 36pt; page-break-inside: avoid; }
+  .assinatura-linha { border-top: 0.5pt solid #333; width: 65%; margin-top: 30pt; padding-top: 4pt; font-size: 8.5pt; }
+
+  .page-break { page-break-before: always; }
 </style>
 </head>
 <body>
 
-<h1>Relatório Final de Inspeção — {{ inspecao.edificacao.nome }}</h1>
-<p>Versão {{ numero_versao }} — gerado em {% now "d/m/Y H:i" %}</p>
-
-<h2>1. Descritivo da edificação</h2>
-<p>{{ snapshot.edificacao_descritivo|linebreaks }}</p>
-{% if snapshot.edificacao_endereco %}<p>Endereço: {{ snapshot.edificacao_endereco }}</p>{% endif %}
-
-<h2>2. Dados gerais</h2>
-<p>
-  Total de itens verificados: {{ snapshot.dados_gerais.total_achados }} —
-  Não conformes: {{ snapshot.dados_gerais.total_nao_conformes }} —
-  Conformes: {{ snapshot.dados_gerais.total_conformes }}
-</p>
-<p>
-  Prioridade 1 (crítico): {{ snapshot.dados_gerais.p1 }} —
-  Prioridade 2 (regular): {{ snapshot.dados_gerais.p2 }} —
-  Prioridade 3 (mínimo): {{ snapshot.dados_gerais.p3 }}
-</p>
-<table border="1" cellpadding="4" style="border-collapse: collapse; width: 100%;">
-  <tr><th>Especialidade</th><th>Total</th><th>Não conformes</th><th>P1</th><th>P2</th><th>P3</th></tr>
-  {% for linha in snapshot.dados_gerais.por_especialidade %}
+{# ── Cabeçalho ──────────────────────────────────────────────────────────────── #}
+<table style="width:100%;border-collapse:collapse;margin-bottom:0">
   <tr>
-    <td>{{ linha.especialidade_nome }}</td><td>{{ linha.total }}</td><td>{{ linha.total_nc }}</td>
-    <td>{{ linha.p1 }}</td><td>{{ linha.p2 }}</td><td>{{ linha.p3 }}</td>
+    <td style="background:#003366;color:#fff;padding:10pt 14pt;text-align:center">
+      <span style="font-size:15pt;font-weight:bold;display:block;letter-spacing:1pt">RELATÓRIO FINAL DE INSPEÇÃO</span>
+      <span style="font-size:8.5pt;color:#b0c8e8;display:block;margin-top:2pt">MPDFT/SPO — LAUDO TÉCNICO DE INSPEÇÃO PREDIAL</span>
+    </td>
   </tr>
-  {% endfor %}
+</table>
+<table style="width:100%;border-collapse:collapse;margin-bottom:14pt;border:1pt solid #b0bec9">
+  <tr>
+    <td style="background:#e8edf5;padding:4pt 12pt;font-size:8pt;color:#333">
+      <strong>Edifício:</strong> {{ inspecao.edificacao.nome }}
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <strong>Versão:</strong> {{ numero_versao }}
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <strong>Gerado em:</strong> {% now "d/m/Y H:i" %}
+      {% if inspecao.edificacao.endereco %}
+      <br><strong>Endereço:</strong> {{ inspecao.edificacao.endereco }}
+      {% endif %}
+    </td>
+  </tr>
 </table>
 
+{# ── 1. Descritivo ─────────────────────────────────────────────────────────── #}
+<h2>1. Descritivo da edificação</h2>
+<p>{{ snapshot.edificacao_descritivo|linebreaks }}</p>
+
+{# ── 2. Dados gerais ───────────────────────────────────────────────────────── #}
+<h2>2. Dados gerais</h2>
+<table style="width:100%;border-collapse:collapse;margin-bottom:10pt">
+  <tr>
+    <td style="width:25%;background:#dbeafe;border:1pt solid #93c5fd;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#1d4ed8;display:block">Total verificado</span>
+      <span style="font-size:18pt;font-weight:bold;color:#1d4ed8;display:block">{{ snapshot.dados_gerais.total_achados }}</span>
+    </td>
+    <td style="width:25%;background:#fee2e2;border:1pt solid #fca5a5;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#b91c1c;display:block">Não conformes</span>
+      <span style="font-size:18pt;font-weight:bold;color:#b91c1c;display:block">{{ snapshot.dados_gerais.total_nao_conformes }}</span>
+    </td>
+    <td style="width:25%;background:#dcfce7;border:1pt solid #86efac;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#15803d;display:block">Conformes</span>
+      <span style="font-size:18pt;font-weight:bold;color:#15803d;display:block">{{ snapshot.dados_gerais.total_conformes }}</span>
+    </td>
+    <td style="width:25%;background:#f4f6fb;border:1pt solid #c0c8d8;padding:8pt;text-align:center">
+      <span style="font-size:7pt;color:#555;display:block">P1 / P2 / P3</span>
+      <span style="font-size:14pt;font-weight:bold;color:#333;display:block">{{ snapshot.dados_gerais.p1 }} / {{ snapshot.dados_gerais.p2 }} / {{ snapshot.dados_gerais.p3 }}</span>
+    </td>
+  </tr>
+</table>
+<table class="dados">
+  <thead>
+    <tr><th>Especialidade</th><th style="text-align:center">Total</th><th style="text-align:center">Não conformes</th><th style="text-align:center">P1</th><th style="text-align:center">P2</th><th style="text-align:center">P3</th></tr>
+  </thead>
+  <tbody>
+    {% for linha in snapshot.dados_gerais.por_especialidade %}
+    <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
+      <td>{{ linha.especialidade_nome }}</td>
+      <td style="text-align:center">{{ linha.total }}</td>
+      <td style="text-align:center">{{ linha.total_nc }}</td>
+      <td style="text-align:center">{% if linha.p1 %}<span class="badge bp1">{{ linha.p1 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center">{% if linha.p2 %}<span class="badge bp2">{{ linha.p2 }}</span>{% else %}—{% endif %}</td>
+      <td style="text-align:center">{% if linha.p3 %}<span class="badge bp3">{{ linha.p3 }}</span>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ── 3.x Achados por especialidade ─────────────────────────────────────────── #}
 {% for esp in snapshot.especialidades %}
+<div class="page-break"></div>
 <h2>3.{{ forloop.counter }} Achados — {{ esp.especialidade_nome }}</h2>
 
 {% for a in esp.achados_completos %}
 <div class="achado">
-  <h3>{{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</h3>
-  <p>{{ a.descricao_nao_conformidade }}</p>
-  <p><strong>GUT:</strong> {{ a.gut_total }} — <strong>Prioridade:</strong> {{ a.prioridade_risco }}</p>
-  {% if a.recomendacao %}<p><strong>Recomendação:</strong> {{ a.recomendacao }}</p>{% endif %}
-  <div class="achado-fotos">
-    {% for foto_data_uri in a.fotos %}<img src="{{ foto_data_uri }}">{% endfor %}
+  <div class="achado-titulo">{{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
+  <div class="achado-meta">
+    <span class="badge bp{{ a.prioridade_risco_num }}">{{ a.prioridade_risco }}</span>
+    &nbsp;Índice GUT: <strong>{{ a.gut_total }}</strong>
   </div>
+  <p>{{ a.descricao_nao_conformidade }}</p>
+  {% if a.recomendacao %}<p><strong>Recomendação:</strong> {{ a.recomendacao }}</p>{% endif %}
+  {% if a.fotos %}
+  <div class="achado-fotos">
+    <table>
+      {% for foto_data_uri in a.fotos %}
+      <tr><td class="foto-cel">
+        <div class="foto-legenda">Foto {{ forloop.counter }}</div>
+        <img src="{{ foto_data_uri }}">
+      </td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
 </div>
 {% endfor %}
 
+{% if esp.achados_resumidos %}
+<h3>Itens em conformidade</h3>
 {% for a in esp.achados_resumidos %}
-<p class="conforme-linha">{{ a.localizacao }} — {{ a.verificacao }} — conforme</p>
+<div class="conforme-linha">{{ a.localizacao }} — {{ a.verificacao }}</div>
 {% endfor %}
+{% endif %}
 
 <h3>Conclusão e direcionamentos</h3>
-<p>{{ esp.conclusao|linebreaks }}</p>
+<div class="conclusao-box">{{ esp.conclusao|linebreaks }}</div>
 {% endfor %}
 
+{# ── 4. Assinaturas ────────────────────────────────────────────────────────── #}
+<div class="page-break"></div>
 <h2>4. Assinaturas</h2>
 {% for esp in snapshot.especialidades %}
 <h3>{{ esp.especialidade_nome }}</h3>
@@ -76,6 +169,14 @@
 </div>
 {% endfor %}
 {% endfor %}
+
+<table style="width:100%;border-collapse:collapse;margin-top:18pt">
+  <tr>
+    <td style="border-top:1pt solid #ccc;padding-top:5pt;text-align:center;font-size:7pt;color:#888">
+      Relatório Final de Inspeção gerado pelo Sistema de Inspeções Prediais — MPDFT/SPO — versão {{ numero_versao }}
+    </td>
+  </tr>
+</table>
 
 </body>
 </html>

@@ -371,6 +371,7 @@ def _montar_snapshot_relatorio(inspecao, numero_versao):
                     'descricao_nao_conformidade': achado.descricao_nao_conformidade,
                     'gut_total': achado.gut_total,
                     'prioridade_risco': achado.get_prioridade_risco_display(),
+                    'prioridade_risco_num': achado.prioridade_risco,
                     'recomendacao': achado.recomendacao,
                     'fotos': caminhos_fotos,
                 })
