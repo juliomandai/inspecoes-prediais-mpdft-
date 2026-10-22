@@ -354,14 +354,34 @@ def _montar_snapshot_relatorio(inspecao, numero_versao):
     geração do Relatório Final — ver ADR-03. Inclui os dados gerais
     (mesmos números do painel de encerramento) e, por especialidade,
     achados completos (não conformes, com fotos copiadas) e resumidos
-    (conformes, sem foto)."""
+    (conformes, sem foto). `anexo01` é a planilha com TODOS os itens
+    verificados (conformes e não conformes, sem foto) — formato do laudo-
+    modelo MPDFT/SPO, numeração sequencial contínua entre especialidades."""
     edificacao = inspecao.edificacao
     especialidades = list(inspecao.especialidades.all())
     especialidades_data = []
+    anexo01 = []
+    grupo_labels = dict(Achado.GRUPO_TECNICO_CHOICES)
+    prazo_labels = dict(Achado.PRAZO_CHOICES)
     for esp in especialidades:
         achados_completos = []
         achados_resumidos = []
         for achado in esp.achados.all():
+            anexo01.append({
+                'numero': len(anexo01) + 1,
+                'especialidade_nome': esp.get_especialidade_display(),
+                'localizacao': achado.localizacao,
+                'sub_localizacao': achado.sub_localizacao,
+                'grupo_tecnico_nome': grupo_labels.get(achado.grupo_tecnico, achado.grupo_tecnico),
+                'verificacao': achado.verificacao,
+                'situacao': 'Conforme' if achado.gut_total == 0 else 'Não conforme',
+                'descricao_nao_conformidade': achado.descricao_nao_conformidade,
+                'recomendacao': achado.recomendacao,
+                'prioridade_risco': achado.get_prioridade_risco_display(),
+                'prioridade_risco_num': achado.prioridade_risco,
+                'gut_total': achado.gut_total,
+                'prazo_label': prazo_labels.get(achado.prazo_meses, f'{achado.prazo_meses} meses') if achado.gut_total else '',
+            })
             if achado.gut_total > 0:
                 fotos = list(achado.fotos.order_by('data_upload')[:2])
                 caminhos_fotos = _copiar_fotos_para_relatorio(inspecao.pk, numero_versao, achado, fotos)
@@ -381,21 +401,29 @@ def _montar_snapshot_relatorio(inspecao, numero_versao):
                     'localizacao': achado.localizacao,
                     'verificacao': achado.verificacao,
                 })
+        titulo_profissional = {
+            'civil': 'Engenheiro civil', 'eletrica': 'Engenheiro eletricista', 'mecanica': 'Engenheiro mecânico',
+        }.get(esp.especialidade, esp.get_especialidade_display())
         especialidades_data.append({
             'especialidade': esp.especialidade,
             'especialidade_nome': esp.get_especialidade_display(),
+            'titulo_profissional': titulo_profissional,
             'profissionais': esp.profissionais_lista,
+            'data_inspecao': esp.data_inspecao.isoformat(),
             'conclusao': esp.conclusao,
             'achados_completos': achados_completos,
             'achados_resumidos': achados_resumidos,
         })
+    datas_vistorias = sorted({esp.data_inspecao for esp in especialidades})
     return {
         'edificacao_nome': edificacao.nome,
         'edificacao_endereco': edificacao.endereco,
         'edificacao_descritivo': edificacao.descritivo,
         'inspecao_criada_em': inspecao.criado_em.isoformat(),
+        'datas_vistorias': [d.strftime('%d/%m') for d in datas_vistorias],
         'dados_gerais': _dados_gerais_snapshot(especialidades),
         'especialidades': especialidades_data,
+        'anexo01': anexo01,
     }
 
 
@@ -593,8 +621,13 @@ def relatorio_final_gerar(request, pk):
     html = render_to_string('inspecoes/relatorio_final_pdf.html', {
         'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
         'graficos': graficos, 'logo_mpdft': _logo_mpdft_data_uri(),
+        'fontes_css': _fontes_pdf_css(),
     }, request=request)
     pdf_bytes = _gerar_pdf_bytes(html)
+    if pdf_bytes is not None:
+        gerado_em = timezone.now()
+        titulo = f'Laudo Técnico de Inspeção Predial — {inspecao.edificacao.nome}'
+        pdf_bytes = _aplicar_metadados_pdf(pdf_bytes, titulo, numero_versao, gerado_em)
     if pdf_bytes is None:
         # `_montar_snapshot_relatorio` já copiou as fotos para
         # relatorios/<pk>/v<numero_versao>/... antes de sabermos que o PDF
@@ -1529,6 +1562,87 @@ def _logo_mpdft_data_uri():
     return 'data:image/png;base64,' + base64.b64encode(dados).decode()
 
 
+_FONTES_PDF_CORRIGIDAS = False
+
+
+def _corrigir_bug_tempfile_fontes_windows():
+    """`xhtml2pdf.files.BaseFile.get_named_tmp_file` grava a fonte num
+    `tempfile.NamedTemporaryFile` e mantém esse handle aberto; o reportlab
+    então tenta reabrir o mesmo arquivo pelo nome para ler os bytes — no
+    Windows isso é negado (`PermissionError`), então nenhuma fonte real via
+    `@font-face` carrega (nem por caminho local, nem por data URI base64).
+    Substitui só esse método por uma versão que fecha o arquivo antes de
+    devolver o nome (padrão seguro de temp file no Windows). Idempotente —
+    chamada a cada geração de PDF, mas só corrige uma vez por processo."""
+    global _FONTES_PDF_CORRIGIDAS
+    if _FONTES_PDF_CORRIGIDAS:
+        return
+    import tempfile
+    from xhtml2pdf import files as xh_files
+
+    def _get_named_tmp_file_corrigido(self):
+        dados = self.get_data()
+        tmp = tempfile.NamedTemporaryFile(suffix=self.suffix, delete=False)
+        if dados:
+            tmp.write(dados)
+        tmp.close()
+        if self.path is None:
+            self.path = tmp.name
+        return tmp
+
+    xh_files.BaseFile.get_named_tmp_file = _get_named_tmp_file_corrigido
+    _FONTES_PDF_CORRIGIDAS = True
+
+
+@functools.lru_cache(maxsize=1)
+def _fontes_pdf_css():
+    """Regras @font-face com Arial/Arial Narrow/Calibri reais (embutidas como
+    data URI base64 — mesmo motivo do `_logo_mpdft_data_uri`), para o
+    Relatório Final usar as fontes do laudo-modelo em vez do Helvetica
+    genérico que o xhtml2pdf usa por padrão para "Arial" no CSS. Lida apenas
+    com os .ttf do Windows (ambiente de produção — ver `_fonte` acima); se
+    não encontrar, devolve string vazia e o PDF cai no Helvetica/Times
+    genéricos sem quebrar a geração em outros ambientes (ex. CI em Linux)."""
+    base = 'C:/Windows/Fonts/'
+    familias = {
+        'Arial': [('normal', 'normal', 'arial.ttf'), ('bold', 'normal', 'arialbd.ttf'),
+                   ('normal', 'italic', 'ariali.ttf'), ('bold', 'italic', 'arialbi.ttf')],
+        'Arial Narrow': [('normal', 'normal', 'ARIALN.TTF'), ('bold', 'normal', 'ARIALNB.TTF')],
+        'Calibri': [('normal', 'normal', 'calibri.ttf'), ('bold', 'normal', 'calibrib.ttf')],
+    }
+    regras = []
+    for familia, variantes in familias.items():
+        for peso, estilo, arquivo in variantes:
+            caminho = base + arquivo
+            if not os.path.exists(caminho):
+                continue
+            with open(caminho, 'rb') as f:
+                b64 = base64.b64encode(f.read()).decode()
+            regras.append(
+                f'@font-face {{ font-family: "{familia}"; font-weight: {peso}; '
+                f'font-style: {estilo}; src: url(data:font/ttf;base64,{b64}); }}'
+            )
+    return '\n'.join(regras)
+
+
+def _aplicar_metadados_pdf(pdf_bytes, titulo, versao, gerado_em):
+    """Move "Versão N — gerado em ..." do corpo visível do laudo para os
+    metadados do PDF (título/assunto) — o modelo de laudo do MPDFT/SPO não
+    mostra essa linha no corpo. Usa `pypdf` (já uma dependência transitiva
+    nesta base), sem precisar de link_callback nem reescrever o HTML."""
+    from pypdf import PdfReader, PdfWriter
+    leitor = PdfReader(io.BytesIO(pdf_bytes))
+    escritor = PdfWriter()
+    escritor.append(leitor)
+    escritor.add_metadata({
+        '/Title': titulo,
+        '/Subject': f'Versão {versao} — gerado em {gerado_em:%d/%m/%Y %H:%M}',
+    })
+    buf = io.BytesIO()
+    escritor.write(buf)
+    return buf.getvalue()
+
+
 def _fonte(tamanho):
     from PIL import ImageFont
     for caminho in ('C:/Windows/Fonts/arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'):
@@ -1651,16 +1765,55 @@ def _grafico_barras_requisitos(por_requisito):
     return _grafico_barras_horizontais(dados)
 
 
-def _grafico_pareto(pareto):
-    """Barras horizontais de NC por grupo técnico, ordenadas como no Pareto 80/20
-    (`chartPareto`), com o percentual acumulado ao lado de cada barra — layout mais
-    legível em PDF do que o combo barra+linha do painel, que depende de rótulos
-    curtos sob cada barra. data URI PNG ou None."""
-    dados = [
-        (g['nome'], g['total'], (13, 110, 253), f" ({g['acumulado_pct']}% acum.)")
-        for g in pareto if g['total'] > 0
-    ]
-    return _grafico_barras_horizontais(dados)
+def _grafico_colunas_grupo_tecnico(grupos):
+    """Colunas agrupadas por grupo técnico, 3 séries (P1/P2/P3) lado a lado —
+    gráfico 2 do Relatório Final (laudo-modelo MPDFT/SPO), com rótulos de
+    dados, legenda e eixo X rotacionado 45° para nomes longos de grupo
+    técnico. Cores e fundo creme (#FFFFF2) amostrados do laudo-modelo.
+    data URI PNG ou None."""
+    from PIL import Image, ImageDraw
+    dados = [g for g in grupos if g['total'] > 0]
+    if not dados:
+        return None
+    S = 4
+    W, H = 580 * S, 330 * S
+    img = Image.new('RGB', (W, H), (255, 255, 242))
+    d = ImageDraw.Draw(img)
+    f = _fonte(11 * S)
+    f_lab = _fonte(10 * S)
+    cores = {'p1': (204, 0, 0), 'p2': (204, 102, 0), 'p3': (0, 102, 0)}
+    maxv = max(max(g['p1'], g['p2'], g['p3']) for g in dados) or 1
+    pad_l, pad_b, pad_t, pad_r = 36 * S, 70 * S, 16 * S, 16 * S
+    plot_w = W - pad_l - pad_r
+    plot_h = H - pad_b - pad_t
+    base_y = pad_t + plot_h
+    gap = plot_w / len(dados)
+    bw = gap * 0.24
+    for i, g in enumerate(dados):
+        cx = pad_l + i * gap + gap / 2
+        for j, chave in enumerate(('p1', 'p2', 'p3')):
+            val = g[chave]
+            x = cx + (j - 1) * (bw + 4 * S) - bw / 2
+            bh = (val / maxv) * plot_h
+            d.rectangle([x, base_y - bh, x + bw, base_y], fill=cores[chave])
+            if val:
+                d.text((x + bw / 2, base_y - bh - 4 * S), str(val), fill=(60, 60, 60), font=f_lab, anchor='mb')
+        # rótulo do grupo técnico, rotacionado 45°
+        label_img = Image.new('RGBA', (220 * S, 40 * S), (255, 255, 242, 0))
+        ld = ImageDraw.Draw(label_img)
+        ld.text((0, 0), g['nome'], fill=(60, 60, 60), font=f, anchor='lm')
+        label_img = label_img.rotate(45, expand=True, resample=Image.BICUBIC)
+        img.paste(label_img, (int(cx - label_img.width * 0.15), int(base_y + 4 * S)), label_img)
+    d.line([pad_l, pad_t, pad_l, base_y], fill=(170, 170, 170), width=S)
+    d.line([pad_l, base_y, W - pad_r, base_y], fill=(170, 170, 170), width=S)
+    # legenda interna à direita, ordem prioridade 1/2/3 (como no laudo-modelo)
+    lx, ly = W - 150 * S, pad_t + 10 * S
+    for k, (chave, nome) in enumerate((('p1', 'prioridade 1'), ('p2', 'prioridade 2'), ('p3', 'prioridade 3'))):
+        y = ly + k * 22 * S
+        d.rectangle([lx, y, lx + 14 * S, y + 14 * S], fill=cores[chave])
+        d.text((lx + 20 * S, y + 7 * S), nome, fill=(60, 60, 60), font=f_lab, anchor='lm')
+    img = img.resize((W // S, H // S), Image.LANCZOS)
+    return _png_data_uri(img)
 
 
 def _adicionar_graficos(ctx):
@@ -1683,15 +1836,16 @@ def _graficos_relatorio_final(inspecao):
     dados = _analise_data(todos_achados)
     return {
         'risco': _grafico_rosca_risco(len(dados['p1']), len(dados['p2']), len(dados['p3'])),
+        'grupo_tecnico': _grafico_colunas_grupo_tecnico(dados['grupos']),
         'prazo': _grafico_barras_prazo(dados['por_prazo']),
         'requisitos': _grafico_barras_requisitos(dados['por_requisito']),
         'direcionamento': _grafico_rosca_direcionamento(dados['por_direcionamento']),
-        'pareto': _grafico_pareto(dados['pareto']),
     }
 
 
 def _gerar_pdf(html_string, nome_arquivo):
     from xhtml2pdf import pisa
+    _corrigir_bug_tempfile_fontes_windows()
     buffer = io.BytesIO()
     result = pisa.pisaDocument(io.BytesIO(html_string.encode('utf-8')), buffer, encoding='utf-8')
     if result.err:
@@ -1706,6 +1860,7 @@ def _gerar_pdf_bytes(html_string):
     HttpResponse — usado quando o PDF precisa ser salvo num FileField
     (RelatorioFinalInspecao), não só servido para download direto."""
     from xhtml2pdf import pisa
+    _corrigir_bug_tempfile_fontes_windows()
     buffer = io.BytesIO()
     result = pisa.pisaDocument(io.BytesIO(html_string.encode('utf-8')), buffer, encoding='utf-8')
     if result.err:

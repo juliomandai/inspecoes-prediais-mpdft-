@@ -2,27 +2,77 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Relatório Final de Inspeção</title>
+<title>Laudo Técnico de Inspeção Predial</title>
 <style>
+  {{ fontes_css|safe }}
+
   @page {
-    size: A4;
-    margin: 1.8cm 1.5cm 2.2cm 1.5cm;
+    size: A4 portrait;
+    margin: 1.1cm 1.8cm 1.6cm 1.8cm;
+    @frame footer_frame {
+      -pdf-frame-content: footer_content;
+      bottom: 0.6cm; left: 1.8cm; right: 1.8cm; height: 1cm;
+    }
   }
+  @page main {
+    size: A4 portrait;
+    margin: 2.4cm 1.8cm 1.6cm 1.8cm;
+    @frame header_frame {
+      -pdf-frame-content: header_content;
+      top: 0.5cm; left: 1.8cm; right: 1.8cm; height: 1.8cm;
+    }
+    @frame footer_frame {
+      -pdf-frame-content: footer_content;
+      bottom: 0.6cm; left: 1.8cm; right: 1.8cm; height: 1cm;
+    }
+  }
+  @page anexo {
+    size: A4 landscape;
+    margin: 2.4cm 1.3cm 1.6cm 1.3cm;
+    @frame header_frame {
+      -pdf-frame-content: header_content;
+      top: 0.5cm; left: 1.3cm; right: 1.3cm; height: 1.8cm;
+    }
+    @frame footer_frame {
+      -pdf-frame-content: footer_content;
+      bottom: 0.6cm; left: 1.3cm; right: 1.3cm; height: 1cm;
+    }
+  }
+
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #222; line-height: 1.45; }
-  p { text-align: justify; margin: 0 0 8pt; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12pt; color: #000; line-height: 1.5; }
+  p { text-align: justify; margin: 0 0 12pt; }
+  p.p-estatico { text-indent: 71pt; }
+  p.p-dinamico { text-indent: 0; }
 
   h2 {
-    font-size: 10pt; font-weight: bold; font-style: italic;
+    font-size: 12pt; font-weight: bold; font-style: italic;
     background: #00ad00; color: #000;
-    padding: 4pt 8pt; margin: 16pt 0 8pt;
+    padding: 3pt 8pt; margin: 0 0 20pt;
   }
-  h3 { font-size: 9.5pt; font-weight: bold; margin: 10pt 0 4pt; color: #003366; }
+  h3 { font-size: 12pt; font-weight: bold; margin: 10pt 0 4pt; color: #000; }
 
-  table.dados { width: 100%; border-collapse: collapse; margin-bottom: 8pt; font-size: 8pt; }
-  table.dados th { background: #003366; color: #fff; padding: 3pt 5pt; text-align: left; font-size: 7.5pt; }
-  table.dados td { padding: 3pt 5pt; border-bottom: 0.5pt solid #ddd; vertical-align: top; }
-  table.dados tr.par td { background: #f4f6fb; }
+  .preencher { background: #ffff00; padding: 2pt 5pt; font-weight: bold; }
+
+  {% comment %}
+  <ul>/<li> sempre desenham o marcador nativo neste renderizador, mesmo com
+  list-style:none — por isso as "listas" do laudo usam <div>, sem <li>.
+  {% endcomment %}
+  .item-respons, .item-anexo { margin: 0 0 8pt 107pt; text-indent: -18pt; font-weight: bold; }
+  .item-anexo { font-weight: normal; }
+  .item-obras { margin: 0 0 6pt 36pt; text-indent: -18pt; font-weight: normal; }
+
+  .tabela-gut, .tabela-doc, .tabela-anexo01 { width: 100%; border-collapse: collapse; margin: 10pt 0 14pt; }
+  .tabela-gut th, .tabela-gut td { border: 0.5pt solid #ddd; padding: 6pt; font-size: 11pt; text-align: justify; vertical-align: top; }
+  .tabela-gut th { background: #f1f2f1; font-weight: bold; text-align: left; }
+
+  .tabela-doc { font-family: "Arial Narrow", Arial, sans-serif; font-size: 9pt; }
+  .tabela-doc th, .tabela-doc td { border: 0.5pt solid #000; padding: 5pt; vertical-align: top; }
+  .tabela-doc th { background: #d0d0d0; font-weight: bold; text-transform: uppercase; }
+
+  .tabela-anexo01 { font-size: 7.5pt; table-layout: fixed; }
+  .tabela-anexo01 th, .tabela-anexo01 td { border: 0.5pt solid #000; padding: 4pt; vertical-align: top; overflow: hidden; }
+  .tabela-anexo01 th { background: #d0d0d0; font-weight: bold; text-align: left; }
 
   .badge { display: inline; padding: 1pt 4pt; border-radius: 2pt; font-size: 7pt; font-weight: bold; color: #fff; }
   .bp1 { background: #cc0000; }
@@ -30,134 +80,203 @@
   .bp3 { background: #006600; }
 
   .achado { margin-bottom: 14pt; padding: 8pt 10pt; border: 0.5pt solid #c0c8d8; page-break-inside: avoid; }
-  .achado-titulo { font-size: 9.5pt; font-weight: bold; color: #003366; margin-bottom: 3pt; }
-  .achado-meta { font-size: 8pt; color: #444; margin-bottom: 5pt; }
+  .achado-titulo { font-size: 11pt; font-weight: bold; color: #003366; margin-bottom: 3pt; }
+  .achado-meta { font-size: 9pt; color: #444; margin-bottom: 5pt; }
+  .achado p { font-size: 10.5pt; text-indent: 0; }
   .achado-fotos { margin-top: 8pt; }
   .achado-fotos table { width: 100%; border-collapse: collapse; }
   .achado-fotos td.foto-cel { width: 50%; text-align: center; padding: 0 6pt 6pt; vertical-align: top; }
   .achado-fotos .foto-legenda { font-size: 7.5pt; color: #666; margin-top: 3pt; }
   .achado-fotos img { width: 100%; border: 0.5pt solid #ccc; }
 
-  .conforme-linha { font-size: 8pt; color: #555; padding: 2pt 0; border-bottom: 0.5pt solid #eee; }
+  .conforme-linha { font-size: 9pt; color: #555; padding: 2pt 0; border-bottom: 0.5pt solid #eee; }
 
-  .conclusao-box { background: #f4f6fb; border: 0.5pt solid #c0c8d8; padding: 8pt 10pt; margin: 6pt 0 14pt; }
+  .conclusao-box p { text-indent: 0; }
 
   .assinatura { margin-top: 36pt; page-break-inside: avoid; }
-  .assinatura-linha { border-top: 0.5pt solid #333; width: 65%; margin-top: 30pt; padding-top: 4pt; font-size: 8.5pt; }
+  .assinatura-linha { border-top: 0.5pt solid #333; width: 65%; margin-top: 30pt; padding-top: 4pt; font-size: 11pt; font-weight: bold; }
+  .assinatura-crea { font-size: 9.5pt; font-weight: normal; }
 
   .page-break { page-break-before: always; }
+
+  #header_content table { width: 100%; border-collapse: collapse; }
+  #header_content img { height: 43pt; }
+  #header_content .orgao { font-size: 9pt; font-weight: bold; line-height: 1.35; padding-left: 10pt; }
+  #footer_content { text-align: center; font-size: 10pt; }
 </style>
 </head>
 <body>
 
-{# ── Cabeçalho (mesma formatação do modelo de laudo do MPDFT/SPO) ────────────── #}
+<div id="header_content">
+  <table>
+    <tr>
+      <td style="width:100pt"><img src="{{ logo_mpdft }}"></td>
+      <td class="orgao">
+        MINISTÉRIO PÚBLICO DA UNIÃO<br>
+        MINISTÉRIO PÚBLICO DO DISTRITO FEDERAL E TERRITÓRIOS<br>
+        SECRETARIA DE PROJETOS E OBRAS<br>
+        SUBSECRETARIA DE FISCALIZAÇÃO DE OBRAS E REFORMAS
+      </td>
+    </tr>
+  </table>
+</div>
+<div id="footer_content">LAUDO DE INSPEÇÃO PREDIAL</div>
+
+{# ── Capa (página 1, sem cabeçalho corrente) ─────────────────────────────── #}
 <table style="width:100%;border-collapse:collapse;margin-bottom:0">
   <tr><td style="text-align:center;padding:6pt 0 4pt">
     <img src="{{ logo_mpdft }}" style="height:46pt">
   </td></tr>
-  <tr><td style="text-align:center;font-size:10pt;font-weight:bold;line-height:1.6;padding-bottom:10pt">
+  <tr><td style="text-align:center;font-size:14pt;font-weight:bold;line-height:1.6;padding-bottom:10pt;font-family:Calibri,Arial,sans-serif">
     MINISTÉRIO PÚBLICO DA UNIÃO<br>
     MINISTÉRIO PÚBLICO DO DISTRITO FEDERAL E TERRITÓRIOS<br>
     SECRETARIA DE PROJETOS E OBRAS
   </td></tr>
-  <tr><td style="text-align:center;font-size:15pt;font-weight:bold;padding:4pt 0 10pt">
-    RELATÓRIO FINAL DE INSPEÇÃO
+  <tr><td style="text-align:center;font-size:16pt;font-weight:bold;padding:4pt 0 14pt">
+    LAUDO TÉCNICO DE INSPEÇÃO PREDIAL
   </td></tr>
-  <tr><td style="text-align:center;font-size:10pt;font-weight:bold;padding-bottom:4pt">
+  <tr><td style="text-align:center;font-size:12pt;font-weight:bold;padding-bottom:8pt">
     Edifício: {{ inspecao.edificacao.nome }}
   </td></tr>
   {% if inspecao.edificacao.endereco %}
-  <tr><td style="text-align:center;font-size:9pt;padding-bottom:4pt">
+  <tr><td style="text-align:center;font-size:12pt;padding-bottom:4pt">
     Endereço: {{ inspecao.edificacao.endereco }}
   </td></tr>
   {% endif %}
-  <tr><td style="text-align:center;font-size:8pt;color:#666;padding-bottom:10pt">
-    Versão {{ numero_versao }} — gerado em {% now "d/m/Y H:i" %}
-  </td></tr>
 </table>
 
-{# ── 1. Descritivo ─────────────────────────────────────────────────────────── #}
-<h2>1. Descritivo da edificação</h2>
-<p>{{ snapshot.edificacao_descritivo|linebreaks }}</p>
+{# ── 1. Informações iniciais e escopo ────────────────────────────────────── #}
+<h2>1. Informações iniciais e escopo:</h2>
 
-{# ── 2. Dados gerais ───────────────────────────────────────────────────────── #}
-<h2>2. Dados gerais</h2>
-<table style="width:100%;border-collapse:collapse;margin-bottom:10pt">
-  <tr>
-    <td style="width:25%;background:#dbeafe;border:1pt solid #93c5fd;padding:8pt;text-align:center">
-      <span style="font-size:7pt;color:#1d4ed8;display:block">Total verificado</span>
-      <span style="font-size:18pt;font-weight:bold;color:#1d4ed8;display:block">{{ snapshot.dados_gerais.total_achados }}</span>
-    </td>
-    <td style="width:25%;background:#fee2e2;border:1pt solid #fca5a5;padding:8pt;text-align:center">
-      <span style="font-size:7pt;color:#b91c1c;display:block">Não conformes</span>
-      <span style="font-size:18pt;font-weight:bold;color:#b91c1c;display:block">{{ snapshot.dados_gerais.total_nao_conformes }}</span>
-    </td>
-    <td style="width:25%;background:#dcfce7;border:1pt solid #86efac;padding:8pt;text-align:center">
-      <span style="font-size:7pt;color:#15803d;display:block">Conformes</span>
-      <span style="font-size:18pt;font-weight:bold;color:#15803d;display:block">{{ snapshot.dados_gerais.total_conformes }}</span>
-    </td>
-    <td style="width:25%;background:#f4f6fb;border:1pt solid #c0c8d8;padding:8pt;text-align:center">
-      <span style="font-size:7pt;color:#555;display:block">P1 / P2 / P3</span>
-      <span style="font-size:14pt;font-weight:bold;color:#333;display:block">{{ snapshot.dados_gerais.p1 }} / {{ snapshot.dados_gerais.p2 }} / {{ snapshot.dados_gerais.p3 }}</span>
-    </td>
-  </tr>
-</table>
-<table class="dados">
+<p class="p-estatico">O presente Laudo técnico de Inspeção Predial tem a finalidade de avaliar
+e registrar tecnicamente as condições de conservação e funcionalidade dos
+componentes da edificação, além de servir de referência para manutenções
+preventivas e corretivas.</p>
+
+<p class="p-estatico">Em consonância com a Doutrina da Engenharia Diagnóstica, a Inspeção
+Predial configura-se como ferramenta essencial para <strong>identificar</strong>, de forma
+abrangente, as <strong>não conformidades</strong> relacionadas às boas práticas e às normas
+técnicas vigentes. Essa atividade técnica procede à <strong>análise do risco</strong> associado às
+inconformidades detectadas e apresenta <strong>recomendações técnicas</strong> objetivas e
+sucintas. Assim, a Inspeção Predial tem como propósito último funcionar como um
+<strong>check-up da edificação</strong>.</p>
+
+<p class="p-estatico">Para elaboração desse laudo foram observados normativos do IBAPE
+(Instituto Brasileiro de Avaliações e Perícias em Engenharia) e da ABNT - prescrições
+da NBR 16747:2020 (Inspeção Predial) e, de forma subsidiária, os apontamentos da
+NBR 13752/96 (Perícias de Engenharia na Construção Civil). Esse conjunto normativo
+e doutrinário respalda a sistematização do procedimento de inspeção, garantindo
+avaliação técnica da edificação dentro dos limites propostos pela Engenharia
+Diagnóstica.</p>
+
+<p class="p-estatico">Responsáveis pela inspeção:</p>
+{% for esp in snapshot.especialidades %}
+{% for nome in esp.profissionais %}
+<div class="item-respons">• {{ esp.titulo_profissional }}: {{ nome }} CREA: <span class="preencher">[A PREENCHER]</span></div>
+{% endfor %}
+{% endfor %}
+
+<p class="p-dinamico">Diligências in loco: {{ snapshot.datas_vistorias|join:"; " }}.</p>
+
+<p class="p-dinamico">Fazem parte deste relatório os anexos:</p>
+<div class="item-anexo">1. Planilha com Lista de verificações.</div>
+
+{# ── 2. Descrição técnica do objeto ──────────────────────────────────────── #}
+<pdf:nextpage name="main" />
+<h2>2. Descrição técnica do objeto:</h2>
+
+<div style="text-align:center;margin-bottom:10pt">
+  <table style="margin:0 auto"><tr><td class="preencher" style="display:block;padding:40pt 60pt">
+    [A PREENCHER: imagem de localização do edifício]
+  </td></tr></table>
+</div>
+
+<p class="p-dinamico">{{ snapshot.edificacao_descritivo|linebreaks }}</p>
+
+<p class="p-dinamico">As últimas obras no edifício foram:</p>
+<div class="item-obras">• <span class="preencher">[A PREENCHER: últimas obras no edifício]</span></div>
+
+{# ── 3. Metodologia aplicada (texto 100% estático, extraído do modelo) ──── #}
+<h2>3. Metodologia aplicada:</h2>
+{% include "inspecoes/_relatorio_final_metodologia.html" %}
+
+{# ── 4. Análise de documentação ──────────────────────────────────────────── #}
+<h2>4. Análise de documentação:</h2>
+
+<table class="tabela-doc">
   <thead>
-    <tr><th>Especialidade</th><th style="text-align:center">Total</th><th style="text-align:center">Não conformes</th><th style="text-align:center">P1</th><th style="text-align:center">P2</th><th style="text-align:center">P3</th></tr>
+    <tr><th style="width:149pt">Documentação base</th><th style="width:136pt">Status</th><th style="width:151pt">Recomendação</th></tr>
   </thead>
   <tbody>
-    {% for linha in snapshot.dados_gerais.por_especialidade %}
-    <tr {% if forloop.counter|divisibleby:2 %}class="par"{% endif %}>
-      <td>{{ linha.especialidade_nome }}</td>
-      <td style="text-align:center">{{ linha.total }}</td>
-      <td style="text-align:center">{{ linha.total_nc }}</td>
-      <td style="text-align:center">{% if linha.p1 %}<span class="badge bp1">{{ linha.p1 }}</span>{% else %}—{% endif %}</td>
-      <td style="text-align:center">{% if linha.p2 %}<span class="badge bp2">{{ linha.p2 }}</span>{% else %}—{% endif %}</td>
-      <td style="text-align:center">{% if linha.p3 %}<span class="badge bp3">{{ linha.p3 }}</span>{% else %}—{% endif %}</td>
+    <tr>
+      <td class="preencher">[A PREENCHER]</td>
+      <td class="preencher">[A PREENCHER]</td>
+      <td class="preencher">[A PREENCHER]</td>
     </tr>
-    {% endfor %}
   </tbody>
 </table>
 
-{# ── 3. Gráficos (mesmos do Painel de Encerramento) ──────────────────────────── #}
-<div class="page-break"></div>
-<h2>3. Gráficos — Painel de Encerramento</h2>
-<table style="width:100%;border-collapse:collapse;margin-bottom:10pt">
-  <tr>
-    <td style="width:50%;vertical-align:top;padding-right:8pt;text-align:center">
-      <h3 style="margin-top:0">Grau de Risco</h3>
-      {% if graficos.risco %}<img src="{{ graficos.risco }}" style="width:170pt">{% else %}<p>Sem dados.</p>{% endif %}
-    </td>
-    <td style="width:50%;vertical-align:top;padding-left:8pt;text-align:center">
-      <h3 style="margin-top:0">Distribuição por Prazo</h3>
-      {% if graficos.prazo %}<img src="{{ graficos.prazo }}" style="width:100%">{% else %}<p>Sem dados.</p>{% endif %}
-    </td>
-  </tr>
-</table>
-<h3>Requisito de Desempenho Afetado</h3>
-{% if graficos.requisitos %}<div style="text-align:center"><img src="{{ graficos.requisitos }}" style="width:90%"></div>{% else %}<p>Sem dados.</p>{% endif %}
-<table style="width:100%;border-collapse:collapse;margin-top:10pt">
-  <tr>
-    <td style="width:40%;vertical-align:top;padding-right:8pt;text-align:center">
-      <h3 style="margin-top:0">Encaminhamento</h3>
-      {% if graficos.direcionamento %}<img src="{{ graficos.direcionamento }}" style="width:150pt">{% else %}<p>Sem dados.</p>{% endif %}
-    </td>
-    <td style="width:60%;vertical-align:top;padding-left:8pt;text-align:center">
-      <h3 style="margin-top:0">Pareto por Grupo Técnico (80/20)</h3>
-      {% if graficos.pareto %}<img src="{{ graficos.pareto }}" style="width:100%">{% else %}<p>Sem dados.</p>{% endif %}
-    </td>
-  </tr>
+<table class="tabela-doc">
+  <thead>
+    <tr><th style="width:149pt">Verificções de rotina e testes periódicos</th><th style="width:136pt">Status</th><th style="width:151pt">Recomendação</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="preencher">[A PREENCHER]</td>
+      <td class="preencher">[A PREENCHER]</td>
+      <td class="preencher">[A PREENCHER]</td>
+    </tr>
+  </tbody>
 </table>
 
-{# ── 4.x Achados por especialidade ─────────────────────────────────────────── #}
+{# ── 5. Exame técnico ─────────────────────────────────────────────────────── #}
+<h2>5. Exame técnico:</h2>
+
+<p class="p-estatico">A estratégia adotada consistiu em apresentar, no corpo deste relatório, as principais
+ocorrências identificadas e compreendidas conforme a conjugação entre o Grau de
+Risco e a Análise GUT – e, complementarmente, aquelas de maior frequência, ainda
+que com menor nível de risco.</p>
+
+<p class="p-estatico">O registro fotográfico de cada achado acompanha sua respectiva descrição, ao longo
+deste relatório, reunindo uma amostra representativa das não conformidades
+identificadas.</p>
+
+<p class="p-estatico">A totalidade das anomalias observadas pode ser consultada no anexo, que contém a
+planilha completa e individualizada das verificações e não conformidades registradas.</p>
+
+<p class="p-estatico">O estudo realizado tem como objetivo estabelecer parâmetros para definir os
+patamares de prioridade, nos termos da NBR 16747.</p>
+
+<div style="text-align:center;margin-bottom:6pt">
+  <h3 style="margin-top:0">Distribuição por Grau de Risco</h3>
+  {% if graficos.risco %}<img src="{{ graficos.risco }}" style="width:260pt">{% else %}<p>Sem dados.</p>{% endif %}
+</div>
+
+<div style="text-align:center;margin-bottom:6pt">
+  {% if graficos.grupo_tecnico %}<img src="{{ graficos.grupo_tecnico }}" style="width:453pt">{% else %}<p>Sem dados.</p>{% endif %}
+</div>
+
+<div style="text-align:center;margin-bottom:6pt">
+  <h3 style="margin-top:0">Prazos Recomendados para intervenção</h3>
+  {% if graficos.prazo %}<img src="{{ graficos.prazo }}" style="width:400pt">{% else %}<p>Sem dados.</p>{% endif %}
+</div>
+
+<div style="text-align:center;margin-bottom:6pt">
+  <h3 style="margin-top:0">Requisito Afetado X Quantidade</h3>
+  {% if graficos.requisitos %}<img src="{{ graficos.requisitos }}" style="width:420pt">{% else %}<p>Sem dados.</p>{% endif %}
+</div>
+
+<div style="text-align:center;margin-bottom:10pt">
+  <h3 style="margin-top:0">Distribuição por Categoria</h3>
+  {% if graficos.direcionamento %}<img src="{{ graficos.direcionamento }}" style="width:260pt">{% else %}<p>Sem dados.</p>{% endif %}
+</div>
+
 {% for esp in snapshot.especialidades %}
-<div class="page-break"></div>
-<h2>4.{{ forloop.counter }} Achados — {{ esp.especialidade_nome }}</h2>
+<h3>5.{{ forloop.counter }}. {{ esp.especialidade_nome }}</h3>
 
 {% for a in esp.achados_completos %}
 <div class="achado">
-  <div class="achado-titulo">4.{{ forloop.parentloop.counter }}.{{ forloop.counter }} — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
+  <div class="achado-titulo">5.{{ forloop.parentloop.counter }}.{{ forloop.counter }} — {{ a.localizacao }}{% if a.sub_localizacao %} — {{ a.sub_localizacao }}{% endif %}: {{ a.verificacao }}</div>
   <div class="achado-meta">
     <span class="badge bp{{ a.prioridade_risco_num }}">{{ a.prioridade_risco }}</span>
     &nbsp;Índice GUT: <strong>{{ a.gut_total }}</strong>
@@ -195,34 +314,72 @@
 {% endfor %}
 
 {% if esp.achados_resumidos %}
-<h3>Itens em conformidade</h3>
+<p class="p-dinamico"><strong>Itens em conformidade:</strong></p>
 {% for a in esp.achados_resumidos %}
 <div class="conforme-linha">{{ a.localizacao }} — {{ a.verificacao }}</div>
 {% endfor %}
 {% endif %}
 
-<h3>Conclusão e direcionamentos</h3>
-<div class="conclusao-box">{{ esp.conclusao|linebreaks }}</div>
+<p class="p-dinamico"><strong>Conclusão e direcionamentos:</strong></p>
+<div class="conclusao-box">
+  {% if esp.conclusao %}{{ esp.conclusao|linebreaks }}{% else %}<p class="preencher" style="display:inline-block">[A PREENCHER]</p>{% endif %}
+</div>
 {% endfor %}
 
-{# ── 5. Assinaturas ────────────────────────────────────────────────────────── #}
-<div class="page-break"></div>
-<h2>5. Assinaturas</h2>
+{# ── 6. Referências (texto estático) ─────────────────────────────────────── #}
+<h2>6. Referências:</h2>
+<p class="p-dinamico">ABNT NBR 13752:1996 – Perícias de Engenharia na Construção Civil</p>
+<p class="p-dinamico">ABNT NBR 14037:2014 - Diretrizes para elaboração de manuais de uso, operação e
+manutenção das edificações - Requisitos para elaboração e apresentação dos
+conteúdos</p>
+<p class="p-dinamico">ABNT– NBR 16747/2020 – Inspeção Predial</p>
+<p class="p-dinamico">Inspeção predial: check up predial: guia da boa manutenção / IBAPE-SP. 3. Leud.</p>
+
+{# ── Assinaturas (não existe no modelo, mantido por decisão do usuário) ──── #}
+<h3>Assinaturas</h3>
 {% for esp in snapshot.especialidades %}
-<h3>{{ esp.especialidade_nome }}</h3>
 {% for nome in esp.profissionais %}
 <div class="assinatura">
-  <div class="assinatura-linha">{{ nome }}</div>
+  <div class="assinatura-linha">
+    {{ nome }}<br>
+    <span class="assinatura-crea">{{ esp.titulo_profissional }} — CREA nº <span class="preencher">[A PREENCHER]</span></span>
+  </div>
 </div>
 {% endfor %}
 {% endfor %}
 
-<table style="width:100%;border-collapse:collapse;margin-top:18pt">
-  <tr>
-    <td style="border-top:1pt solid #ccc;padding-top:5pt;text-align:center;font-size:7pt;color:#888">
-      Relatório Final de Inspeção gerado pelo Sistema de Inspeções Prediais — MPDFT/SPO — versão {{ numero_versao }}
-    </td>
-  </tr>
+{# ── 7. Anexo 01 - Planilha (paisagem) ───────────────────────────────────── #}
+<pdf:nextpage name="anexo" />
+<h2>7. Anexo 01 - Planilha:</h2>
+
+<table class="tabela-anexo01">
+  <thead>
+    <tr>
+      <th width="22pt">Nº</th><th width="75pt">Local</th><th width="85pt">Sistema/elemento</th><th width="55pt">Situação</th>
+      <th width="185pt">Anomalia</th><th width="165pt">Recomendação</th><th width="62pt">Prioridade</th><th width="32pt">GUT</th><th width="42pt">Prazo</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in snapshot.anexo01 %}
+    {% comment %}
+    Células sempre com algum conteúdo (nunca <td></td> vazio): uma célula
+    sem nenhum nó-filho faz este renderizador (xhtml2pdf/reportlab) recalcular
+    a largura da coluna pelo padding apenas, sobrescrevendo a largura definida
+    no <th> para a coluna inteira a partir dessa linha.
+    {% endcomment %}
+    <tr>
+      <td>{{ item.numero }}</td>
+      <td>{{ item.localizacao }}{% if item.sub_localizacao %} — {{ item.sub_localizacao }}{% endif %}</td>
+      <td>{{ item.grupo_tecnico_nome|default:"—" }}</td>
+      <td>{{ item.situacao }}</td>
+      <td>{{ item.descricao_nao_conformidade|default:"—" }}</td>
+      <td>{{ item.recomendacao|default:"—" }}</td>
+      <td class="bp{{ item.prioridade_risco_num }}" style="color:#fff;font-weight:bold;text-align:center">{{ item.prioridade_risco }}</td>
+      <td style="text-align:center">{{ item.gut_total }}</td>
+      <td style="text-align:center">{{ item.prazo_label|default:"—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 
 </body>
