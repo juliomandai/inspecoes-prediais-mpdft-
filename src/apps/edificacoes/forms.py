@@ -1,8 +1,42 @@
+from decimal import Decimal
+
 from django import forms
 from .models import Edificacao
 
 
+def formatar_decimal_br(valor):
+    """Converte um Decimal (ex. 4745.52) para texto no padrão BR (4.745,52)."""
+    texto = f'{valor:,.2f}'
+    return texto.translate(str.maketrans({',': '.', '.': ','}))
+
+
+class CampoDecimalBR(forms.DecimalField):
+    """DecimalField cujo widget exibe/aceita separador de milhar "." e
+    decimal "," (ex. "4.745,52"), em vez do formato "4745.52" do Django."""
+
+    def to_python(self, value):
+        if isinstance(value, str):
+            value = value.strip()
+            if value:
+                value = value.replace('.', '').replace(',', '.')
+        return super().to_python(value)
+
+    def prepare_value(self, value):
+        if isinstance(value, Decimal):
+            return formatar_decimal_br(value)
+        return value
+
+
 class EdificacaoForm(forms.ModelForm):
+    area_construida_m2 = CampoDecimalBR(
+        label='Área construída (m²)', required=False,
+        max_digits=10, decimal_places=2,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control', 'inputmode': 'decimal',
+            'placeholder': '0,00', 'autocomplete': 'off',
+        }),
+    )
+
     class Meta:
         model = Edificacao
         fields = [
@@ -12,7 +46,6 @@ class EdificacaoForm(forms.ModelForm):
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'endereco': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'area_construida_m2': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
             'pavimentos': forms.TextInput(attrs={'class': 'form-control'}),
             'data_inauguracao': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
