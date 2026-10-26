@@ -5,10 +5,16 @@ from .models import Edificacao
 class EdificacaoForm(forms.ModelForm):
     class Meta:
         model = Edificacao
-        fields = ['nome', 'endereco', 'ativo']
+        fields = [
+            'nome', 'endereco', 'area_construida_m2', 'pavimentos',
+            'data_inauguracao', 'ativo',
+        ]
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'endereco': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'area_construida_m2': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'pavimentos': forms.TextInput(attrs={'class': 'form-control'}),
+            'data_inauguracao': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 

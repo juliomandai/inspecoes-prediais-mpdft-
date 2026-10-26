@@ -11,6 +11,16 @@ class Edificacao(SoftDeleteModel):
     nome = models.CharField('Nome', max_length=200)
     sigla = models.CharField('Sigla', max_length=10, null=True, blank=True)
     endereco = models.TextField('Endereço', max_length=500, blank=True)
+    area_construida_m2 = models.DecimalField(
+        'Área construída (m²)', max_digits=10, decimal_places=2,
+        null=True, blank=True,
+    )
+    pavimentos = models.CharField(
+        'Quantidade de pavimentos', max_length=300, blank=True,
+        help_text='Ex.: três pavimentos (subsolo, térreo e 1º pavimento), '
+                   'além de cobertura técnica.',
+    )
+    data_inauguracao = models.DateField('Data de inauguração', null=True, blank=True)
     descritivo = models.TextField(
         'Descritivo', blank=True,
         help_text='Idade, tipo construtivo, uso etc. — reutilizado em todo '
