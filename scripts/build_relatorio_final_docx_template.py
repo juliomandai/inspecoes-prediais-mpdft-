@@ -12,8 +12,10 @@ Observação sobre o arquivo de origem: ele é tratado como dado de entrada
 (nunca executado). Este script não deve ser colocado na mesma pasta do
 arquivo de origem.
 """
+import copy
 import sys
 from docx import Document
+from docx.text.paragraph import Paragraph
 
 
 def substituir_em_runs(paragrafos_ou_celulas, mapa):
@@ -399,6 +401,72 @@ def main(origem, destino):
                 r.text = ''
     for row in list(t15.rows[4:]):
         row._tr.getparent().remove(row._tr)
+
+    # ── 11. Conclusão e Direcionamentos (Civil / Elétrica / Mecânica) ──────
+    # Estes 3 blocos correspondem ao campo de texto livre já existente
+    # `InspecaoEspecialidade.conclusao`, digitado manualmente pelo
+    # profissional responsável ao finalizar a especialidade na plataforma
+    # (não é LLM, não é campo novo — mesmo molde de "Metodologia"/
+    # "Fundamentação Normativa"/"Caracterização da Edificação", ver passo
+    # 2d). Como é um texto livre único, possivelmente dividido em um número
+    # qualquer de parágrafos (não necessariamente os 3/2/3 do exemplo),
+    # usamos o loop de parágrafo do docxtpl — {%p for %}/{%p endfor %},
+    # nível de PARÁGRAFO, não confundir com {%tr %} (nível de LINHA de
+    # tabela, usado nos passos 5 a 10) — para gerar dinamicamente quantos
+    # parágrafos forem necessários a partir de `conclusao_xxx.split('\n\n')`
+    # em tempo de render.
+    #
+    # IMPORTANTE (confirmado empiricamente): a tag de abertura {%p for %} e
+    # a de fechamento {%p endfor %} têm que estar cada uma ISOLADA no seu
+    # PRÓPRIO parágrafo — não podem compartilhar parágrafo entre si nem com
+    # o {{ paragrafo }} de conteúdo. O mecanismo de patch_xml do docxtpl,
+    # ao encontrar um parágrafo com tag "{%p ...%}", colapsa o <w:p> inteiro
+    # até o primeiro "</w:p>" daquele MESMO parágrafo, descartando tudo que
+    # vier depois do fechamento da tag dentro dele. Se for+conteúdo+endfor
+    # estiverem no mesmo parágrafo, o {%p endfor %} (e o {{ paragrafo }},
+    # se também estivesse ali) é descartado nesse colapso, sobrando um
+    # `{% for %}` sem `{% endfor %}` correspondente em algum lugar do
+    # documento -> jinja2.exceptions.TemplateSyntaxError: Encountered
+    # unknown tag 'endfor'. Por isso usamos sempre 3 parágrafos dedicados:
+    # for (isolado) / molde com "{{ paragrafo }}" (isolado, SEM prefixo "p"
+    # — por isso não é afetado pelo colapso, e é o parágrafo que o jinja2
+    # de fato repete) / endfor (isolado). Mesma lógica do loop de linha
+    # {%tr %} das tabelas (passo 5), só que a nível de parágrafo.
+    blocos_conclusao = [
+        ('Os achados críticos da engenharia civil relacionam-se majoritariamente', 'conclusao_civil', 3),
+        ('A não conformidade de maior relevância é o rompimento da cordoalha', 'conclusao_eletrica', 2),
+        ('O elevador apresenta boas condições gerais de conservação e funcionamento', 'conclusao_mecanica', 3),
+    ]
+    paragrafos_corpo = doc.paragraphs
+    for inicio_texto, var, n_paragrafos in blocos_conclusao:
+        idx = next(i for i, p in enumerate(paragrafos_corpo) if p.text.startswith(inicio_texto))
+        p_for = paragrafos_corpo[idx]
+        p_molde = paragrafos_corpo[idx + 1]
+
+        forcar_run_unico(p_for, "{%p for paragrafo in " + var + r".split('\n\n') %}")
+        forcar_run_unico(p_molde, '{{ paragrafo }}')
+
+        if n_paragrafos >= 3:
+            # Já existe um 3º parágrafo de exemplo (civil e mecânica):
+            # reaproveita como o parágrafo isolado do "endfor". Parágrafos
+            # de exemplo adicionais, se houver, são removidos inteiramente
+            # (o {%p for %} do docxtpl gera, em tempo de render, quantos
+            # parágrafos forem necessários a partir do conteúdo real de
+            # `conclusao_xxx` — os parágrafos extras do exemplo não devem
+            # continuar existindo no template).
+            p_endfor = paragrafos_corpo[idx + 2]
+            forcar_run_unico(p_endfor, '{%p endfor %}')
+            for p_extra in paragrafos_corpo[idx + 3: idx + n_paragrafos]:
+                p_extra._element.getparent().remove(p_extra._element)
+        else:
+            # Bloco Elétrica tem só 2 parágrafos de exemplo — não há um 3º
+            # parágrafo para reaproveitar como "endfor". Clona o parágrafo
+            # "for" (preserva fonte/tamanho/alinhamento) e insere uma cópia
+            # logo depois do "molde", contendo só a tag de fechamento.
+            novo_elemento = copy.deepcopy(p_for._element)
+            p_molde._element.addnext(novo_elemento)
+            p_endfor = Paragraph(novo_elemento, p_molde._parent)
+            forcar_run_unico(p_endfor, '{%p endfor %}')
 
     doc.save(destino)
 
