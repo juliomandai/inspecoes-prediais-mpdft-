@@ -102,6 +102,10 @@ class InspecaoEspecialidade(SoftDeleteModel):
         help_text='Texto livre, redigido pelo profissional responsável — exigido '
                    'para finalizar esta especialidade.',
     )
+    numero_art = models.CharField(
+        'Número da ART', max_length=50, blank=True,
+        help_text='ART desta especialidade específica — uma por engenharia (civil/elétrica/mecânica).',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
