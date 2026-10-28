@@ -46,3 +46,31 @@ class Edificacao(SoftDeleteModel):
 
     def __str__(self):
         return self.nome
+
+
+class Profissional(SoftDeleteModel):
+    """Engenheiro(a)/profissional responsável técnico, reaproveitável entre
+    inspeções (como Edificacao) — ver ADR do grill de 2026-10-27: antes era
+    só texto livre em InspecaoEspecialidade.profissional."""
+    nome = models.CharField('Nome', max_length=200)
+    crea = models.CharField(
+        'CREA', max_length=30,
+        help_text='Número do registro no CREA (ex.: "12345/D-DF"). '
+                   'Profissionais migrados do cadastro antigo recebem um '
+                   'placeholder "PENDENTE-N" a completar manualmente.',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nome']
+        verbose_name = 'Profissional'
+        verbose_name_plural = 'Profissionais'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['crea'], condition=Q(excluido_em__isnull=True),
+                name='unique_profissional_crea_ativo',
+            ),
+        ]
+
+    def __str__(self):
+        return self.nome
