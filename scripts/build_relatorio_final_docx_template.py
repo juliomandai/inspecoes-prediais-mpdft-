@@ -11,6 +11,38 @@ Uso:
 Observação sobre o arquivo de origem: ele é tratado como dado de entrada
 (nunca executado). Este script não deve ser colocado na mesma pasta do
 arquivo de origem.
+
+!!! ATENÇÃO — NÃO EDITE O .docx GERADO DIRETO NO WORD !!!
+O arquivo de saída (destino), hoje versionado em
+`src/apps/relatorio_final/templates_docx/relatorio_final_modelo.docx`, é um
+ARTEFATO GERADO por este script — não é uma fonte editável. Qualquer ajuste
+de formatação, texto ou marcador feito manualmente no Word direto nesse
+.docx vai ser SILENCIOSAMENTE DESCARTADO na próxima vez que este script for
+executado (re-render do zero a partir de `origem.docx`, sem nenhuma
+mesclagem com o destino anterior). Qualquer alteração necessária no
+template — mudar um marcador {{ }}, corrigir formatação, adicionar/remover
+um bloco — deve ser feita EDITANDO ESTE SCRIPT (ex.: `mapa_texto`,
+`forcar_run_unico`, os passos numerados em `main()`) e reexecutando-o contra
+o arquivo de origem para regenerar o .docx. Se alguém editar o .docx final
+direto no Word "só para testar", documente a mudança aqui antes, ou ela
+será perdida na próxima regeneração.
+
+NOTA — ARQUIVO DE ORIGEM NÃO VERSIONADO (lacuna de reexecutabilidade):
+O arquivo de origem usado para gerar o template atual,
+`Laudo_Inspecao_Predial_PJ_Infancia_Juventude - Regina.docx` (laudo-modelo
+real do MPDFT/SPO, de autoria da Secretaria de Projetos e Obras), NÃO está
+versionado neste repositório — hoje ele só existe localmente, na máquina do
+autor original deste script. Isso significa que, se esse arquivo for
+perdido, este script deixa de ser reexecutável: não há como regenerar
+`relatorio_final_modelo.docx` do zero nem reproduzir os passos 2b/2c/2d/9/11
+(que dependem de encontrar trechos de texto específicos desse arquivo real).
+Para sanar essa lacuna, o arquivo de origem (ou um substituto equivalente,
+sem dados sensíveis de uma inspeção real) deveria ser arquivado em algum
+lugar duradouro e acessível à equipe — por exemplo, um processo SEI, uma
+pasta compartilhada do MPDFT/SPO, ou outro repositório de documentos
+institucionais. Enquanto isso não for feito, quem precisar reexecutar este
+script contra uma nova origem deve perguntar à Secretaria de Projetos e
+Obras (SPO/MPDFT) onde obter o laudo-modelo mais recente.
 """
 import copy
 import sys
