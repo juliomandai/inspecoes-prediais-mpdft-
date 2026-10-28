@@ -21,7 +21,7 @@ def test_calcular_prioridade_segue_limiares_da_tela(gut, em_conformidade, espera
 
 @pytest.fixture
 def cenario_backup(db, client):
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
     U = get_user_model()
     u = U.objects.create_user(username='ze', password='1', is_staff=True)
@@ -30,8 +30,9 @@ def cenario_backup(db, client):
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='X', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X')])
     # GUT baixo (4) mas o profissional escolheu P1 deliberadamente — o backup
     # precisa preservar essa escolha humana, não recalculá-la a partir do GUT.
     achado = Achado.objects.create(

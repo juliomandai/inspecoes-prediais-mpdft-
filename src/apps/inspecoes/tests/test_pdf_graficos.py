@@ -29,7 +29,7 @@ def test_barras_gera_imagem():
 
 @pytest.mark.django_db
 def test_pdf_especialidade_retorna_pdf_com_imagens(client):
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
     U = get_user_model()
     u = U.objects.create_user(username='ze', password='1', is_staff=True)
@@ -37,7 +37,8 @@ def test_pdf_especialidade_retorna_pdf_com_imagens(client):
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='Fulano', data_inspecao=date.today())
+        inspecao=insp, especialidade='civil', data_inspecao=date.today())
+    esp.profissionais.set([Profissional.objects.create(nome='Fulano', crea='CREA-FULANO')])
     Achado.objects.create(
         especialidade=esp, localizacao='Térreo', verificacao='Fissura',
         grupo_tecnico='Estrutura', requisito_afetado='Segurança Estrutural',

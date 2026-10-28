@@ -30,6 +30,7 @@ from .forms import (
     ConclusaoEspecialidadeForm,
 )
 from apps.edificacoes.forms import DescritivoEdificacaoForm
+from apps.edificacoes.models import Profissional
 from .imagens import comprimir_imagem
 
 
@@ -138,7 +139,7 @@ def inspecao_list(request):
         if form.cleaned_data.get('especialidade'):
             qs = qs.filter(especialidades__especialidade=form.cleaned_data['especialidade']).distinct()
         if form.cleaned_data.get('profissional'):
-            qs = qs.filter(especialidades__profissional__icontains=form.cleaned_data['profissional']).distinct()
+            qs = qs.filter(especialidades__profissionais__nome__icontains=form.cleaned_data['profissional']).distinct()
         if form.cleaned_data.get('data_inicio'):
             qs = qs.filter(especialidades__data_inspecao__gte=form.cleaned_data['data_inicio']).distinct()
         if form.cleaned_data.get('data_fim'):
@@ -235,27 +236,28 @@ def inspecao_delete(request, pk):
 
 # ── Especialidades ─────────────────────────────────────────────────────────────
 
-def _profissionais_do_post(request):
-    """Coleta os nomes dos inputs dinâmicos 'profissionais' (um por campo)."""
-    return [n.strip() for n in request.POST.getlist('profissionais') if n.strip()]
+def _profissionais_ids_do_post(request):
+    """Coleta os ids dos <select> dinâmicos 'profissionais' (um por campo)."""
+    return [int(i) for i in request.POST.getlist('profissionais') if i.strip()]
 
 
 @login_required
 def especialidade_create(request, inspecao_pk):
     inspecao = get_object_or_404(Inspecao, pk=inspecao_pk)
     form = EspecialidadeForm(request.POST or None, inspecao=inspecao)
-    profissionais = _profissionais_do_post(request)
+    ids_selecionados = _profissionais_ids_do_post(request)
     erro_profissionais = None
     if request.method == 'POST' and form.is_valid():
+        profissionais = Profissional.objects.filter(pk__in=ids_selecionados)
         if not profissionais:
             erro_profissionais = 'Informe ao menos um profissional responsável.'
         else:
             esp = form.save(commit=False)
             esp.inspecao = inspecao
-            esp.profissional = '\n'.join(profissionais)
             try:
-                esp.full_clean()
+                esp.full_clean(exclude=['profissionais'])
                 esp.save()
+                esp.profissionais.set(profissionais)
                 _log(request, 'especialidade_criada', f'{esp.get_especialidade_display()} criada em "{inspecao.edificacao}".')
                 messages.success(request, f'{esp.get_especialidade_display()} adicionada com sucesso.')
                 return redirect('inspecoes:detail', pk=inspecao_pk)
@@ -264,7 +266,8 @@ def especialidade_create(request, inspecao_pk):
     return render(request, 'inspecoes/especialidade_form.html', {
         'form': form,
         'inspecao': inspecao,
-        'profissionais': profissionais or [''],
+        'profissionais_disponiveis': Profissional.objects.all(),
+        'ids_selecionados': ids_selecionados or [None],
         'erro_profissionais': erro_profissionais,
     })
 
@@ -436,15 +439,16 @@ def especialidade_update(request, pk):
     if not _pode_editar_especialidade(request.user, esp):
         return _acesso_negado_especialidade(request, esp)
     form = EspecialidadeForm(request.POST or None, instance=esp, inspecao=esp.inspecao)
-    profissionais = _profissionais_do_post(request) if request.method == 'POST' else esp.profissionais_lista
+    ids_selecionados = _profissionais_ids_do_post(request) if request.method == 'POST' else list(esp.profissionais.values_list('pk', flat=True))
     erro_profissionais = None
     if request.method == 'POST' and form.is_valid():
+        profissionais = Profissional.objects.filter(pk__in=ids_selecionados)
         if not profissionais:
             erro_profissionais = 'Informe ao menos um profissional responsável.'
         else:
             esp = form.save(commit=False)
-            esp.profissional = '\n'.join(profissionais)
             esp.save()
+            esp.profissionais.set(profissionais)
             if esp.status == 'finalizada':
                 _avisar_relatorio_final_desatualizado(request, esp)
             messages.success(request, 'Especialidade atualizada com sucesso.')
@@ -453,7 +457,8 @@ def especialidade_update(request, pk):
         'form': form,
         'inspecao': esp.inspecao,
         'especialidade': esp,
-        'profissionais': profissionais or [''],
+        'profissionais_disponiveis': Profissional.objects.all(),
+        'ids_selecionados': ids_selecionados or [None],
         'erro_profissionais': erro_profissionais,
     })
 
@@ -2093,7 +2098,7 @@ def _gerar_zip_backup(inspecao):
         esp_dict = {
             'id': esp.pk,
             'especialidade': esp.get_especialidade_display(),
-            'profissional': esp.profissional,
+            'profissional': '\n'.join(esp.profissionais_lista),
             'data_inspecao': esp.data_inspecao.strftime('%Y-%m-%d'),
             'status': esp.get_status_display(),
             'achados': [],
@@ -2176,6 +2181,25 @@ def inspecao_backup_download(request, pk):
 
 # ── Restaurar backup ──────────────────────────────────────────────────────────
 
+def _profissional_por_nome(nome):
+    """Busca um Profissional existente pelo nome (case-insensitive) ou cria um
+    novo com CREA placeholder 'PENDENTE-N' — mesmo padrão da migração de dados
+    0020 (ver apps/inspecoes/migrations/0020_inspecaoespecialidade_profissionais.py),
+    usado aqui para restaurar backups antigos que ainda guardam os
+    profissionais como texto livre."""
+    prof = Profissional.objects.filter(nome__iexact=nome).first()
+    if prof:
+        return prof
+    ultimo_n = 0
+    for crea in Profissional.todos_objects.filter(crea__startswith='PENDENTE-').values_list('crea', flat=True):
+        try:
+            n = int(crea.split('-', 1)[1])
+        except (IndexError, ValueError):
+            continue
+        ultimo_n = max(ultimo_n, n)
+    return Profissional.objects.create(nome=nome, crea=f'PENDENTE-{ultimo_n + 1}')
+
+
 def _restaurar_backup(arquivo_zip, request):
     """
     Lê um arquivo ZIP de backup e recria a inspeção no banco de dados.
@@ -2247,11 +2271,13 @@ def _restaurar_backup(arquivo_zip, request):
                 inspecao=inspecao,
                 especialidade=esp_key,
                 defaults={
-                    'profissional': esp_data.get('profissional', ''),
                     'data_inspecao': data_insp,
                     'status': STATUS_MAP.get(esp_data.get('status', ''), 'em_andamento'),
                 },
             )
+            nomes_profissionais = [n.strip() for n in esp_data.get('profissional', '').splitlines() if n.strip()]
+            if nomes_profissionais:
+                esp.profissionais.set([_profissional_por_nome(n) for n in nomes_profissionais])
 
             for achado_data in esp_data.get('achados', []):
                 em_conf = bool(achado_data.get('em_conformidade', False))

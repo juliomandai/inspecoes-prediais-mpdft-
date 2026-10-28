@@ -94,7 +94,10 @@ class InspecaoEspecialidade(SoftDeleteModel):
         related_name='especialidades',
     )
     especialidade = models.CharField('Especialidade', max_length=20, choices=ESPECIALIDADE_CHOICES)
-    profissional = models.TextField('Profissionais responsáveis', help_text='Um nome por linha.')
+    profissionais = models.ManyToManyField(
+        'edificacoes.Profissional', related_name='especialidades',
+        verbose_name='Profissionais responsáveis',
+    )
     data_inspecao = models.DateField('Data da inspeção')
     status = models.CharField('Status', max_length=20, choices=STATUS_CHOICES, default='em_andamento')
     conclusao = models.TextField(
@@ -129,7 +132,7 @@ class InspecaoEspecialidade(SoftDeleteModel):
 
     @property
     def profissionais_lista(self):
-        return [p.strip() for p in self.profissional.splitlines() if p.strip()]
+        return list(self.profissionais.order_by('nome').values_list('nome', flat=True))
 
     @property
     def profissionais_display(self):

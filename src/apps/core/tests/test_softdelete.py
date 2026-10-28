@@ -4,7 +4,7 @@ import pytest
 from datetime import date
 from django.contrib.auth import get_user_model
 
-from apps.edificacoes.models import Edificacao
+from apps.edificacoes.models import Edificacao, Profissional
 from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
 
 
@@ -19,8 +19,9 @@ def cadeia(db):
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='X', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X')])
     achado = Achado.objects.create(
         especialidade=esp, localizacao='L1', verificacao='V', grupo_tecnico='estrutura',
         requisito_afetado='durabilidade', gravidade=3, urgencia=3, tendencia=3,

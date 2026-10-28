@@ -61,13 +61,15 @@ def test_form_edicao_mostra_data_em_iso(client, usuario_logado, edificacao):
 @pytest.mark.django_db
 def test_especialidade_aceita_data_futura(client, usuario_logado, edificacao):
     """Especialidade pode ter data de inspeção futura (pré-cadastro)."""
+    from apps.edificacoes.models import Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade
     insp = Inspecao.objects.create(edificacao=edificacao)
+    prof = Profissional.objects.create(nome='Fulano de Tal', crea='CREA-FULANO')
     futura = date.today() + timedelta(days=10)
     url = reverse('inspecoes:especialidade_create', args=[insp.pk])
     resp = client.post(url, {
         'especialidade': 'civil',
-        'profissionais': 'Fulano de Tal',
+        'profissionais': [str(prof.pk)],
         'data_inspecao': futura.isoformat(),
     })
     assert resp.status_code == 302

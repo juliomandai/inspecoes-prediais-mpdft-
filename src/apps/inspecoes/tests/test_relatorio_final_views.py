@@ -3,7 +3,7 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from apps.edificacoes.models import Edificacao
+from apps.edificacoes.models import Edificacao, Profissional
 from apps.inspecoes.models import Inspecao, InspecaoEspecialidade
 from apps.inspecoes.views import _pode_gerar_relatorio_final
 
@@ -12,18 +12,24 @@ from apps.inspecoes.models import Achado, Foto
 from apps.inspecoes.views import _montar_snapshot_relatorio
 
 
+def _prof(nome):
+    return Profissional.objects.get_or_create(nome=nome, defaults={'crea': f'CREA-{nome}'})[0]
+
+
 @pytest.fixture
 def inspecao_com_profissionais(db):
     edif = Edificacao.objects.create(nome='Sede', descritivo='x')
     insp = Inspecao.objects.create(edificacao=edif)
-    InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='Ana Civil',
+    civil = InspecaoEspecialidade.objects.create(
+        inspecao=insp, especialidade='civil',
         data_inspecao=date.today(), conclusao='ok',
     )
-    InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='eletrica', profissional='Beto Eletrica',
+    civil.profissionais.set([_prof('Ana Civil')])
+    eletrica = InspecaoEspecialidade.objects.create(
+        inspecao=insp, especialidade='eletrica',
         data_inspecao=date.today(), conclusao='ok',
     )
+    eletrica.profissionais.set([_prof('Beto Eletrica')])
     return insp
 
 
@@ -155,10 +161,11 @@ def test_gerar_relatorio_final_cria_versao_1_e_bloqueia_sem_pendencias_resolvida
     assert resp.status_code == 302
     assert inspecao_com_profissionais.relatorios_finais.count() == 0
 
-    InspecaoEspecialidade.objects.create(
-        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+    mecanica_esp = InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica',
         data_inspecao=date.today(), conclusao='ok', status='finalizada',
     )
+    mecanica_esp.profissionais.set([_prof('Carlos Mecanica')])
     inspecao_com_profissionais.especialidades.update(status='finalizada')
 
     resp = client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
@@ -232,10 +239,11 @@ def test_falha_na_geracao_do_pdf_limpa_fotos_ja_copiadas(client, inspecao_com_pr
     civil_user = U.objects.create_user(username='ana2', password='1', first_name='Ana', last_name='Civil')
     client.force_login(civil_user)
 
-    InspecaoEspecialidade.objects.create(
-        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+    mecanica_esp = InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica',
         data_inspecao=date.today(), conclusao='ok', status='finalizada',
     )
+    mecanica_esp.profissionais.set([_prof('Carlos Mecanica')])
     inspecao_com_profissionais.especialidades.update(status='finalizada')
     civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
     achado = Achado.objects.create(
@@ -280,10 +288,11 @@ def test_download_relatorio_final(client, inspecao_com_profissionais):
     U = get_user_model()
     civil = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
     client.force_login(civil)
-    InspecaoEspecialidade.objects.create(
-        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+    mecanica_esp = InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica',
         data_inspecao=date.today(), conclusao='ok', status='finalizada',
     )
+    mecanica_esp.profissionais.set([_prof('Carlos Mecanica')])
     inspecao_com_profissionais.especialidades.update(status='finalizada')
     client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
     relatorio = inspecao_com_profissionais.relatorios_finais.get()
@@ -300,10 +309,11 @@ def test_reabrir_especialidade_avisa_quando_ja_ha_relatorio_gerado(client, inspe
     U = get_user_model()
     civil_user = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
     client.force_login(civil_user)
-    InspecaoEspecialidade.objects.create(
-        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+    mecanica_esp = InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica',
         data_inspecao=date.today(), conclusao='ok', status='finalizada',
     )
+    mecanica_esp.profissionais.set([_prof('Carlos Mecanica')])
     inspecao_com_profissionais.especialidades.update(status='finalizada')
     client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
 
@@ -320,10 +330,11 @@ def test_editar_conclusao_de_especialidade_finalizada_avisa_quando_ja_ha_relator
     U = get_user_model()
     civil_user = U.objects.create_user(username='ana', password='1', first_name='Ana', last_name='Civil')
     client.force_login(civil_user)
-    InspecaoEspecialidade.objects.create(
-        inspecao=inspecao_com_profissionais, especialidade='mecanica', profissional='Carlos Mecanica',
+    mecanica_esp = InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica',
         data_inspecao=date.today(), conclusao='ok', status='finalizada',
     )
+    mecanica_esp.profissionais.set([_prof('Carlos Mecanica')])
     inspecao_com_profissionais.especialidades.update(status='finalizada')
     client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
 
@@ -354,13 +365,14 @@ def test_especialidade_update_nao_aceita_mais_campo_conclusao(client, inspecao_c
     civil.conclusao = 'Conclusão original.'
     civil.save(update_fields=['conclusao'])
 
+    prof_pk = _prof('Ana Civil').pk
     resp = client.post(
         reverse('inspecoes:especialidade_update', kwargs={'pk': civil.pk}),
         {
             'especialidade': 'civil',
             'data_inspecao': civil.data_inspecao.isoformat(),
             'conclusao': 'Tentativa de mudar a conclusão por aqui.',
-            'profissionais': ['Ana Civil'],
+            'profissionais': [str(prof_pk)],
         },
         follow=True,
     )
