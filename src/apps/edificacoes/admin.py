@@ -21,6 +21,6 @@ class ProfissionalAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
 
 @admin.register(HistoricoIntervencao)
 class HistoricoIntervencaoAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
-    list_display = ['edificacao', 'ano', 'descricao']
+    list_display = ['edificacao', 'ano', 'descricao', 'excluido_em']
     list_filter = ['edificacao']
     ordering = ['edificacao', 'ano']

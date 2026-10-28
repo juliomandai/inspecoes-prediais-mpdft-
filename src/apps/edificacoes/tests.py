@@ -73,3 +73,37 @@ def test_edificacao_update_sincroniza_historico(client, django_user_model):
     assert list(e.historico_intervencoes.values_list('ano', 'descricao')) == [
         (2022, 'Reforma de fachada'), (2023, 'Troca de elevador'),
     ]
+
+
+@pytest.mark.django_db
+def test_edificacao_create_form_invalido_reexibe_historico_digitado(client, django_user_model):
+    staff = django_user_model.objects.create_user(username='admin', password='x', is_staff=True)
+    client.force_login(staff)
+    Edificacao.objects.create(nome='Sede já existente')
+    # nome duplicado torna o form inválido; o histórico digitado não deve ser perdido.
+    resp = client.post('/edificacoes/nova/', {
+        'nome': 'Sede já existente', 'endereco': '', 'area_construida_m2': '',
+        'pavimentos': '', 'ativo': 'on',
+        'historico_ano': ['2022'],
+        'historico_descricao': ['Reforma de fachada'],
+    })
+    assert resp.status_code == 200
+    assert resp.context['historico'] == [{'ano': '2022', 'descricao': 'Reforma de fachada'}]
+    assert not HistoricoIntervencao.objects.exists()
+
+
+@pytest.mark.django_db
+def test_sincronizar_historico_ignora_ano_nao_numerico_sem_perder_os_demais():
+    from django.test import RequestFactory
+    from apps.edificacoes.views import _sincronizar_historico
+
+    e = Edificacao.objects.create(nome='Sede ano inválido')
+    HistoricoIntervencao.objects.create(edificacao=e, ano=2000, descricao='Antigo')
+    request = RequestFactory().post('/edificacoes/0/editar/', {
+        'historico_ano': ['2022', 'abc'],
+        'historico_descricao': ['Reforma de fachada', 'Intervenção sem ano válido'],
+    })
+    _sincronizar_historico(e, request)
+    assert list(e.historico_intervencoes.values_list('ano', 'descricao')) == [
+        (2022, 'Reforma de fachada'),
+    ]
