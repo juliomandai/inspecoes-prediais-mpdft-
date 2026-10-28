@@ -6,6 +6,7 @@ import os
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.core.exceptions import RequestDataTooBig
 from django.db.models import Count, Q, Min, Max
@@ -308,7 +309,6 @@ def _copiar_fotos_para_relatorio(inspecao_pk, numero_versao, achado, fotos):
     """Copia os arquivos de imagem usados para um caminho próprio do
     relatório — independente do ciclo de vida da Foto original (ADR-07).
     Retorna a lista de caminhos salvos (relativos ao storage)."""
-    from django.core.files.storage import default_storage
     caminhos = []
     for i, foto in enumerate(fotos, start=1):
         ext = foto.arquivo.name.rsplit('.', 1)[-1]
@@ -820,19 +820,27 @@ def relatorio_final_gerar(request, pk):
     # `gerar_docx_relatorio` não deve lançar exceção em condições normais —
     # ela só preenche um template .docx fixo com o contexto montado abaixo.
     # Se lançar mesmo assim, é um bug real (ex.: variável faltando no
-    # contexto) que deve propagar e aparecer nos logs, não ser engolido com
-    # uma limpeza silenciosa das fotos já copiadas pelo snapshot — por isso,
-    # ao contrário da versão antiga (PDF), esta view não tem mais um bloco de
-    # "rollback" das fotos em caso de falha na geração do arquivo.
+    # contexto) que deve propagar e aparecer nos logs — não é engolido com um
+    # retorno None/sentinela como na versão antiga (PDF). Mas isso não isenta
+    # a limpeza das fotos: `_montar_snapshot_relatorio` já copiou os arquivos
+    # para relatorios/<pk>/v<numero_versao>/... antes deste ponto, e nenhuma
+    # RelatorioFinalInspecao será criada se a exceção subir — sem a limpeza
+    # abaixo, essas cópias ficariam órfãs no storage para sempre.
     contexto = _montar_contexto_docx(inspecao, snapshot, painel, especialidades, plano_por_horizonte, textos, nao_conformes)
-    docx_bytes = gerar_docx_relatorio(contexto)
-
-    relatorio = RelatorioFinalInspecao(
-        inspecao=inspecao, numero_versao=numero_versao, snapshot=snapshot, gerado_por=request.user,
-    )
-    nome_arquivo = f"relatorio_final_{inspecao.edificacao.nome.replace(' ', '_')}_v{numero_versao}.docx"
-    relatorio.arquivo_docx.save(nome_arquivo, ContentFile(docx_bytes), save=False)
-    relatorio.save()
+    try:
+        docx_bytes = gerar_docx_relatorio(contexto)
+        relatorio = RelatorioFinalInspecao(
+            inspecao=inspecao, numero_versao=numero_versao, snapshot=snapshot, gerado_por=request.user,
+        )
+        nome_arquivo = f"relatorio_final_{inspecao.edificacao.nome.replace(' ', '_')}_v{numero_versao}.docx"
+        relatorio.arquivo_docx.save(nome_arquivo, ContentFile(docx_bytes), save=False)
+        relatorio.save()
+    except Exception:
+        for esp in snapshot['especialidades']:
+            for achado in esp['achados_completos']:
+                for caminho in achado['fotos']:
+                    default_storage.delete(caminho)
+        raise
 
     _log(request, 'relatorio_final_gerado',
          f'Relatório Final de Inspeção (v{numero_versao}) gerado para "{inspecao.edificacao}".')

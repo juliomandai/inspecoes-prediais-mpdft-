@@ -343,3 +343,79 @@ def test_relatorio_final_gerar_produz_docx(client, django_user_model, settings, 
                 texto += '\n' + '\n'.join(p.text for p in cell.paragraphs)
     assert '{{' not in texto
     assert '{%' not in texto
+
+
+@pytest.mark.django_db
+def test_falha_na_geracao_do_docx_limpa_fotos_ja_copiadas(client, inspecao_com_profissionais, settings):
+    """Cobre o achado da revisão de qualidade: `_montar_snapshot_relatorio`
+    (chamado antes de `gerar_docx_relatorio`) já copiou as fotos para
+    relatorios/<pk>/v<N>/... antes de sabermos se o .docx vai ser gerado com
+    sucesso. Se `gerar_docx_relatorio` lançar uma exceção, essas cópias não
+    podem ficar órfãs — nenhuma RelatorioFinalInspecao vai apontar pra elas.
+
+    Diferente da antiga versão em PDF (que usava um retorno sentinela
+    `None` engolido pela view), `gerar_docx_relatorio` não tem esse padrão —
+    uma falha real é uma exceção, que deve propagar (não ser convertida
+    silenciosamente numa mensagem de erro + redirect). Por isso o teste
+    força a falha via `unittest.mock.patch` com `side_effect` e espera que
+    a própria chamada a `client.post` levante a exceção (comportamento
+    padrão do test client do Django: exceções não tratadas pela view
+    propagam para o teste).
+
+    Captura os caminhos reais via um espião em `_montar_snapshot_relatorio`
+    em vez de prever o nome do arquivo: o storage de mídia deste projeto não
+    é isolado por teste, então um arquivo de uma execução anterior pode já
+    ocupar o nome "óbvio" e forçar o Django a usar um sufixo diferente.
+    """
+    from unittest.mock import patch
+    from django.core.files.storage import default_storage
+    import apps.inspecoes.views as views_module
+
+    settings.GEMINI_API_KEY = ''  # sem chamada real ao Gemini neste teste
+
+    U = get_user_model()
+    civil_user = U.objects.create_user(username='ana3', password='1', first_name='Ana', last_name='Civil')
+    client.force_login(civil_user)
+
+    mecanica_esp = InspecaoEspecialidade.objects.create(
+        inspecao=inspecao_com_profissionais, especialidade='mecanica',
+        data_inspecao=date.today(), conclusao='ok', status='finalizada',
+    )
+    mecanica_esp.profissionais.set([_prof('Carlos Mecanica')])
+    inspecao_com_profissionais.especialidades.update(status='finalizada')
+    civil = inspecao_com_profissionais.especialidades.get(especialidade='civil')
+    achado = Achado.objects.create(
+        especialidade=civil, localizacao='L1', verificacao='Rachadura',
+        grupo_tecnico='estrutura', requisito_afetado='seguranca_estrutural',
+        gravidade=5, urgencia=5, tendencia=5,
+    )
+    Foto.objects.create(
+        achado=achado, arquivo=SimpleUploadedFile('f1.jpg', b'conteudo1', content_type='image/jpeg'),
+        nome_original='f1.jpg',
+    )
+    Foto.objects.create(
+        achado=achado, arquivo=SimpleUploadedFile('f2.jpg', b'conteudo2', content_type='image/jpeg'),
+        nome_original='f2.jpg',
+    )
+
+    capturado = {}
+    original_montar_snapshot = views_module._montar_snapshot_relatorio
+
+    def _snapshot_espiao(inspecao, numero_versao):
+        resultado = original_montar_snapshot(inspecao, numero_versao)
+        capturado['snapshot'] = resultado
+        return resultado
+
+    with patch('apps.inspecoes.views._montar_snapshot_relatorio', side_effect=_snapshot_espiao), \
+         patch('apps.inspecoes.views.gerar_docx_relatorio', side_effect=RuntimeError('falha simulada na geração do docx')):
+        with pytest.raises(RuntimeError, match='falha simulada na geração do docx'):
+            client.post(reverse('inspecoes:relatorio_final_gerar', kwargs={'pk': inspecao_com_profissionais.pk}))
+
+    assert inspecao_com_profissionais.relatorios_finais.count() == 0
+
+    snapshot = capturado['snapshot']
+    civil_data = next(e for e in snapshot['especialidades'] if e['especialidade'] == 'civil')
+    caminhos_copiados = civil_data['achados_completos'][0]['fotos']
+    assert len(caminhos_copiados) == 2  # sanity: as fotos foram de fato copiadas antes da falha
+    for caminho in caminhos_copiados:
+        assert not default_storage.exists(caminho)
