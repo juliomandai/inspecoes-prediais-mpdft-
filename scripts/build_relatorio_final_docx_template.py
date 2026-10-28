@@ -206,21 +206,21 @@ def main(origem, destino):
             forcar_run_unico(p, '{{ sumario_executivo }}')
             break
 
-    # ── 2d. Parágrafo introdutório do "Histórico de Intervenções" ──────────
-    # Este parágrafo ("O edifício abriga a Promotoria de Justiça...") não
-    # fazia parte do mapa original e mencionava o nome da edificação dentro
-    # de uma frase maior (run único). Substituímos só o nome; os demais
-    # dados fixos desta frase (área construída, datas de inauguração/
-    # averbação, "21 anos de uso") permanecem como texto fixo nesta versão
-    # — ver observação no relatório desta task.
+    # ── 2d. Parágrafo "Caracterização da Edificação" ───────────────────────
+    # Este parágrafo ("O edifício abriga a Promotoria de Justiça... possui
+    # três pavimentos... 4.745,52 m²... inaugurado em 29/07/2005... 21 anos
+    # de uso... averbada em 9/08/2006...") corresponde, no desenho da
+    # feature, à seção "Caracterização da Edificação" do laudo — texto livre
+    # já existente em `Edificacao.descritivo`, preenchido manualmente por
+    # edificação na plataforma, no mesmo molde de "Metodologia"/
+    # "Fundamentação Normativa" (blocos de texto fixo/manual, não decompostos
+    # em sub-variáveis). Por isso o parágrafo inteiro — não só o nome da
+    # edificação — é substituído por um único marcador. Não criamos
+    # variáveis como `idade_edificio`/`data_averbacao`: o projeto decidiu
+    # explicitamente não rastrear data de averbação.
     for p in doc.paragraphs:
         if p.text.startswith('O edifício abriga a Promotoria de Justiça'):
-            for r in p.runs:
-                if 'Promotoria de Justiça de Defesa da Infância e da Juventude' in r.text:
-                    r.text = r.text.replace(
-                        'Promotoria de Justiça de Defesa da Infância e da Juventude',
-                        '{{ edificacao_nome }}',
-                    )
+            forcar_run_unico(p, '{{ caracterizacao_edificacao }}')
             break
 
     # ── 2e. Tabela 3 (Encaminhamento) — por índice de célula ────────────────
