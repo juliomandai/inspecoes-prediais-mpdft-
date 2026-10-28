@@ -5,6 +5,7 @@ import pytest
 from apps.edificacoes.forms import EdificacaoForm
 from apps.edificacoes.models import Edificacao
 from apps.edificacoes.models import Profissional
+from apps.edificacoes.models import HistoricoIntervencao
 
 
 @pytest.mark.django_db
@@ -46,3 +47,29 @@ def test_profissional_form_exige_crea():
     form = ProfissionalForm(data={'nome': 'Ana Civil', 'crea': ''})
     assert not form.is_valid()
     assert 'crea' in form.errors
+
+
+@pytest.mark.django_db
+def test_historico_intervencao_ordena_por_ano():
+    e = Edificacao.objects.create(nome='Sede com histórico')
+    HistoricoIntervencao.objects.create(edificacao=e, ano=2023, descricao='Troca de chiller')
+    HistoricoIntervencao.objects.create(edificacao=e, ano=2022, descricao='Recuperação de fachada')
+    anos = list(e.historico_intervencoes.values_list('ano', flat=True))
+    assert anos == [2022, 2023]
+
+
+@pytest.mark.django_db
+def test_edificacao_update_sincroniza_historico(client, django_user_model):
+    staff = django_user_model.objects.create_user(username='admin', password='x', is_staff=True)
+    client.force_login(staff)
+    e = Edificacao.objects.create(nome='Sede histórico view')
+    resp = client.post(f'/edificacoes/{e.pk}/editar/', {
+        'nome': 'Sede histórico view', 'endereco': '', 'area_construida_m2': '',
+        'pavimentos': '', 'ativo': 'on',
+        'historico_ano': ['2022', '2023'],
+        'historico_descricao': ['Reforma de fachada', 'Troca de elevador'],
+    })
+    assert resp.status_code == 302
+    assert list(e.historico_intervencoes.values_list('ano', 'descricao')) == [
+        (2022, 'Reforma de fachada'), (2023, 'Troca de elevador'),
+    ]

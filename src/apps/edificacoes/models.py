@@ -48,6 +48,27 @@ class Edificacao(SoftDeleteModel):
         return self.nome
 
 
+class HistoricoIntervencao(SoftDeleteModel):
+    """Uma linha do quadro 'Ano / Intervenção' do laudo-modelo (seção
+    Caracterização da Edificação) — intervenções relevantes já realizadas
+    na edificação (reforma, troca de equipamento etc.)."""
+    edificacao = models.ForeignKey(
+        Edificacao, on_delete=models.CASCADE, related_name='historico_intervencoes',
+        verbose_name='Edificação',
+    )
+    ano = models.PositiveIntegerField('Ano')
+    descricao = models.CharField('Intervenção', max_length=300)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['ano', 'id']
+        verbose_name = 'Histórico de intervenção'
+        verbose_name_plural = 'Histórico de intervenções'
+
+    def __str__(self):
+        return f'{self.ano} — {self.descricao}'
+
+
 class Profissional(SoftDeleteModel):
     """Engenheiro(a)/profissional responsável técnico, reaproveitável entre
     inspeções (como Edificacao) — ver ADR do grill de 2026-10-27: antes era

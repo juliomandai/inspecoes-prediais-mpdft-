@@ -1,6 +1,6 @@
 from django.contrib import admin
 from apps.core.admin import SoftDeleteAdminMixin
-from .models import Edificacao, Profissional
+from .models import Edificacao, Profissional, HistoricoIntervencao
 
 
 @admin.register(Edificacao)
@@ -17,3 +17,10 @@ class ProfissionalAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
     list_display = ['nome', 'crea', 'criado_em', 'excluido_em']
     search_fields = ['nome', 'crea']
     ordering = ['nome']
+
+
+@admin.register(HistoricoIntervencao)
+class HistoricoIntervencaoAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
+    list_display = ['edificacao', 'ano', 'descricao']
+    list_filter = ['edificacao']
+    ordering = ['edificacao', 'ano']
