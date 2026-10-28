@@ -7,7 +7,7 @@ def migrar_profissionais_para_entidade(apps, schema_editor):
     cache = {}
     contador = 1
     for esp in InspecaoEspecialidade.objects.all():
-        nomes = [n.strip() for n in esp.profissional.splitlines() if n.strip()]
+        nomes = [' '.join(n.split()) for n in esp.profissional.splitlines() if n.strip()]
         for nome in nomes:
             chave = nome.lower()
             if chave not in cache:

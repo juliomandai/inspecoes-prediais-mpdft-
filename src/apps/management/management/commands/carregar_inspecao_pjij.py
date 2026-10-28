@@ -10,6 +10,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from datetime import date
 
+from apps.edificacoes.models import Profissional
+
 EDIFICACAO_NOME = 'Promotoria de Justiça da Defesa da Infância e Juventude'
 DATA_INSPECAO_CIV = date(2026, 5, 1)
 DATA_INSPECAO_MEC = date(2026, 5, 1)
@@ -715,25 +717,6 @@ ACHADOS_MEC = [
 ]
 
 
-def _profissional_por_nome(nome):
-    """Busca um Profissional ativo existente pelo nome (case-insensitive) ou
-    cria um novo com CREA placeholder 'PENDENTE-N' — mesmo padrão da
-    migração de dados 0020 do app inspecoes, usado aqui porque este
-    comando de carga ainda guarda os profissionais como texto livre."""
-    from apps.edificacoes.models import Profissional
-    prof = Profissional.objects.filter(nome__iexact=nome).first()
-    if prof:
-        return prof
-    ultimo_n = 0
-    for crea in Profissional.todos_objects.filter(crea__startswith='PENDENTE-').values_list('crea', flat=True):
-        try:
-            n = int(crea.split('-', 1)[1])
-        except (IndexError, ValueError):
-            continue
-        ultimo_n = max(ultimo_n, n)
-    return Profissional.objects.create(nome=nome, crea=f'PENDENTE-{ultimo_n + 1}')
-
-
 class Command(BaseCommand):
     help = 'Carrega a inspeção predial da PJIJ a partir dos dados da planilha Excel'
 
@@ -791,7 +774,7 @@ class Command(BaseCommand):
                 data_inspecao=DATA_INSPECAO_MEC,
                 status='finalizada',
             )
-            esp_mec.profissionais.set([_profissional_por_nome('Engenheiro Mecânico (a definir)')])
+            esp_mec.profissionais.set([Profissional.buscar_ou_criar_por_nome('Engenheiro Mecânico (a definir)')])
             self._criar_achados(esp_mec, ACHADOS_MEC)
             nc = sum(1 for r in ACHADOS_MEC if not r[4])
             cf = sum(1 for r in ACHADOS_MEC if r[4])
@@ -836,7 +819,7 @@ class Command(BaseCommand):
                 f'Especialidade civil já existia (id={esp_civ.pk}). Use --limpar para recriar.'
             ))
         else:
-            esp_civ.profissionais.set([_profissional_por_nome('Eng. Civil Jader Mendes Santana Pereira')])
+            esp_civ.profissionais.set([Profissional.buscar_ou_criar_por_nome('Eng. Civil Jader Mendes Santana Pereira')])
             self.stdout.write(f'Especialidade civil criada (id={esp_civ.pk})')
             self._criar_achados(esp_civ, ACHADOS_CIV)
             nc = sum(1 for r in ACHADOS_CIV if not r[4])
@@ -859,7 +842,7 @@ class Command(BaseCommand):
                 f'Especialidade mecânica já existia (id={esp_mec.pk}). Use --limpar para recriar.'
             ))
         else:
-            esp_mec.profissionais.set([_profissional_por_nome('Engenheiro Mecânico (a definir)')])
+            esp_mec.profissionais.set([Profissional.buscar_ou_criar_por_nome('Engenheiro Mecânico (a definir)')])
             self.stdout.write(f'Especialidade mecânica criada (id={esp_mec.pk})')
             self._criar_achados(esp_mec, ACHADOS_MEC)
             nc = sum(1 for r in ACHADOS_MEC if not r[4])

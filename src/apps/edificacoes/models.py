@@ -95,3 +95,23 @@ class Profissional(SoftDeleteModel):
 
     def __str__(self):
         return self.nome
+
+    @classmethod
+    def buscar_ou_criar_por_nome(cls, nome):
+        """Busca um Profissional existente pelo nome (case-insensitive) ou
+        cria um novo com CREA placeholder 'PENDENTE-N' — mesmo padrão da
+        migração de dados 0020 (ver
+        apps/inspecoes/migrations/0020_inspecaoespecialidade_profissionais.py).
+        Usado ao importar/restaurar dados que só guardam os profissionais
+        como texto livre, sem CREA conhecido."""
+        prof = cls.objects.filter(nome__iexact=nome).first()
+        if prof:
+            return prof
+        ultimo_n = 0
+        for crea in cls.todos_objects.filter(crea__startswith='PENDENTE-').values_list('crea', flat=True):
+            try:
+                n = int(crea.split('-', 1)[1])
+            except (IndexError, ValueError):
+                continue
+            ultimo_n = max(ultimo_n, n)
+        return cls.objects.create(nome=nome, crea=f'PENDENTE-{ultimo_n + 1}')

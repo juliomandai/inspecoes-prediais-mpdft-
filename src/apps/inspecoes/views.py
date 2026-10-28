@@ -2181,25 +2181,6 @@ def inspecao_backup_download(request, pk):
 
 # ── Restaurar backup ──────────────────────────────────────────────────────────
 
-def _profissional_por_nome(nome):
-    """Busca um Profissional existente pelo nome (case-insensitive) ou cria um
-    novo com CREA placeholder 'PENDENTE-N' — mesmo padrão da migração de dados
-    0020 (ver apps/inspecoes/migrations/0020_inspecaoespecialidade_profissionais.py),
-    usado aqui para restaurar backups antigos que ainda guardam os
-    profissionais como texto livre."""
-    prof = Profissional.objects.filter(nome__iexact=nome).first()
-    if prof:
-        return prof
-    ultimo_n = 0
-    for crea in Profissional.todos_objects.filter(crea__startswith='PENDENTE-').values_list('crea', flat=True):
-        try:
-            n = int(crea.split('-', 1)[1])
-        except (IndexError, ValueError):
-            continue
-        ultimo_n = max(ultimo_n, n)
-    return Profissional.objects.create(nome=nome, crea=f'PENDENTE-{ultimo_n + 1}')
-
-
 def _restaurar_backup(arquivo_zip, request):
     """
     Lê um arquivo ZIP de backup e recria a inspeção no banco de dados.
@@ -2277,7 +2258,7 @@ def _restaurar_backup(arquivo_zip, request):
             )
             nomes_profissionais = [n.strip() for n in esp_data.get('profissional', '').splitlines() if n.strip()]
             if nomes_profissionais:
-                esp.profissionais.set([_profissional_por_nome(n) for n in nomes_profissionais])
+                esp.profissionais.set([Profissional.buscar_ou_criar_por_nome(n) for n in nomes_profissionais])
 
             for achado_data in esp_data.get('achados', []):
                 em_conf = bool(achado_data.get('em_conformidade', False))
