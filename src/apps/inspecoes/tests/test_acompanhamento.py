@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 @pytest.fixture
 def cenario(db, client):
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
     U = get_user_model()
     u = U.objects.create_user(username='ze', password='1', is_staff=True,
@@ -20,9 +20,11 @@ def cenario(db, client):
     insp_anexo = Inspecao.objects.create(edificacao=anexo)
 
     civ = InspecaoEspecialidade.objects.create(inspecao=insp_sede, especialidade='civil',
-        profissional='X', data_inspecao=date.today())
+        data_inspecao=date.today())
+    civ.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X')])
     ele = InspecaoEspecialidade.objects.create(inspecao=insp_anexo, especialidade='eletrica',
-        profissional='Y', data_inspecao=date.today())
+        data_inspecao=date.today())
+    ele.profissionais.set([Profissional.objects.create(nome='Y', crea='CREA-Y')])
 
     def nc(esp, direc, loc='L1', status='pendente'):
         return Achado.objects.create(

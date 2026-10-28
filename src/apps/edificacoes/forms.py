@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django import forms
-from .models import Edificacao
+from .models import Edificacao, Profissional
 
 
 def formatar_decimal_br(valor):
@@ -69,3 +69,22 @@ class DescritivoEdificacaoForm(forms.ModelForm):
             'descritivo': forms.Textarea(attrs={'class': 'form-control', 'rows': 5}),
         }
         labels = {'descritivo': 'Descritivo da edificação'}
+
+
+class ProfissionalForm(forms.ModelForm):
+    class Meta:
+        model = Profissional
+        fields = ['nome', 'crea']
+        widgets = {
+            'nome': forms.TextInput(attrs={'class': 'form-control'}),
+            'crea': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 12345/D-DF'}),
+        }
+
+    def clean_crea(self):
+        crea = self.cleaned_data['crea'].strip()
+        qs = Profissional.objects.filter(crea__iexact=crea)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Já existe um profissional cadastrado com este CREA.')
+        return crea

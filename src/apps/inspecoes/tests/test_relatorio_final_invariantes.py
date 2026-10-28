@@ -11,13 +11,19 @@ from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado, Foto
 from apps.inspecoes.models import RelatorioFinalInspecao
 
 
+def _prof(nome):
+    from apps.edificacoes.models import Profissional
+    return Profissional.objects.get_or_create(nome=nome, defaults={'crea': f'CREA-{nome}'})[0]
+
+
 @pytest.mark.django_db
 def test_conclusao_aceita_texto_livre_e_pode_ficar_vazia():
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='Ana', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([_prof('Ana')])
     assert esp.conclusao == ''
     esp.conclusao = 'Estrutura em bom estado geral; recomenda-se manutenção preventiva nos itens 3 e 7.'
     esp.save(update_fields=['conclusao'])
@@ -32,8 +38,9 @@ def test_finalizar_especialidade_exige_conclusao_preenchida():
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='Ana', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([_prof('Ana')])
     Achado.objects.create(
         especialidade=esp, localizacao='L1', verificacao='V', grupo_tecnico='estrutura',
         requisito_afetado='durabilidade', gravidade=1, urgencia=1, tendencia=1, em_conformidade=True,
@@ -62,7 +69,7 @@ def test_relatorio_final_e_versionado_e_unico_por_inspecao():
     r1 = RelatorioFinalInspecao.objects.create(
         inspecao=insp, numero_versao=1, snapshot={'ok': True}, gerado_por=u,
     )
-    r1.arquivo_pdf.save('teste.pdf', ContentFile(b'%PDF-fake'), save=True)
+    r1.arquivo_docx.save('teste.docx', ContentFile(b'fake-docx'), save=True)
     r2 = RelatorioFinalInspecao.objects.create(
         inspecao=insp, numero_versao=2, snapshot={'ok': True}, gerado_por=u,
     )
@@ -76,9 +83,10 @@ def test_relatorio_final_e_versionado_e_unico_por_inspecao():
 
 def _criar_especialidade(insp, especialidade, conclusao='Conclusão padrão.', finalizada=True):
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade=especialidade, profissional='Ana',
+        inspecao=insp, especialidade=especialidade,
         data_inspecao=date.today(), conclusao=conclusao,
     )
+    esp.profissionais.set([_prof('Ana')])
     if finalizada:
         esp.status = 'finalizada'
         esp.save(update_fields=['status'])

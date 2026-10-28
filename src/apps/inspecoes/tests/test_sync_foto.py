@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 
 @pytest.fixture
 def cenario(db, client):
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
     U = get_user_model()
     u = U.objects.create_user(username='ze', password='1', is_staff=True)
@@ -17,8 +17,9 @@ def cenario(db, client):
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='X', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X')])
     achado = Achado.objects.create(
         especialidade=esp, localizacao='Subsolo', verificacao='Infiltração',
         grupo_tecnico='estrutura', requisito_afetado='durabilidade',
@@ -88,15 +89,16 @@ def test_sincronizar_foto_nao_exige_csrf_token():
     tem acesso a um token CSRF renderizado em página — precisa ser csrf_exempt,
     igual aos demais endpoints de sync (achado_sincronizar,
     achado_sincronizar_edicao)."""
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
     U = get_user_model()
     u = U.objects.create_user(username='maria', password='1', is_staff=True)
     edif = Edificacao.objects.create(nome='Sede 2')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='X', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X2')])
     achado = Achado.objects.create(
         especialidade=esp, localizacao='L', verificacao='V', grupo_tecnico='estrutura',
         requisito_afetado='durabilidade', gravidade=1, urgencia=1, tendencia=1, prioridade_risco=3,

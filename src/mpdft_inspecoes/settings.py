@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'apps.inspecoes',
     'apps.acessibilidade',
     'apps.management',
+    'apps.relatorio_final',
 ]
 
 MIDDLEWARE = [
@@ -125,3 +126,10 @@ DEFAULT_FROM_EMAIL = config(
 NOTIFICAR_NOVO_USUARIO = config(
     'NOTIFICAR_NOVO_USUARIO', default='juliomandai@gmail.com', cast=Csv()
 )
+
+# ── Relatório Final — texto gerado por LLM (Gemini) ────────────────────────
+# Camada gratuita aceita conscientemente (decisão do grill de 2026-10-27):
+# o Google pode usar os dados enviados para treinar modelos. Se GEMINI_API_KEY
+# estiver vazio, a geração de texto é pulada sem erro (ver gemini_client.py).
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+GEMINI_MODEL = config('GEMINI_MODEL', default='gemini-3.8-flash')

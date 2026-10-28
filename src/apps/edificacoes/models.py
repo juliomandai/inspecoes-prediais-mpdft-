@@ -46,3 +46,72 @@ class Edificacao(SoftDeleteModel):
 
     def __str__(self):
         return self.nome
+
+
+class HistoricoIntervencao(SoftDeleteModel):
+    """Uma linha do quadro 'Ano / Intervenção' do laudo-modelo (seção
+    Caracterização da Edificação) — intervenções relevantes já realizadas
+    na edificação (reforma, troca de equipamento etc.)."""
+    edificacao = models.ForeignKey(
+        Edificacao, on_delete=models.CASCADE, related_name='historico_intervencoes',
+        verbose_name='Edificação',
+    )
+    ano = models.PositiveIntegerField('Ano')
+    descricao = models.CharField('Intervenção', max_length=300)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['ano', 'id']
+        verbose_name = 'Histórico de intervenção'
+        verbose_name_plural = 'Histórico de intervenções'
+
+    def __str__(self):
+        return f'{self.ano} — {self.descricao}'
+
+
+class Profissional(SoftDeleteModel):
+    """Engenheiro(a)/profissional responsável técnico, reaproveitável entre
+    inspeções (como Edificacao) — ver ADR do grill de 2026-10-27: antes era
+    só texto livre em InspecaoEspecialidade.profissional."""
+    nome = models.CharField('Nome', max_length=200)
+    crea = models.CharField(
+        'CREA', max_length=30,
+        help_text='Número do registro no CREA (ex.: "12345/D-DF"). '
+                   'Profissionais migrados do cadastro antigo recebem um '
+                   'placeholder "PENDENTE-N" a completar manualmente.',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nome']
+        verbose_name = 'Profissional'
+        verbose_name_plural = 'Profissionais'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['crea'], condition=Q(excluido_em__isnull=True),
+                name='unique_profissional_crea_ativo',
+            ),
+        ]
+
+    def __str__(self):
+        return self.nome
+
+    @classmethod
+    def buscar_ou_criar_por_nome(cls, nome):
+        """Busca um Profissional existente pelo nome (case-insensitive) ou
+        cria um novo com CREA placeholder 'PENDENTE-N' — mesmo padrão da
+        migração de dados 0020 (ver
+        apps/inspecoes/migrations/0020_inspecaoespecialidade_profissionais.py).
+        Usado ao importar/restaurar dados que só guardam os profissionais
+        como texto livre, sem CREA conhecido."""
+        prof = cls.objects.filter(nome__iexact=nome).first()
+        if prof:
+            return prof
+        ultimo_n = 0
+        for crea in cls.todos_objects.filter(crea__startswith='PENDENTE-').values_list('crea', flat=True):
+            try:
+                n = int(crea.split('-', 1)[1])
+            except (IndexError, ValueError):
+                continue
+            ultimo_n = max(ultimo_n, n)
+        return cls.objects.create(nome=nome, crea=f'PENDENTE-{ultimo_n + 1}')

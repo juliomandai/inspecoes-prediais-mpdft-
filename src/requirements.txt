@@ -7,3 +7,5 @@ whitenoise>=6.7
 pytest-django>=4.8
 xhtml2pdf>=0.2.17
 pypdf>=4.0
+docxtpl>=0.16
+google-genai>=0.1

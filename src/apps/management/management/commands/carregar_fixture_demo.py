@@ -1,6 +1,6 @@
 from datetime import date
 from django.core.management.base import BaseCommand
-from apps.edificacoes.models import Edificacao
+from apps.edificacoes.models import Edificacao, Profissional
 from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
 
 
@@ -18,8 +18,13 @@ class Command(BaseCommand):
         especialidade, created = InspecaoEspecialidade.objects.get_or_create(
             inspecao=inspecao,
             especialidade='civil',
-            defaults={'profissional': 'Demo SPO', 'data_inspecao': date.today(), 'status': 'em_andamento'},
+            defaults={'data_inspecao': date.today(), 'status': 'em_andamento'},
         )
+        if created:
+            demo_prof, _ = Profissional.objects.get_or_create(
+                nome='Demo SPO', defaults={'crea': 'DEMO-SPO'},
+            )
+            especialidade.profissionais.set([demo_prof])
 
         if created:
             Achado.objects.create(
@@ -54,7 +59,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f'Edificação: "{edificacao.nome}"'))
         self.stdout.write(self.style.SUCCESS(
-            f'Inspeção #{inspecao.pk}: {especialidade.profissional} — {especialidade.get_especialidade_display()}'
+            f'Inspeção #{inspecao.pk}: {especialidade.profissionais_display} — {especialidade.get_especialidade_display()}'
         ))
         self.stdout.write('')
         self.stdout.write('Acesse: http://127.0.0.1:8000/')

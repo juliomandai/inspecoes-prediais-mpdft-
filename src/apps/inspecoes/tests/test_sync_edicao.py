@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 @pytest.fixture
 def cenario(db, client):
     """Achado não conforme já preenchido (pré-cadastro), pronto para edição."""
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado
     U = get_user_model()
     u = U.objects.create_user(username='ze', password='1', is_staff=True)
@@ -18,8 +18,9 @@ def cenario(db, client):
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='X', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X')])
     achado = Achado.objects.create(
         especialidade=esp,
         localizacao='Fachada', sub_localizacao='Sul', verificacao='Fissuras',

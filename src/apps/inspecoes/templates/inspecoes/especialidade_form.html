@@ -36,11 +36,24 @@
 
           <div class="mb-3">
             <label class="form-label">Profissionais responsáveis</label>
+            <template id="profissional-select-template">
+              <select name="profissionais" class="form-select">
+                <option value="">Selecione...</option>
+                {% for p in profissionais_disponiveis %}
+                <option value="{{ p.pk }}">{{ p.nome }} — CREA {{ p.crea }}</option>
+                {% endfor %}
+              </select>
+            </template>
             <div id="profissionais-container">
-              {% for nome in profissionais %}
+              {% for pid in ids_selecionados %}
               <div class="input-group mb-2 profissional-row">
                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                <input type="text" name="profissionais" class="form-control" value="{{ nome }}" placeholder="Nome do profissional">
+                <select name="profissionais" class="form-select">
+                  <option value="">Selecione...</option>
+                  {% for p in profissionais_disponiveis %}
+                  <option value="{{ p.pk }}" {% if p.pk == pid %}selected{% endif %}>{{ p.nome }} — CREA {{ p.crea }}</option>
+                  {% endfor %}
+                </select>
                 <button type="button" class="btn btn-outline-danger" onclick="removerProfissional(this)" title="Remover">
                   <i class="bi bi-x-lg"></i>
                 </button>
@@ -50,6 +63,9 @@
             <button type="button" class="btn btn-outline-primary btn-sm" onclick="adicionarProfissional()">
               <i class="bi bi-plus-lg"></i> Adicionar profissional
             </button>
+            <a href="{% url 'edificacoes:profissional_create' %}" target="_blank" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-person-plus"></i> Cadastrar novo profissional
+            </a>
             {% if erro_profissionais %}<div class="text-danger small mt-1">{{ erro_profissionais }}</div>{% endif %}
           </div>
 
@@ -58,6 +74,14 @@
             {{ form.data_inspecao }}
             {% if form.data_inspecao.errors %}
             <div class="text-danger small mt-1">{{ form.data_inspecao.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.numero_art.id_for_label }}" class="form-label">{{ form.numero_art.label }}</label>
+            {{ form.numero_art }}
+            {% if form.numero_art.errors %}
+            <div class="text-danger small mt-1">{{ form.numero_art.errors }}</div>
             {% endif %}
           </div>
 
@@ -80,23 +104,31 @@
 
 {% block extra_js %}
 <script>
-// ── Profissionais responsáveis dinâmicos ────────────────────────────────────
 function adicionarProfissional() {
   var c = document.getElementById('profissionais-container');
   var div = document.createElement('div');
   div.className = 'input-group mb-2 profissional-row';
-  div.innerHTML =
-    '<span class="input-group-text"><i class="bi bi-person"></i></span>' +
-    '<input type="text" name="profissionais" class="form-control" placeholder="Nome do profissional">' +
-    '<button type="button" class="btn btn-outline-danger" onclick="removerProfissional(this)" title="Remover"><i class="bi bi-x-lg"></i></button>';
+  var icon = document.createElement('span');
+  icon.className = 'input-group-text';
+  icon.innerHTML = '<i class="bi bi-person"></i>';
+  var tpl = document.getElementById('profissional-select-template');
+  var select = tpl.content.firstElementChild.cloneNode(true);
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-outline-danger';
+  btn.title = 'Remover';
+  btn.innerHTML = '<i class="bi bi-x-lg"></i>';
+  btn.onclick = function () { removerProfissional(btn); };
+  div.appendChild(icon);
+  div.appendChild(select);
+  div.appendChild(btn);
   c.appendChild(div);
-  div.querySelector('input').focus();
+  select.focus();
 }
 function removerProfissional(btn) {
   var rows = document.querySelectorAll('#profissionais-container .profissional-row');
   if (rows.length <= 1) {
-    // mantém ao menos um campo, apenas limpa
-    btn.closest('.profissional-row').querySelector('input').value = '';
+    btn.closest('.profissional-row').querySelector('select').value = '';
     return;
   }
   btn.closest('.profissional-row').remove();

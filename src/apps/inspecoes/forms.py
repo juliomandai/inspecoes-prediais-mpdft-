@@ -45,12 +45,14 @@ class EspecialidadeForm(forms.ModelForm):
 
     class Meta:
         model = InspecaoEspecialidade
-        fields = ['especialidade', 'data_inspecao']
+        fields = ['especialidade', 'data_inspecao', 'numero_art']
         widgets = {
             'especialidade': forms.Select(attrs={'class': 'form-select'}),
+            'numero_art': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 1234567890123456'}),
         }
         labels = {
             'especialidade': 'Especialidade',
+            'numero_art': 'Número da ART',
         }
 
     def __init__(self, *args, inspecao=None, **kwargs):

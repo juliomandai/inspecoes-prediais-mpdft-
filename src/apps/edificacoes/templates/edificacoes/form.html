@@ -49,6 +49,23 @@
         {{ form.pavimentos }}
         <div class="form-text">Ex.: três pavimentos (subsolo, térreo e 1º pavimento), além de cobertura técnica.</div>
       </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Histórico de intervenções</label>
+        <div id="historico-container">
+          {% for h in historico %}
+          <div class="input-group mb-2 historico-row">
+            <input type="number" name="historico_ano" class="form-control" style="max-width:100px" value="{{ h.ano }}" placeholder="Ano">
+            <input type="text" name="historico_descricao" class="form-control" value="{{ h.descricao }}" placeholder="Intervenção">
+            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.historico-row').remove()" title="Remover">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="adicionarHistorico()">
+          <i class="bi bi-plus-lg"></i> Adicionar intervenção
+        </button>
+      </div>
       {% if form.instance.pk %}
       <div class="mb-3 form-check">
         {{ form.ativo }}
@@ -86,5 +103,17 @@ document.addEventListener('DOMContentLoaded', function () {
     campo.value = digitos ? formatarAreaBR(digitos) : '';
   });
 });
+
+function adicionarHistorico() {
+  var c = document.getElementById('historico-container');
+  var div = document.createElement('div');
+  div.className = 'input-group mb-2 historico-row';
+  div.innerHTML =
+    '<input type="number" name="historico_ano" class="form-control" style="max-width:100px" placeholder="Ano">' +
+    '<input type="text" name="historico_descricao" class="form-control" placeholder="Intervenção">' +
+    '<button type="button" class="btn btn-outline-danger" onclick="this.closest(\'.historico-row\').remove()" title="Remover"><i class="bi bi-x-lg"></i></button>';
+  c.appendChild(div);
+  div.querySelector('input').focus();
+}
 </script>
 {% endblock %}

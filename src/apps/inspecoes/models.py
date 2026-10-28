@@ -94,13 +94,20 @@ class InspecaoEspecialidade(SoftDeleteModel):
         related_name='especialidades',
     )
     especialidade = models.CharField('Especialidade', max_length=20, choices=ESPECIALIDADE_CHOICES)
-    profissional = models.TextField('Profissionais responsáveis', help_text='Um nome por linha.')
+    profissionais = models.ManyToManyField(
+        'edificacoes.Profissional', related_name='especialidades',
+        verbose_name='Profissionais responsáveis',
+    )
     data_inspecao = models.DateField('Data da inspeção')
     status = models.CharField('Status', max_length=20, choices=STATUS_CHOICES, default='em_andamento')
     conclusao = models.TextField(
         'Conclusão e direcionamentos', blank=True,
         help_text='Texto livre, redigido pelo profissional responsável — exigido '
                    'para finalizar esta especialidade.',
+    )
+    numero_art = models.CharField(
+        'Número da ART', max_length=50, blank=True,
+        help_text='ART desta especialidade específica — uma por engenharia (civil/elétrica/mecânica).',
     )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -125,7 +132,7 @@ class InspecaoEspecialidade(SoftDeleteModel):
 
     @property
     def profissionais_lista(self):
-        return [p.strip() for p in self.profissional.splitlines() if p.strip()]
+        return list(self.profissionais.order_by('nome').values_list('nome', flat=True))
 
     @property
     def profissionais_display(self):
@@ -527,7 +534,7 @@ def relatorio_pdf_upload_path(instance, filename):
 
 
 class RelatorioFinalInspecao(models.Model):
-    """Documento formal (PDF + snapshot) gerado ao encerrar uma inspeção
+    """Documento formal (Word + snapshot) gerado ao encerrar uma inspeção
     completa, para instruir ART junto ao CREA.
 
     Imutável depois de gerado (ADR-03): gerar de novo cria uma nova versão,
@@ -545,7 +552,7 @@ class RelatorioFinalInspecao(models.Model):
         verbose_name='Inspeção',
     )
     numero_versao = models.PositiveIntegerField('Versão')
-    arquivo_pdf = models.FileField('PDF gerado', upload_to=relatorio_pdf_upload_path)
+    arquivo_docx = models.FileField('Word gerado', upload_to=relatorio_pdf_upload_path)
     snapshot = models.JSONField('Snapshot')
     gerado_por = models.ForeignKey(
         get_user_model(), on_delete=models.PROTECT, related_name='relatorios_finais_gerados',

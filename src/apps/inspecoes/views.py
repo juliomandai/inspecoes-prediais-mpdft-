@@ -1,5 +1,4 @@
 import base64
-import functools
 import json
 import io
 import zipfile
@@ -7,6 +6,7 @@ import os
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.core.exceptions import RequestDataTooBig
 from django.db.models import Count, Q, Min, Max
@@ -30,7 +30,13 @@ from .forms import (
     ConclusaoEspecialidadeForm,
 )
 from apps.edificacoes.forms import DescritivoEdificacaoForm
+from apps.edificacoes.models import Profissional
 from .imagens import comprimir_imagem
+from apps.relatorio_final.dados import (
+    classificar_condicao_global, plano_acao_por_horizonte, montar_payload_llm,
+)
+from apps.relatorio_final.gemini_client import gerar_textos_relatorio
+from apps.relatorio_final.docx_builder import gerar_docx_relatorio
 
 
 def _redirect_detail(inspecao_pk, esp_pk=None):
@@ -138,7 +144,7 @@ def inspecao_list(request):
         if form.cleaned_data.get('especialidade'):
             qs = qs.filter(especialidades__especialidade=form.cleaned_data['especialidade']).distinct()
         if form.cleaned_data.get('profissional'):
-            qs = qs.filter(especialidades__profissional__icontains=form.cleaned_data['profissional']).distinct()
+            qs = qs.filter(especialidades__profissionais__nome__icontains=form.cleaned_data['profissional']).distinct()
         if form.cleaned_data.get('data_inicio'):
             qs = qs.filter(especialidades__data_inspecao__gte=form.cleaned_data['data_inicio']).distinct()
         if form.cleaned_data.get('data_fim'):
@@ -235,27 +241,28 @@ def inspecao_delete(request, pk):
 
 # ── Especialidades ─────────────────────────────────────────────────────────────
 
-def _profissionais_do_post(request):
-    """Coleta os nomes dos inputs dinâmicos 'profissionais' (um por campo)."""
-    return [n.strip() for n in request.POST.getlist('profissionais') if n.strip()]
+def _profissionais_ids_do_post(request):
+    """Coleta os ids dos <select> dinâmicos 'profissionais' (um por campo)."""
+    return [int(i) for i in request.POST.getlist('profissionais') if i.strip()]
 
 
 @login_required
 def especialidade_create(request, inspecao_pk):
     inspecao = get_object_or_404(Inspecao, pk=inspecao_pk)
     form = EspecialidadeForm(request.POST or None, inspecao=inspecao)
-    profissionais = _profissionais_do_post(request)
+    ids_selecionados = _profissionais_ids_do_post(request)
     erro_profissionais = None
     if request.method == 'POST' and form.is_valid():
+        profissionais = Profissional.objects.filter(pk__in=ids_selecionados)
         if not profissionais:
             erro_profissionais = 'Informe ao menos um profissional responsável.'
         else:
             esp = form.save(commit=False)
             esp.inspecao = inspecao
-            esp.profissional = '\n'.join(profissionais)
             try:
-                esp.full_clean()
+                esp.full_clean(exclude=['profissionais'])
                 esp.save()
+                esp.profissionais.set(profissionais)
                 _log(request, 'especialidade_criada', f'{esp.get_especialidade_display()} criada em "{inspecao.edificacao}".')
                 messages.success(request, f'{esp.get_especialidade_display()} adicionada com sucesso.')
                 return redirect('inspecoes:detail', pk=inspecao_pk)
@@ -264,7 +271,8 @@ def especialidade_create(request, inspecao_pk):
     return render(request, 'inspecoes/especialidade_form.html', {
         'form': form,
         'inspecao': inspecao,
-        'profissionais': profissionais or [''],
+        'profissionais_disponiveis': Profissional.objects.all(),
+        'ids_selecionados': ids_selecionados or [None],
         'erro_profissionais': erro_profissionais,
     })
 
@@ -301,7 +309,6 @@ def _copiar_fotos_para_relatorio(inspecao_pk, numero_versao, achado, fotos):
     """Copia os arquivos de imagem usados para um caminho próprio do
     relatório — independente do ciclo de vida da Foto original (ADR-07).
     Retorna a lista de caminhos salvos (relativos ao storage)."""
-    from django.core.files.storage import default_storage
     caminhos = []
     for i, foto in enumerate(fotos, start=1):
         ext = foto.arquivo.name.rsplit('.', 1)[-1]
@@ -436,15 +443,16 @@ def especialidade_update(request, pk):
     if not _pode_editar_especialidade(request.user, esp):
         return _acesso_negado_especialidade(request, esp)
     form = EspecialidadeForm(request.POST or None, instance=esp, inspecao=esp.inspecao)
-    profissionais = _profissionais_do_post(request) if request.method == 'POST' else esp.profissionais_lista
+    ids_selecionados = _profissionais_ids_do_post(request) if request.method == 'POST' else list(esp.profissionais.values_list('pk', flat=True))
     erro_profissionais = None
     if request.method == 'POST' and form.is_valid():
+        profissionais = Profissional.objects.filter(pk__in=ids_selecionados)
         if not profissionais:
             erro_profissionais = 'Informe ao menos um profissional responsável.'
         else:
             esp = form.save(commit=False)
-            esp.profissional = '\n'.join(profissionais)
             esp.save()
+            esp.profissionais.set(profissionais)
             if esp.status == 'finalizada':
                 _avisar_relatorio_final_desatualizado(request, esp)
             messages.success(request, 'Especialidade atualizada com sucesso.')
@@ -453,7 +461,8 @@ def especialidade_update(request, pk):
         'form': form,
         'inspecao': esp.inspecao,
         'especialidade': esp,
-        'profissionais': profissionais or [''],
+        'profissionais_disponiveis': Profissional.objects.all(),
+        'ids_selecionados': ids_selecionados or [None],
         'erro_profissionais': erro_profissionais,
     })
 
@@ -557,6 +566,189 @@ def especialidade_reabrir(request, pk):
 
 # ── Relatório Final de Inspeção (ART/CREA) ──────────────────────────────────
 
+_MESES_PT = {
+    1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril', 5: 'maio', 6: 'junho',
+    7: 'julho', 8: 'agosto', 9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro',
+}
+
+
+def _data_extenso(d):
+    return f'{d.day} de {_MESES_PT[d.month]} de {d.year}'
+
+
+def _dividir_em_ate_n_paragrafos(texto, n):
+    """Distribui um texto corrido (potencialmente multi-parágrafo) pelas N
+    variáveis numeradas (_1/_2/.../_n) que o template .docx expõe para cada
+    bloco de texto gerado pelo Gemini.
+
+    Decisão (ver SYSTEM_PROMPT em `gemini_client.py`): o próprio prompt
+    instrui o modelo a separar parágrafos com uma linha em branco ('\n\n')
+    quando o texto cobre mais de um parágrafo — então dividir por aí
+    aproveita essa estrutura, em vez de sempre jogar tudo na variável `_1` e
+    deixar as demais vazias. Parágrafos excedentes (mais que `n`) são
+    concatenados no último slot, nunca descartados. Texto vazio (ex.: sem
+    GEMINI_API_KEY) produz `n` strings vazias.
+    """
+    paragrafos = [p.strip() for p in texto.split('\n\n') if p.strip()]
+    if not paragrafos:
+        return [''] * n
+    if len(paragrafos) > n:
+        paragrafos = paragrafos[:n - 1] + ['\n\n'.join(paragrafos[n - 1:])]
+    return paragrafos + [''] * (n - len(paragrafos))
+
+
+def _montar_contexto_docx(inspecao, snapshot, painel, especialidades, plano_por_horizonte, textos, nao_conformes):
+    """Monta o dict de contexto final passado ao docxtpl — as 83 variáveis
+    Jinja confirmadas no template real do laudo-modelo MPDFT/SPO."""
+    edificacao = inspecao.edificacao
+    por_esp = {e.especialidade: e for e in especialidades}
+    resumo_por_esp = {r['especialidade_nome']: r for r in painel['resumo_especialidade']['por_especialidade']}
+
+    def resumo(nome_display):
+        r = resumo_por_esp.get(nome_display, {'total': 0, 'total_nc': 0, 'p1': 0, 'p2': 0, 'p3': 0})
+        pct = round((r['total'] - r['total_nc']) / r['total'] * 100) if r['total'] else 0
+        return r['total'], r['total_nc'], pct, r['p1'], r['p2'], r['p3']
+
+    civil_total, civil_nc, civil_pct_conf, civil_p1, civil_p2, civil_p3 = resumo('Engenharia Civil')
+    eletrica_total, eletrica_nc, eletrica_pct_conf, eletrica_p1, eletrica_p2, eletrica_p3 = resumo('Engenharia Elétrica')
+    mecanica_total, mecanica_nc, mecanica_pct_conf, mecanica_p1, mecanica_p2, mecanica_p3 = resumo('Engenharia Mecânica')
+
+    titulos_por_especialidade = {
+        'civil': 'engenheiro civil', 'eletrica': 'engenheiro eletricista', 'mecanica': 'engenheiro mecânico',
+    }
+    equipe_tecnica = '; '.join(
+        f"{p.nome}, {titulos_por_especialidade.get(esp.especialidade, esp.get_especialidade_display().lower())}"
+        for esp in especialidades for p in esp.profissionais.all()
+    )
+    responsabilidade_tecnica = '; '.join(
+        f"ART {esp.get_especialidade_display().lower()} nº {esp.numero_art or '[número]'}"
+        for esp in especialidades
+    )
+
+    def profissional_principal(chave):
+        esp = por_esp.get(chave)
+        if esp is None:
+            return '[nome]', '[CREA]'
+        p = esp.profissionais.first()
+        return (p.nome, p.crea) if p else ('[nome]', '[CREA]')
+
+    nome_civil, crea_civil = profissional_principal('civil')
+    nome_eletrica, crea_eletrica = profissional_principal('eletrica')
+    nome_mecanica, crea_mecanica = profissional_principal('mecanica')
+
+    direcionamento_totais = {d['key']: d for d in painel['por_direcionamento']}
+
+    matriz_risco_prazo = [
+        {
+            'rotulo': f"P{linha['prioridade']} – {dict(Achado.PRIORIDADE_CHOICES)[linha['prioridade']].split('— ')[-1]}",
+            'celulas': [c['qtd'] or '—' for c in linha['celulas']],
+            'total': sum(c['qtd'] for c in linha['celulas']),
+        }
+        for linha in painel['matriz_risco_prazo']
+    ]
+
+    anexo01 = [{
+        'numero': item['numero'], 'local': item['localizacao'],
+        'sistema_elemento': item['grupo_tecnico_nome'], 'situacao': item['situacao'],
+        'nao_conformidade': item['descricao_nao_conformidade'] or '—',
+        'recomendacao': item['recomendacao'] or '—',
+        'grau_risco': item['prioridade_risco'] if item['gut_total'] else '—',
+        'gut': item['gut_total'] or '—', 'prazo': item['prazo_label'] or '—',
+    } for item in snapshot['anexo01']]
+
+    plano_de_acao = [{
+        'horizonte': linha['horizonte'], 'nc': linha['nc'],
+        'principais_acoes': textos.get(f"plano_acao_{chave}", '—'),
+        'forma_execucao': linha['forma_execucao'],
+    } for linha, chave in zip(plano_por_horizonte, ['imediato', 'curto', 'medio', 'longo'])]
+
+    conclusoes_por_especialidade = {
+        esp.especialidade: esp.conclusao for esp in especialidades
+    }
+
+    top_gut_p1 = sorted(
+        (a for a in nao_conformes if a.prioridade_risco == 1), key=lambda a: -a.gut_total,
+    )
+    prazo_labels = dict(Achado.PRAZO_CHOICES)
+
+    principais_constatacoes_1, principais_constatacoes_2, principais_constatacoes_3 = (
+        _dividir_em_ate_n_paragrafos(textos['principais_constatacoes'], 3)
+    )
+    resultados_gerais_intro_1, resultados_gerais_intro_2 = (
+        _dividir_em_ate_n_paragrafos(textos['resultados_gerais_intro'], 2)
+    )
+    providencias_administracao_1, providencias_administracao_2 = (
+        _dividir_em_ate_n_paragrafos(textos['providencias_administracao'], 2)
+    )
+    conclusao_1, conclusao_2 = _dividir_em_ate_n_paragrafos(textos['conclusao'], 2)
+
+    agora = timezone.localtime(timezone.now())
+    return {
+        'edificacao_nome': edificacao.nome, 'edificacao_endereco': edificacao.endereco,
+        'datas_vistorias': ', '.join(snapshot['datas_vistorias']),
+        'mes_geracao': _MESES_PT[agora.month], 'ano_atual': agora.year,
+        'area_construida': f'{edificacao.area_construida_m2:.2f}'.replace('.', ',') if edificacao.area_construida_m2 else '[a preencher] m²',
+        'pavimentos': edificacao.pavimentos or '[a preencher]',
+        'data_inauguracao_extenso': _data_extenso(edificacao.data_inauguracao) if edificacao.data_inauguracao else '[a preencher]',
+        'equipe_tecnica': equipe_tecnica,
+        'responsabilidade_tecnica': responsabilidade_tecnica,
+        'caracterizacao_edificacao': edificacao.descritivo or '[a preencher]',
+        'sumario_executivo': textos['sumario_executivo'],
+        'principais_constatacoes_1': principais_constatacoes_1,
+        'principais_constatacoes_2': principais_constatacoes_2,
+        'principais_constatacoes_3': principais_constatacoes_3,
+        'providencias_administracao_1': providencias_administracao_1,
+        'providencias_administracao_2': providencias_administracao_2,
+        'resultados_gerais_intro_1': resultados_gerais_intro_1,
+        'resultados_gerais_intro_2': resultados_gerais_intro_2,
+        'resultados_gerais_achados_criticos': textos['resultados_gerais_achados_criticos'],
+        'n_ganhos_rapidos': painel['n_ganhos_rapidos'],
+        'itens_conformidade_civil': textos['itens_conformidade_civil'],
+        'itens_conformidade_eletrica': textos['itens_conformidade_eletrica'],
+        'itens_conformidade_mecanica': textos['itens_conformidade_mecanica'],
+        'conclusao_civil': conclusoes_por_especialidade.get('civil', ''),
+        'conclusao_eletrica': conclusoes_por_especialidade.get('eletrica', ''),
+        'conclusao_mecanica': conclusoes_por_especialidade.get('mecanica', ''),
+        'conclusao_1': conclusao_1, 'conclusao_2': conclusao_2,
+        'iqe': painel['iqe'], 'iqe_faixa': painel['iqe_faixa'], 'total': painel['total'],
+        'pct_conformidade': painel['pct_conformidade'], 'total_conformes': painel['total_conformes'],
+        'total_nc': painel['total_nc'], 'p1_total': painel['p1_total'], 'p2_total': painel['p2_total'],
+        'p3_total': painel['p3_total'], 'gut_media': painel['gut_media'],
+        'direcionamento_manutencao_total': direcionamento_totais.get('manutencao', {}).get('total', 0),
+        'direcionamento_manutencao_pct': direcionamento_totais.get('manutencao', {}).get('pct', 0),
+        'direcionamento_nova_contratacao_total': direcionamento_totais.get('nova_contratacao', {}).get('total', 0),
+        'direcionamento_nova_contratacao_pct': direcionamento_totais.get('nova_contratacao', {}).get('pct', 0),
+        'direcionamento_garantia_total': direcionamento_totais.get('garantia', {}).get('total', 0),
+        'direcionamento_garantia_pct': direcionamento_totais.get('garantia', {}).get('pct', 0),
+        'manutencao_classificacao': textos['manutencao_classificacao'] or '[a preencher]',
+        'manutencao_fundamentacao': textos['manutencao_fundamentacao'],
+        'uso_classificacao': textos['uso_classificacao'] or '[a preencher]',
+        'uso_fundamentacao': textos['uso_fundamentacao'],
+        'condicao_global': classificar_condicao_global(painel['iqe']),
+        'civil_total': civil_total, 'civil_nc': civil_nc, 'civil_pct_conf': civil_pct_conf,
+        'civil_p1': civil_p1, 'civil_p2': civil_p2, 'civil_p3': civil_p3,
+        'eletrica_total': eletrica_total, 'eletrica_nc': eletrica_nc, 'eletrica_pct_conf': eletrica_pct_conf,
+        'eletrica_p1': eletrica_p1, 'eletrica_p2': eletrica_p2, 'eletrica_p3': eletrica_p3,
+        'mecanica_total': mecanica_total, 'mecanica_nc': mecanica_nc, 'mecanica_pct_conf': mecanica_pct_conf,
+        'mecanica_p1': mecanica_p1, 'mecanica_p2': mecanica_p2, 'mecanica_p3': mecanica_p3,
+        'matriz_risco_prazo': matriz_risco_prazo,
+        'top_gut': [{
+            'numero': i + 1, 'local': a.localizacao, 'nao_conformidade': a.descricao_nao_conformidade or '—',
+            'recomendacao': a.recomendacao or '—', 'gut': a.gut_total,
+            'prazo': prazo_labels.get(a.prazo_meses, f'{a.prazo_meses} meses'),
+        } for i, a in enumerate(top_gut_p1)],
+        'historico_intervencoes': [
+            {'ano': h.ano, 'descricao': h.descricao} for h in edificacao.historico_intervencoes.all()
+        ],
+        'plano_de_acao': plano_de_acao,
+        'nome_civil': nome_civil, 'titulo_civil': 'Engenheiro civil', 'crea_civil': crea_civil,
+        'nome_eletrica': nome_eletrica, 'titulo_eletrica': 'Engenheiro eletricista', 'crea_eletrica': crea_eletrica,
+        'nome_mecanica': nome_mecanica, 'titulo_mecanica': 'Engenheiro mecânico', 'crea_mecanica': crea_mecanica,
+        'nome_secretaria_spo': '[nome da Secretária de Projetos e Obras]',
+        'anexo01': anexo01,
+    }
+
+
 @login_required
 def relatorio_final_painel(request, pk):
     inspecao = get_object_or_404(
@@ -615,41 +807,40 @@ def relatorio_final_gerar(request, pk):
         return redirect('inspecoes:relatorio_final_painel', pk=pk)
 
     numero_versao = (inspecao.relatorios_finais.aggregate(m=Max('numero_versao'))['m'] or 0) + 1
-    # `snapshot` (caminhos leves) é o que persiste no banco; `contexto_pdf`
-    # (fotos como data URI) é só para renderizar o HTML/PDF desta vez — ver
-    # a nota em `_montar_contexto_pdf_com_fotos` sobre nunca trocar os dois.
     snapshot = _montar_snapshot_relatorio(inspecao, numero_versao)
-    contexto_pdf = _montar_contexto_pdf_com_fotos(snapshot)
-    painel = _painel_encerramento_relatorio(inspecao, list(inspecao.especialidades.all()))
-    html = render_to_string('inspecoes/relatorio_final_pdf.html', {
-        'inspecao': inspecao, 'snapshot': contexto_pdf, 'numero_versao': numero_versao,
-        'painel': painel, 'logo_mpdft': _logo_mpdft_data_uri(),
-        'fontes_css': _fontes_pdf_css(),
-    }, request=request)
-    pdf_bytes = _gerar_pdf_bytes(html)
-    if pdf_bytes is not None:
-        gerado_em = timezone.now()
-        titulo = f'Laudo Técnico de Inspeção Predial — {inspecao.edificacao.nome}'
-        pdf_bytes = _aplicar_metadados_pdf(pdf_bytes, titulo, numero_versao, gerado_em)
-    if pdf_bytes is None:
-        # `_montar_snapshot_relatorio` já copiou as fotos para
-        # relatorios/<pk>/v<numero_versao>/... antes de sabermos que o PDF
-        # falharia — sem isso, ficariam órfãs (nenhuma RelatorioFinalInspecao
-        # aponta pra elas) e o número de versão ficaria abandonado.
-        from django.core.files.storage import default_storage
+    especialidades = list(inspecao.especialidades.all())
+    painel = _painel_encerramento_relatorio(inspecao, especialidades)
+
+    todos_achados = [a for esp in especialidades for a in esp.achados.all()]
+    nao_conformes = [a for a in todos_achados if a.gut_total > 0]
+    plano_por_horizonte = plano_acao_por_horizonte(nao_conformes)
+    payload_llm = montar_payload_llm(especialidades, plano_por_horizonte, painel)
+    textos = gerar_textos_relatorio(payload_llm)
+
+    # `gerar_docx_relatorio` não deve lançar exceção em condições normais —
+    # ela só preenche um template .docx fixo com o contexto montado abaixo.
+    # Se lançar mesmo assim, é um bug real (ex.: variável faltando no
+    # contexto) que deve propagar e aparecer nos logs — não é engolido com um
+    # retorno None/sentinela como na versão antiga (PDF). Mas isso não isenta
+    # a limpeza das fotos: `_montar_snapshot_relatorio` já copiou os arquivos
+    # para relatorios/<pk>/v<numero_versao>/... antes deste ponto, e nenhuma
+    # RelatorioFinalInspecao será criada se a exceção subir — sem a limpeza
+    # abaixo, essas cópias ficariam órfãs no storage para sempre.
+    contexto = _montar_contexto_docx(inspecao, snapshot, painel, especialidades, plano_por_horizonte, textos, nao_conformes)
+    try:
+        docx_bytes = gerar_docx_relatorio(contexto)
+        relatorio = RelatorioFinalInspecao(
+            inspecao=inspecao, numero_versao=numero_versao, snapshot=snapshot, gerado_por=request.user,
+        )
+        nome_arquivo = f"relatorio_final_{inspecao.edificacao.nome.replace(' ', '_')}_v{numero_versao}.docx"
+        relatorio.arquivo_docx.save(nome_arquivo, ContentFile(docx_bytes), save=False)
+        relatorio.save()
+    except Exception:
         for esp in snapshot['especialidades']:
             for achado in esp['achados_completos']:
                 for caminho in achado['fotos']:
                     default_storage.delete(caminho)
-        messages.error(request, 'Erro ao gerar o PDF do relatório. Tente novamente.')
-        return redirect('inspecoes:relatorio_final_painel', pk=pk)
-
-    relatorio = RelatorioFinalInspecao(
-        inspecao=inspecao, numero_versao=numero_versao, snapshot=snapshot, gerado_por=request.user,
-    )
-    nome_arquivo = f"relatorio_final_{inspecao.edificacao.nome.replace(' ', '_')}_v{numero_versao}.pdf"
-    relatorio.arquivo_pdf.save(nome_arquivo, ContentFile(pdf_bytes), save=False)
-    relatorio.save()
+        raise
 
     _log(request, 'relatorio_final_gerado',
          f'Relatório Final de Inspeção (v{numero_versao}) gerado para "{inspecao.edificacao}".')
@@ -664,8 +855,11 @@ def relatorio_final_download(request, pk, versao_pk):
         messages.error(request, 'Acesso negado.')
         return redirect('inspecoes:detail', pk=pk)
     relatorio = get_object_or_404(RelatorioFinalInspecao, pk=versao_pk, inspecao=inspecao)
-    resp = HttpResponse(relatorio.arquivo_pdf.read(), content_type='application/pdf')
-    resp['Content-Disposition'] = f'attachment; filename="{os.path.basename(relatorio.arquivo_pdf.name)}"'
+    resp = HttpResponse(
+        relatorio.arquivo_docx.read(),
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    resp['Content-Disposition'] = f'attachment; filename="{os.path.basename(relatorio.arquivo_docx.name)}"'
     return resp
 
 
@@ -1553,18 +1747,6 @@ def _png_data_uri(img):
     return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
 
 
-@functools.lru_cache(maxsize=1)
-def _logo_mpdft_data_uri():
-    """Logomarca do MPDFT para o cabeçalho do Relatório Final, como PNG data
-    URI — embutida porque o xhtml2pdf não resolve STATIC_URL/arquivos
-    estáticos (sem link_callback configurado nesta base de código)."""
-    from django.conf import settings
-    caminho = settings.BASE_DIR / 'static' / 'img' / 'mpdft_logo.png'
-    with open(caminho, 'rb') as f:
-        dados = f.read()
-    return 'data:image/png;base64,' + base64.b64encode(dados).decode()
-
-
 _FONTES_PDF_CORRIGIDAS = False
 
 
@@ -1595,55 +1777,6 @@ def _corrigir_bug_tempfile_fontes_windows():
 
     xh_files.BaseFile.get_named_tmp_file = _get_named_tmp_file_corrigido
     _FONTES_PDF_CORRIGIDAS = True
-
-
-@functools.lru_cache(maxsize=1)
-def _fontes_pdf_css():
-    """Regras @font-face com Arial/Arial Narrow/Calibri reais (embutidas como
-    data URI base64 — mesmo motivo do `_logo_mpdft_data_uri`), para o
-    Relatório Final usar as fontes do laudo-modelo em vez do Helvetica
-    genérico que o xhtml2pdf usa por padrão para "Arial" no CSS. Lida apenas
-    com os .ttf do Windows (ambiente de produção — ver `_fonte` acima); se
-    não encontrar, devolve string vazia e o PDF cai no Helvetica/Times
-    genéricos sem quebrar a geração em outros ambientes (ex. CI em Linux)."""
-    base = 'C:/Windows/Fonts/'
-    familias = {
-        'Arial': [('normal', 'normal', 'arial.ttf'), ('bold', 'normal', 'arialbd.ttf'),
-                   ('normal', 'italic', 'ariali.ttf'), ('bold', 'italic', 'arialbi.ttf')],
-        'Arial Narrow': [('normal', 'normal', 'ARIALN.TTF'), ('bold', 'normal', 'ARIALNB.TTF')],
-        'Calibri': [('normal', 'normal', 'calibri.ttf'), ('bold', 'normal', 'calibrib.ttf')],
-    }
-    regras = []
-    for familia, variantes in familias.items():
-        for peso, estilo, arquivo in variantes:
-            caminho = base + arquivo
-            if not os.path.exists(caminho):
-                continue
-            with open(caminho, 'rb') as f:
-                b64 = base64.b64encode(f.read()).decode()
-            regras.append(
-                f'@font-face {{ font-family: "{familia}"; font-weight: {peso}; '
-                f'font-style: {estilo}; src: url(data:font/ttf;base64,{b64}); }}'
-            )
-    return '\n'.join(regras)
-
-
-def _aplicar_metadados_pdf(pdf_bytes, titulo, versao, gerado_em):
-    """Move "Versão N — gerado em ..." do corpo visível do laudo para os
-    metadados do PDF (título/assunto) — o modelo de laudo do MPDFT/SPO não
-    mostra essa linha no corpo. Usa `pypdf` (já uma dependência transitiva
-    nesta base), sem precisar de link_callback nem reescrever o HTML."""
-    from pypdf import PdfReader, PdfWriter
-    leitor = PdfReader(io.BytesIO(pdf_bytes))
-    escritor = PdfWriter()
-    escritor.append(leitor)
-    escritor.add_metadata({
-        '/Title': titulo,
-        '/Subject': f'Versão {versao} — gerado em {gerado_em:%d/%m/%Y %H:%M}',
-    })
-    buf = io.BytesIO()
-    escritor.write(buf)
-    return buf.getvalue()
 
 
 def _fonte(tamanho):
@@ -1927,48 +2060,6 @@ def _gerar_pdf(html_string, nome_arquivo):
     return resp
 
 
-def _gerar_pdf_bytes(html_string):
-    """Como `_gerar_pdf`, mas devolve os bytes do PDF em vez de um
-    HttpResponse — usado quando o PDF precisa ser salvo num FileField
-    (RelatorioFinalInspecao), não só servido para download direto."""
-    from xhtml2pdf import pisa
-    _corrigir_bug_tempfile_fontes_windows()
-    buffer = io.BytesIO()
-    result = pisa.pisaDocument(io.BytesIO(html_string.encode('utf-8')), buffer, encoding='utf-8')
-    if result.err:
-        return None
-    return buffer.getvalue()
-
-
-def _foto_para_data_uri(caminho):
-    """Lê um arquivo de foto já copiado para o relatório (ver
-    `_copiar_fotos_para_relatorio`) e devolve como data URI base64 — mesmo
-    padrão já usado pelos gráficos do laudo (`_png_data_uri`), necessário
-    porque o xhtml2pdf não resolve MEDIA_URL/caminhos de arquivo (sem
-    link_callback configurado nesta base de código)."""
-    from django.core.files.storage import default_storage
-    ext = caminho.rsplit('.', 1)[-1].lower()
-    mime = 'image/png' if ext == 'png' else 'image/jpeg'
-    with default_storage.open(caminho, 'rb') as f:
-        dados = f.read()
-    return f'data:{mime};base64,' + base64.b64encode(dados).decode()
-
-
-def _montar_contexto_pdf_com_fotos(snapshot):
-    """Monta uma CÓPIA do snapshot só para renderizar o template do PDF, com
-    os caminhos de foto trocados por data URIs embutidas. O `snapshot`
-    original (com os caminhos leves, não as imagens infladas em base64)
-    continua sendo o que é persistido em `RelatorioFinalInspecao.snapshot` —
-    nunca passe o retorno desta função para lá, ou o JSONField no banco
-    incharia com uma cópia inteira das imagens a cada versão gerada."""
-    import copy
-    contexto = copy.deepcopy(snapshot)
-    for esp in contexto['especialidades']:
-        for achado in esp['achados_completos']:
-            achado['fotos'] = [_foto_para_data_uri(caminho) for caminho in achado['fotos']]
-    return contexto
-
-
 # ── Análise por especialidade ─────────────────────────────────────────────────
 
 @login_required
@@ -2093,7 +2184,7 @@ def _gerar_zip_backup(inspecao):
         esp_dict = {
             'id': esp.pk,
             'especialidade': esp.get_especialidade_display(),
-            'profissional': esp.profissional,
+            'profissional': '\n'.join(esp.profissionais_lista),
             'data_inspecao': esp.data_inspecao.strftime('%Y-%m-%d'),
             'status': esp.get_status_display(),
             'achados': [],
@@ -2247,11 +2338,13 @@ def _restaurar_backup(arquivo_zip, request):
                 inspecao=inspecao,
                 especialidade=esp_key,
                 defaults={
-                    'profissional': esp_data.get('profissional', ''),
                     'data_inspecao': data_insp,
                     'status': STATUS_MAP.get(esp_data.get('status', ''), 'em_andamento'),
                 },
             )
+            nomes_profissionais = [n.strip() for n in esp_data.get('profissional', '').splitlines() if n.strip()]
+            if nomes_profissionais:
+                esp.profissionais.set([Profissional.buscar_ou_criar_por_nome(n) for n in nomes_profissionais])
 
             for achado_data in esp_data.get('achados', []):
                 em_conf = bool(achado_data.get('em_conformidade', False))

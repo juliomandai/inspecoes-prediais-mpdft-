@@ -23,7 +23,7 @@ class AchadoInline(admin.TabularInline):
 class InspecaoEspecialidadeInline(admin.TabularInline):
     model = InspecaoEspecialidade
     extra = 0
-    fields = ['especialidade', 'profissional', 'data_inspecao', 'status']
+    fields = ['especialidade', 'profissionais', 'data_inspecao', 'status']
     show_change_link = True
 
 
@@ -38,11 +38,15 @@ class InspecaoAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
 
 @admin.register(InspecaoEspecialidade)
 class InspecaoEspecialidadeAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
-    list_display = ['inspecao', 'especialidade', 'profissional', 'data_inspecao', 'status', 'excluido_em']
+    list_display = ['inspecao', 'especialidade', 'profissionais_resumo', 'data_inspecao', 'status', 'excluido_em']
     list_filter = ['status', 'especialidade']
-    search_fields = ['profissional', 'inspecao__edificacao__nome']
+    search_fields = ['profissionais__nome', 'inspecao__edificacao__nome']
     date_hierarchy = 'data_inspecao'
     inlines = [AchadoInline]
+
+    @admin.display(description='Profissionais')
+    def profissionais_resumo(self, obj):
+        return obj.profissionais_display
 
 
 @admin.register(Achado)
@@ -106,7 +110,7 @@ class LogAcessoAdmin(admin.ModelAdmin):
 class RelatorioFinalInspecaoAdmin(admin.ModelAdmin):
     list_display = ['inspecao', 'numero_versao', 'gerado_por', 'gerado_em']
     list_filter = ['inspecao__edificacao']
-    readonly_fields = ['inspecao', 'numero_versao', 'arquivo_pdf', 'snapshot', 'gerado_por', 'gerado_em']
+    readonly_fields = ['inspecao', 'numero_versao', 'arquivo_docx', 'snapshot', 'gerado_por', 'gerado_em']
 
     def has_add_permission(self, request):
         return False

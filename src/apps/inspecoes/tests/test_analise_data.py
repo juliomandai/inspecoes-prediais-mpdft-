@@ -177,12 +177,13 @@ def test_montar_charts_serializa_json_consistente_com_as_metricas():
 
 @pytest.mark.django_db
 def test_analise_data_integra_tudo_e_mantem_as_chaves_do_dict():
-    insp_esp_fields = dict(profissional='X', data_inspecao='2026-01-01', especialidade='civil')
-    from apps.edificacoes.models import Edificacao
+    insp_esp_fields = dict(data_inspecao='2026-01-01', especialidade='civil')
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao
     edif = Edificacao.objects.create(nome='Sede X')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(inspecao=insp, **insp_esp_fields)
+    esp.profissionais.set([Profissional.objects.create(nome='X', crea='CREA-X')])
     a1 = Achado.objects.create(
         especialidade=esp, localizacao='L1', verificacao='V', grupo_tecnico='estrutura',
         requisito_afetado='durabilidade', gravidade=5, urgencia=5, tendencia=5, prioridade_risco=1,

@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 @pytest.fixture
 def cenario(db, client):
-    from apps.edificacoes.models import Edificacao
+    from apps.edificacoes.models import Edificacao, Profissional
     from apps.inspecoes.models import Inspecao, InspecaoEspecialidade, Achado, Foto
 
     U = get_user_model()
@@ -17,8 +17,9 @@ def cenario(db, client):
     edif = Edificacao.objects.create(nome='Sede')
     insp = Inspecao.objects.create(edificacao=edif)
     esp = InspecaoEspecialidade.objects.create(
-        inspecao=insp, especialidade='civil', profissional='ze', data_inspecao=date.today(),
+        inspecao=insp, especialidade='civil', data_inspecao=date.today(),
     )
+    esp.profissionais.set([Profissional.objects.create(nome='ze', crea='CREA-ZE')])
     achado = Achado.objects.create(
         especialidade=esp, localizacao='L1', verificacao='V', grupo_tecnico='estrutura',
         requisito_afetado='durabilidade', gravidade=3, urgencia=3, tendencia=3,
