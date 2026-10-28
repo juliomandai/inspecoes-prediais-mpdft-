@@ -534,7 +534,7 @@ def relatorio_pdf_upload_path(instance, filename):
 
 
 class RelatorioFinalInspecao(models.Model):
-    """Documento formal (PDF + snapshot) gerado ao encerrar uma inspeção
+    """Documento formal (Word + snapshot) gerado ao encerrar uma inspeção
     completa, para instruir ART junto ao CREA.
 
     Imutável depois de gerado (ADR-03): gerar de novo cria uma nova versão,
@@ -552,7 +552,7 @@ class RelatorioFinalInspecao(models.Model):
         verbose_name='Inspeção',
     )
     numero_versao = models.PositiveIntegerField('Versão')
-    arquivo_pdf = models.FileField('PDF gerado', upload_to=relatorio_pdf_upload_path)
+    arquivo_docx = models.FileField('Word gerado', upload_to=relatorio_pdf_upload_path)
     snapshot = models.JSONField('Snapshot')
     gerado_por = models.ForeignKey(
         get_user_model(), on_delete=models.PROTECT, related_name='relatorios_finais_gerados',

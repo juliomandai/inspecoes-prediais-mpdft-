@@ -69,7 +69,7 @@ def test_relatorio_final_e_versionado_e_unico_por_inspecao():
     r1 = RelatorioFinalInspecao.objects.create(
         inspecao=insp, numero_versao=1, snapshot={'ok': True}, gerado_por=u,
     )
-    r1.arquivo_pdf.save('teste.pdf', ContentFile(b'%PDF-fake'), save=True)
+    r1.arquivo_docx.save('teste.docx', ContentFile(b'fake-docx'), save=True)
     r2 = RelatorioFinalInspecao.objects.create(
         inspecao=insp, numero_versao=2, snapshot={'ok': True}, gerado_por=u,
     )

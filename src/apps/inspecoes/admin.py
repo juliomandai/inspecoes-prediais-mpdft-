@@ -110,7 +110,7 @@ class LogAcessoAdmin(admin.ModelAdmin):
 class RelatorioFinalInspecaoAdmin(admin.ModelAdmin):
     list_display = ['inspecao', 'numero_versao', 'gerado_por', 'gerado_em']
     list_filter = ['inspecao__edificacao']
-    readonly_fields = ['inspecao', 'numero_versao', 'arquivo_pdf', 'snapshot', 'gerado_por', 'gerado_em']
+    readonly_fields = ['inspecao', 'numero_versao', 'arquivo_docx', 'snapshot', 'gerado_por', 'gerado_em']
 
     def has_add_permission(self, request):
         return False
